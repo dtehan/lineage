@@ -1,0 +1,33 @@
+{
+  "assetId": "col-3",
+  "impactedAssets": [
+    {
+      "id": "col-4",
+      "databaseName": "analytics_db",
+      "tableName": "order_summary",
+      "columnName": "sum_amount",
+      "depth": 1,
+      "impactType": "direct"
+    },
+    {
+      "id": "col-5",
+      "databaseName": "reporting_db",
+      "tableName": "daily_sales",
+      "columnName": "total_sales",
+      "depth": 2,
+      "impactType": "indirect"
+    }
+  ],
+  "summary": {
+    "totalImpacted": 2,
+    "byDatabase": {
+      "analytics_db": 1,
+      "reporting_db": 1
+    },
+    "byDepth": {
+      "1": 1,
+      "2": 1
+    },
+    "criticalCount": 1
+  }
+}

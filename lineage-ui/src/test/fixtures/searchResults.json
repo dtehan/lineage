@@ -1,0 +1,22 @@
+{
+  "results": [
+    {
+      "id": "tbl-1",
+      "type": "table",
+      "databaseName": "sales_db",
+      "tableName": "orders",
+      "matchedOn": "tableName",
+      "score": 0.95
+    },
+    {
+      "id": "col-3",
+      "type": "column",
+      "databaseName": "sales_db",
+      "tableName": "orders",
+      "columnName": "total_amount",
+      "matchedOn": "columnName",
+      "score": 0.85
+    }
+  ],
+  "total": 2
+}

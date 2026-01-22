@@ -1,0 +1,51 @@
+{
+  "assetId": "col-3",
+  "graph": {
+    "nodes": [
+      {
+        "id": "col-1",
+        "type": "column",
+        "databaseName": "sales_db",
+        "tableName": "orders",
+        "columnName": "order_id"
+      },
+      {
+        "id": "col-2",
+        "type": "column",
+        "databaseName": "sales_db",
+        "tableName": "orders",
+        "columnName": "customer_id"
+      },
+      {
+        "id": "col-3",
+        "type": "column",
+        "databaseName": "sales_db",
+        "tableName": "orders",
+        "columnName": "total_amount"
+      },
+      {
+        "id": "col-4",
+        "type": "column",
+        "databaseName": "analytics_db",
+        "tableName": "order_summary",
+        "columnName": "sum_amount"
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-1",
+        "source": "col-3",
+        "target": "col-4",
+        "transformationType": "AGGREGATION",
+        "confidenceScore": 0.95
+      },
+      {
+        "id": "edge-2",
+        "source": "col-1",
+        "target": "col-3",
+        "transformationType": "DIRECT",
+        "confidenceScore": 1.0
+      }
+    ]
+  }
+}

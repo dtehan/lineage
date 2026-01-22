@@ -1,0 +1,25 @@
+{
+  "databases": [
+    {
+      "id": "db-1",
+      "name": "sales_db",
+      "ownerName": "admin",
+      "createTimestamp": "2024-01-01T00:00:00Z",
+      "commentString": "Sales database"
+    },
+    {
+      "id": "db-2",
+      "name": "analytics_db",
+      "ownerName": "admin",
+      "createTimestamp": "2024-01-01T00:00:00Z",
+      "commentString": "Analytics database"
+    },
+    {
+      "id": "db-3",
+      "name": "warehouse_db",
+      "ownerName": "admin",
+      "createTimestamp": "2024-01-01T00:00:00Z",
+      "commentString": "Data warehouse"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "tables": [
+    {
+      "id": "tbl-1",
+      "databaseName": "sales_db",
+      "tableName": "orders",
+      "tableKind": "T",
+      "createTimestamp": "2024-01-01T00:00:00Z",
+      "commentString": "Orders table",
+      "rowCount": 10000
+    },
+    {
+      "id": "tbl-2",
+      "databaseName": "sales_db",
+      "tableName": "customers",
+      "tableKind": "T",
+      "createTimestamp": "2024-01-01T00:00:00Z",
+      "commentString": "Customers table",
+      "rowCount": 5000
+    },
+    {
+      "id": "tbl-3",
+      "databaseName": "sales_db",
+      "tableName": "products",
+      "tableKind": "T",
+      "createTimestamp": "2024-01-01T00:00:00Z",
+      "commentString": "Products table",
+      "rowCount": 1000
+    }
+  ]
+}
