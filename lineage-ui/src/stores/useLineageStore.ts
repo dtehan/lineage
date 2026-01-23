@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { LineageNode, LineageEdge } from '../types';
+import type { LineageNode, LineageEdge, SearchResult } from '../types';
 
 interface LineageState {
   // Selected asset
@@ -17,40 +17,127 @@ interface LineageState {
   direction: 'upstream' | 'downstream' | 'both';
   setDirection: (direction: 'upstream' | 'downstream' | 'both') => void;
 
-  // Highlighted nodes (for hover effects)
-  highlightedNodeIds: Set<string>;
-  setHighlightedNodeIds: (ids: Set<string>) => void;
+  // View mode (graph vs table)
+  viewMode: 'graph' | 'table';
+  setViewMode: (mode: 'graph' | 'table') => void;
 
-  // Expanded table groups
-  expandedTables: Set<string>;
-  toggleTableExpanded: (tableId: string) => void;
+  // Edge selection
+  selectedEdgeId: string | null;
+  setSelectedEdge: (id: string | null) => void;
+
+  // Highlighted nodes and edges (for path highlighting)
+  highlightedNodeIds: Set<string>;
+  highlightedEdgeIds: Set<string>;
+  setHighlightedNodeIds: (ids: Set<string>) => void;
+  setHighlightedPath: (nodeIds: Set<string>, edgeIds: Set<string>) => void;
+  clearHighlight: () => void;
+
+  // Panel state
+  isPanelOpen: boolean;
+  panelContent: 'node' | 'edge' | null;
+  openPanel: (content: 'node' | 'edge') => void;
+  closePanel: () => void;
+
+  // Fullscreen
+  isFullscreen: boolean;
+  toggleFullscreen: () => void;
+
+  // Search state (moved from local component state for persistence)
+  searchQuery: string;
+  searchResults: SearchResult[];
+  setSearchQuery: (query: string) => void;
+  setSearchResults: (results: SearchResult[]) => void;
+
+  // Database clustering
+  showDatabaseClusters: boolean;
+  toggleDatabaseClusters: () => void;
+
+  // Expanded table groups - Map tracks explicit toggle state, tables not in map use default
+  expandedTables: Map<string, boolean>;
+  toggleTableExpanded: (tableId: string, defaultExpanded?: boolean) => void;
+  setAllTablesExpanded: (expanded: boolean) => void;
+  isTableExpanded: (tableId: string, defaultExpanded: boolean) => boolean;
 }
 
 export const useLineageStore = create<LineageState>((set) => ({
+  // Selected asset
   selectedAssetId: null,
   setSelectedAssetId: (id) => set({ selectedAssetId: id }),
 
+  // Graph state
   nodes: [],
   edges: [],
   setGraph: (nodes, edges) => set({ nodes, edges }),
 
-  maxDepth: 5,
+  // View options
+  maxDepth: 3,
   setMaxDepth: (depth) => set({ maxDepth: depth }),
   direction: 'both',
   setDirection: (direction) => set({ direction }),
 
-  highlightedNodeIds: new Set(),
-  setHighlightedNodeIds: (ids) => set({ highlightedNodeIds: ids }),
+  // View mode
+  viewMode: 'graph',
+  setViewMode: (mode) => set({ viewMode: mode }),
 
-  expandedTables: new Set(),
-  toggleTableExpanded: (tableId) =>
+  // Edge selection
+  selectedEdgeId: null,
+  setSelectedEdge: (id) => set({ selectedEdgeId: id }),
+
+  // Highlighted nodes and edges
+  highlightedNodeIds: new Set(),
+  highlightedEdgeIds: new Set(),
+  setHighlightedNodeIds: (ids) => set({ highlightedNodeIds: ids }),
+  setHighlightedPath: (nodeIds, edgeIds) =>
+    set({ highlightedNodeIds: nodeIds, highlightedEdgeIds: edgeIds }),
+  clearHighlight: () =>
+    set({
+      highlightedNodeIds: new Set(),
+      highlightedEdgeIds: new Set(),
+      selectedAssetId: null,
+      selectedEdgeId: null,
+    }),
+
+  // Panel state
+  isPanelOpen: false,
+  panelContent: null,
+  openPanel: (content) => set({ isPanelOpen: true, panelContent: content }),
+  closePanel: () => set({ isPanelOpen: false, panelContent: null }),
+
+  // Fullscreen
+  isFullscreen: false,
+  toggleFullscreen: () => set((state) => ({ isFullscreen: !state.isFullscreen })),
+
+  // Search state
+  searchQuery: '',
+  searchResults: [],
+  setSearchQuery: (query) => set({ searchQuery: query }),
+  setSearchResults: (results) => set({ searchResults: results }),
+
+  // Database clustering
+  showDatabaseClusters: true,
+  toggleDatabaseClusters: () =>
+    set((state) => ({ showDatabaseClusters: !state.showDatabaseClusters })),
+
+  // Expanded table groups - Map tracks explicit toggle state
+  expandedTables: new Map(),
+  toggleTableExpanded: (tableId, defaultExpanded = true) =>
     set((state) => {
-      const newExpanded = new Set(state.expandedTables);
-      if (newExpanded.has(tableId)) {
-        newExpanded.delete(tableId);
-      } else {
-        newExpanded.add(tableId);
-      }
+      const newExpanded = new Map(state.expandedTables);
+      // Get current state: if in map use that, otherwise use default
+      const currentState = newExpanded.has(tableId)
+        ? newExpanded.get(tableId)!
+        : defaultExpanded;
+      // Toggle to opposite state
+      newExpanded.set(tableId, !currentState);
       return { expandedTables: newExpanded };
     }),
+  setAllTablesExpanded: () =>
+    set(() => {
+      // Clear the map - all tables will use their default state
+      return { expandedTables: new Map() };
+    }),
+  isTableExpanded: (_tableId, defaultExpanded) => {
+    // This is a selector-like function - handled in component instead
+    return defaultExpanded;
+  },
 }));

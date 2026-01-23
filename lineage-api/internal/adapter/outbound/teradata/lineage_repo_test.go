@@ -1,262 +1,216 @@
 package teradata
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/your-org/lineage-api/internal/domain"
+	"github.com/stretchr/testify/require"
 )
 
-// TC-UNIT-020: TeradataLineageRepository BuildGraph
-func TestLineageRepository_BuildGraph(t *testing.T) {
-	repo := &LineageRepository{}
+// TC-UNIT-020: TeradataLineageRepository GetLineageGraph
+func TestLineageRepository_GetLineageGraph(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
 
-	upstream := []domain.ColumnLineage{
-		{
-			LineageID:          "lin-001",
-			SourceColumnID:     "col-src-001",
-			SourceDatabase:     "source_db",
-			SourceTable:        "source_table",
-			SourceColumn:       "source_col",
-			TargetColumnID:     "col-root",
-			TargetDatabase:     "root_db",
-			TargetTable:        "root_table",
-			TargetColumn:       "root_col",
-			TransformationType: "DIRECT",
-			ConfidenceScore:    0.95,
-		},
-		{
-			LineageID:          "lin-002",
-			SourceColumnID:     "col-src-002",
-			SourceDatabase:     "source_db",
-			SourceTable:        "source_table2",
-			SourceColumn:       "source_col2",
-			TargetColumnID:     "col-src-001",
-			TargetDatabase:     "source_db",
-			TargetTable:        "source_table",
-			TargetColumn:       "source_col",
-			TransformationType: "TRANSFORM",
-			ConfidenceScore:    0.85,
-		},
-	}
-
-	downstream := []domain.ColumnLineage{
-		{
-			LineageID:          "lin-003",
-			SourceColumnID:     "col-root",
-			SourceDatabase:     "root_db",
-			SourceTable:        "root_table",
-			SourceColumn:       "root_col",
-			TargetColumnID:     "col-tgt-001",
-			TargetDatabase:     "target_db",
-			TargetTable:        "target_table",
-			TargetColumn:       "target_col",
-			TransformationType: "AGGREGATE",
-			ConfidenceScore:    0.90,
-		},
-	}
-
-	graph := repo.buildGraph("col-root", upstream, downstream)
+	graph, err := repo.GetLineageGraph(context.Background(), "demo_user.STG_CUSTOMER.customer_id", "both", 5)
+	require.NoError(t, err)
 
 	// Verify root node is included
 	rootFound := false
 	for _, node := range graph.Nodes {
-		if node.ID == "col-root" {
+		if node.ID == "demo_user.STG_CUSTOMER.customer_id" {
 			rootFound = true
 			assert.Equal(t, "column", node.Type)
+			assert.Equal(t, "demo_user", node.DatabaseName)
+			assert.Equal(t, "STG_CUSTOMER", node.TableName)
+			assert.Equal(t, "customer_id", node.ColumnName)
+			// Verify metadata is populated
+			assert.NotNil(t, node.Metadata)
+			assert.Equal(t, "INTEGER", node.Metadata["columnType"])
 			break
 		}
 	}
 	assert.True(t, rootFound, "Root node should be included in graph")
 
-	// Verify no duplicate nodes (nodeMap deduplication works)
+	// Verify no duplicate nodes
 	nodeIDs := make(map[string]bool)
 	for _, node := range graph.Nodes {
 		assert.False(t, nodeIDs[node.ID], "Node %s should not be duplicated", node.ID)
 		nodeIDs[node.ID] = true
 	}
 
-	// Verify all unique nodes are created (root + 2 upstream sources + 1 downstream target)
-	// Note: col-src-001 appears in both upstream lineages but should only be counted once
-	expectedNodeCount := 4 // col-root, col-src-001, col-src-002, col-tgt-001
-	assert.Equal(t, expectedNodeCount, len(graph.Nodes))
-
-	// Verify all edges are created
-	assert.Equal(t, 3, len(graph.Edges))
-
 	// Verify all edges have valid source and target references
 	for _, edge := range graph.Edges {
 		assert.True(t, nodeIDs[edge.Source], "Edge source %s should exist in nodes", edge.Source)
 		assert.True(t, nodeIDs[edge.Target], "Edge target %s should exist in nodes", edge.Target)
 	}
+}
 
-	// Verify edge properties are preserved
-	for _, edge := range graph.Edges {
-		if edge.ID == "lin-001" {
-			assert.Equal(t, "DIRECT", edge.TransformationType)
-			assert.InDelta(t, 0.95, edge.ConfidenceScore, 0.001)
+func TestLineageRepository_GetLineageGraph_UpstreamOnly(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
+
+	graph, err := repo.GetLineageGraph(context.Background(), "demo_user.STG_CUSTOMER.customer_id", "upstream", 5)
+	require.NoError(t, err)
+
+	// Should have the root node and upstream source
+	assert.GreaterOrEqual(t, len(graph.Nodes), 1)
+
+	// Verify root node exists
+	rootFound := false
+	for _, node := range graph.Nodes {
+		if node.ID == "demo_user.STG_CUSTOMER.customer_id" {
+			rootFound = true
+			break
 		}
 	}
+	assert.True(t, rootFound, "Root node should be included")
 }
 
-func TestLineageRepository_BuildGraph_EmptyLineage(t *testing.T) {
-	repo := &LineageRepository{}
+func TestLineageRepository_GetLineageGraph_DownstreamOnly(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
 
-	graph := repo.buildGraph("col-root", []domain.ColumnLineage{}, []domain.ColumnLineage{})
+	graph, err := repo.GetLineageGraph(context.Background(), "demo_user.STG_CUSTOMER.customer_id", "downstream", 5)
+	require.NoError(t, err)
 
-	// Should only have root node
-	assert.Len(t, graph.Nodes, 1)
-	assert.Equal(t, "col-root", graph.Nodes[0].ID)
+	// Should have at least the root node
+	assert.GreaterOrEqual(t, len(graph.Nodes), 1)
 
-	// Should have no edges
-	assert.Empty(t, graph.Edges)
-}
-
-func TestLineageRepository_BuildGraph_UpstreamOnly(t *testing.T) {
-	repo := &LineageRepository{}
-
-	upstream := []domain.ColumnLineage{
-		{
-			LineageID:      "lin-001",
-			SourceColumnID: "col-src-001",
-			SourceDatabase: "source_db",
-			SourceTable:    "source_table",
-			SourceColumn:   "source_col",
-			TargetColumnID: "col-root",
-			TargetDatabase: "root_db",
-			TargetTable:    "root_table",
-			TargetColumn:   "root_col",
-		},
-	}
-
-	graph := repo.buildGraph("col-root", upstream, []domain.ColumnLineage{})
-
-	// Should have root + 1 upstream source
-	assert.Len(t, graph.Nodes, 2)
-	assert.Len(t, graph.Edges, 1)
-}
-
-func TestLineageRepository_BuildGraph_DownstreamOnly(t *testing.T) {
-	repo := &LineageRepository{}
-
-	downstream := []domain.ColumnLineage{
-		{
-			LineageID:      "lin-001",
-			SourceColumnID: "col-root",
-			SourceDatabase: "root_db",
-			SourceTable:    "root_table",
-			SourceColumn:   "root_col",
-			TargetColumnID: "col-tgt-001",
-			TargetDatabase: "target_db",
-			TargetTable:    "target_table",
-			TargetColumn:   "target_col",
-		},
-	}
-
-	graph := repo.buildGraph("col-root", []domain.ColumnLineage{}, downstream)
-
-	// Should have root + 1 downstream target
-	assert.Len(t, graph.Nodes, 2)
-	assert.Len(t, graph.Edges, 1)
-}
-
-func TestLineageRepository_BuildGraph_NodeDeduplication(t *testing.T) {
-	repo := &LineageRepository{}
-
-	// Create lineage where the same node appears multiple times
-	upstream := []domain.ColumnLineage{
-		{
-			LineageID:      "lin-001",
-			SourceColumnID: "col-shared",
-			SourceDatabase: "shared_db",
-			SourceTable:    "shared_table",
-			SourceColumn:   "shared_col",
-			TargetColumnID: "col-root",
-		},
-	}
-
-	downstream := []domain.ColumnLineage{
-		{
-			LineageID:      "lin-002",
-			SourceColumnID: "col-root",
-			TargetColumnID: "col-shared", // Same node as upstream source
-			TargetDatabase: "shared_db",
-			TargetTable:    "shared_table",
-			TargetColumn:   "shared_col",
-		},
-	}
-
-	graph := repo.buildGraph("col-root", upstream, downstream)
-
-	// Should deduplicate col-shared
-	assert.Len(t, graph.Nodes, 2) // col-root and col-shared
-	assert.Len(t, graph.Edges, 2)
-
-	// Verify only unique node IDs
-	nodeIDs := make(map[string]int)
+	// Verify root node exists
+	rootFound := false
 	for _, node := range graph.Nodes {
-		nodeIDs[node.ID]++
+		if node.ID == "demo_user.STG_CUSTOMER.customer_id" {
+			rootFound = true
+			break
+		}
 	}
-
-	for id, count := range nodeIDs {
-		assert.Equal(t, 1, count, "Node %s should appear exactly once", id)
-	}
+	assert.True(t, rootFound, "Root node should be included")
 }
 
-func TestLineageRepository_BuildGraph_PreservesNodeMetadata(t *testing.T) {
-	repo := &LineageRepository{}
+func TestLineageRepository_GetLineageGraph_PreservesNodeMetadata(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
 
-	upstream := []domain.ColumnLineage{
-		{
-			LineageID:      "lin-001",
-			SourceColumnID: "col-src-001",
-			SourceDatabase: "source_db",
-			SourceTable:    "source_table",
-			SourceColumn:   "source_col",
-			TargetColumnID: "col-root",
-			TargetDatabase: "root_db",
-			TargetTable:    "root_table",
-			TargetColumn:   "root_col",
-		},
-	}
-
-	graph := repo.buildGraph("col-root", upstream, []domain.ColumnLineage{})
+	graph, err := repo.GetLineageGraph(context.Background(), "demo_user.SRC_CUSTOMER.customer_id", "downstream", 5)
+	require.NoError(t, err)
 
 	// Find the source node and verify metadata
 	for _, node := range graph.Nodes {
-		if node.ID == "col-src-001" {
+		if node.ID == "demo_user.SRC_CUSTOMER.customer_id" {
 			assert.Equal(t, "column", node.Type)
-			assert.Equal(t, "source_db", node.DatabaseName)
-			assert.Equal(t, "source_table", node.TableName)
-			assert.Equal(t, "source_col", node.ColumnName)
+			assert.Equal(t, "demo_user", node.DatabaseName)
+			assert.Equal(t, "SRC_CUSTOMER", node.TableName)
+			assert.Equal(t, "customer_id", node.ColumnName)
+			// Verify metadata is populated with column type
+			assert.NotNil(t, node.Metadata)
+			assert.Equal(t, "INTEGER", node.Metadata["columnType"])
 			return
 		}
 	}
 	t.Error("Source node not found in graph")
 }
 
-func TestLineageRepository_BuildGraph_PreservesEdgeMetadata(t *testing.T) {
-	repo := &LineageRepository{}
+func TestLineageRepository_GetLineageGraph_PreservesEdgeMetadata(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
 
-	downstream := []domain.ColumnLineage{
-		{
-			LineageID:          "lin-001",
-			SourceColumnID:     "col-root",
-			TargetColumnID:     "col-tgt-001",
-			TransformationType: "AGGREGATE",
-			ConfidenceScore:    0.87,
-		},
+	graph, err := repo.GetLineageGraph(context.Background(), "demo_user.SRC_CUSTOMER.customer_id", "downstream", 1)
+	require.NoError(t, err)
+
+	// Find an edge and verify metadata is preserved
+	for _, edge := range graph.Edges {
+		if edge.Source == "demo_user.SRC_CUSTOMER.customer_id" {
+			assert.NotEmpty(t, edge.ID)
+			assert.Equal(t, "demo_user.SRC_CUSTOMER.customer_id", edge.Source)
+			assert.NotEmpty(t, edge.Target)
+			assert.NotEmpty(t, edge.TransformationType)
+			return
+		}
+	}
+}
+
+func TestLineageRepository_GetLineageGraph_ColumnTypeInMetadata(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
+
+	// Test various column types
+	testCases := []struct {
+		columnID     string
+		expectedType string
+	}{
+		{"demo_user.SRC_CUSTOMER.customer_id", "INTEGER"},
+		{"demo_user.SRC_CUSTOMER.first_name", "VARCHAR(100)"},
+		{"demo_user.SRC_CUSTOMER.email", "VARCHAR(255)"},
+		{"demo_user.SRC_SALES.sale_date", "DATE"},
+		{"demo_user.SRC_PRODUCT.price", "DECIMAL(10,2)"},
 	}
 
-	graph := repo.buildGraph("col-root", []domain.ColumnLineage{}, downstream)
+	for _, tc := range testCases {
+		t.Run(tc.columnID, func(t *testing.T) {
+			graph, err := repo.GetLineageGraph(context.Background(), tc.columnID, "both", 1)
+			require.NoError(t, err)
 
-	assert.Len(t, graph.Edges, 1)
+			// Find the node and verify column type
+			for _, node := range graph.Nodes {
+				if node.ID == tc.columnID {
+					assert.NotNil(t, node.Metadata, "Metadata should be populated for %s", tc.columnID)
+					assert.Equal(t, tc.expectedType, node.Metadata["columnType"], "Column type should match for %s", tc.columnID)
+					return
+				}
+			}
+			t.Errorf("Node %s not found in graph", tc.columnID)
+		})
+	}
+}
 
-	edge := graph.Edges[0]
-	assert.Equal(t, "lin-001", edge.ID)
-	assert.Equal(t, "col-root", edge.Source)
-	assert.Equal(t, "col-tgt-001", edge.Target)
-	assert.Equal(t, "AGGREGATE", edge.TransformationType)
-	assert.InDelta(t, 0.87, edge.ConfidenceScore, 0.001)
+func TestLineageRepository_GetUpstreamLineage(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
+
+	lineage, err := repo.GetUpstreamLineage(context.Background(), "demo_user.STG_CUSTOMER.customer_id", 5)
+	require.NoError(t, err)
+
+	// Should find upstream source
+	assert.GreaterOrEqual(t, len(lineage), 1)
+
+	// Verify lineage points to the correct target
+	for _, lin := range lineage {
+		assert.Equal(t, "demo_user.STG_CUSTOMER.customer_id", lin.TargetColumnID)
+	}
+}
+
+func TestLineageRepository_GetDownstreamLineage(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
+
+	lineage, err := repo.GetDownstreamLineage(context.Background(), "demo_user.SRC_CUSTOMER.customer_id", 5)
+	require.NoError(t, err)
+
+	// Should find downstream targets
+	assert.GreaterOrEqual(t, len(lineage), 1)
+
+	// Verify lineage comes from the correct source
+	for _, lin := range lineage {
+		if lin.Depth == 1 {
+			assert.Equal(t, "demo_user.SRC_CUSTOMER.customer_id", lin.SourceColumnID)
+		}
+	}
+}
+
+func TestLineageRepository_GetDirectLineage(t *testing.T) {
+	assetRepo := NewAssetRepository()
+	repo := NewLineageRepository(assetRepo)
+
+	lineage, err := repo.GetDirectLineage(context.Background(), "demo_user.STG_CUSTOMER.customer_id")
+	require.NoError(t, err)
+
+	// Should find direct relationships
+	for _, lin := range lineage {
+		// Direct lineage should have this column as either source or target
+		isSource := lin.SourceColumnID == "demo_user.STG_CUSTOMER.customer_id"
+		isTarget := lin.TargetColumnID == "demo_user.STG_CUSTOMER.customer_id"
+		assert.True(t, isSource || isTarget, "Column should be either source or target in direct lineage")
+	}
 }

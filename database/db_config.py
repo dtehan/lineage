@@ -2,7 +2,8 @@
 """
 Database Configuration Module
 
-Reads database credentials from environment variables with fallback defaults.
+Reads database credentials from .env file and environment variables with fallback defaults.
+Environment variables take precedence over .env file values.
 
 Environment Variables:
     TD_HOST     - Teradata host
@@ -12,6 +13,20 @@ Environment Variables:
 """
 
 import os
+from pathlib import Path
+
+# Try to load .env file (python-dotenv is optional)
+try:
+    from dotenv import load_dotenv
+    # Look for .env in project root (parent of database/)
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        # Also check current working directory
+        load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, rely on environment variables
 
 
 def get_config():

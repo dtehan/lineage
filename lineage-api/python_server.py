@@ -2,23 +2,40 @@
 """
 Python Flask Backend for Lineage API
 Implements the same API as the Go backend using teradatasql driver.
+
+Reads configuration from .env file and environment variables.
+Environment variables take precedence over .env file values.
 """
 
 import os
 import json
+from pathlib import Path
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 import teradatasql
 
+# Try to load .env file (python-dotenv is optional)
+try:
+    from dotenv import load_dotenv
+    # Look for .env in project root (parent of lineage-api/)
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+    else:
+        # Also check current working directory
+        load_dotenv()
+except ImportError:
+    pass  # python-dotenv not installed, rely on environment variables
+
 app = Flask(__name__)
 CORS(app, origins=["http://localhost:3000", "http://localhost:3004", "http://localhost:5173"])
 
-# Database configuration
+# Database configuration - supports both TD_* (database scripts) and TERADATA_* (Go server) prefixes
 DB_CONFIG = {
-    "host": os.environ.get("TERADATA_HOST", "test-sad3sstx4u4llczi.env.clearscape.teradata.com"),
-    "user": os.environ.get("TERADATA_USER", "demo_user"),
-    "password": os.environ.get("TERADATA_PASSWORD", "password"),
-    "database": os.environ.get("TERADATA_DATABASE", "demo_user"),
+    "host": os.environ.get("TERADATA_HOST") or os.environ.get("TD_HOST", "test-sad3sstx4u4llczi.env.clearscape.teradata.com"),
+    "user": os.environ.get("TERADATA_USER") or os.environ.get("TD_USER", "demo_user"),
+    "password": os.environ.get("TERADATA_PASSWORD") or os.environ.get("TD_PASSWORD", "password"),
+    "database": os.environ.get("TERADATA_DATABASE") or os.environ.get("TD_DATABASE", "demo_user"),
 }
 
 
@@ -144,6 +161,32 @@ def list_columns(database, table):
         return jsonify({"error": str(e)}), 500
 
 
+def get_column_metadata(cur, column_id):
+    """Get metadata for a column from LIN_COLUMN table."""
+    parts = column_id.split(".")
+    if len(parts) != 3:
+        return None
+
+    database, table, column = parts[0], parts[1], parts[2]
+    cur.execute("""
+        SELECT column_type, nullable, column_position
+        FROM LIN_COLUMN
+        WHERE UPPER(database_name) = UPPER(?)
+          AND UPPER(table_name) = UPPER(?)
+          AND UPPER(column_name) = UPPER(?)
+          AND is_active = 'Y'
+    """, [database, table, column])
+
+    row = cur.fetchone()
+    if row:
+        return {
+            "columnType": row[0].strip() if row[0] else "unknown",
+            "nullable": row[1] == "Y" if row[1] else True,
+            "columnPosition": row[2] if row[2] else 0
+        }
+    return None
+
+
 def get_column_lineage(cur, column_id, direction, max_depth):
     """Get lineage for a single column."""
     nodes = {}
@@ -211,22 +254,30 @@ def get_column_lineage(cur, column_id, direction, max_depth):
             target_id = row[4].strip() if row[4] else ""
 
             if source_id not in nodes:
-                nodes[source_id] = {
+                node = {
                     "id": source_id,
                     "type": "column",
                     "databaseName": row[1].strip() if row[1] else "",
                     "tableName": row[2].strip() if row[2] else "",
                     "columnName": row[3].strip() if row[3] else ""
                 }
+                metadata = get_column_metadata(cur, source_id)
+                if metadata:
+                    node["metadata"] = metadata
+                nodes[source_id] = node
 
             if target_id not in nodes:
-                nodes[target_id] = {
+                node = {
                     "id": target_id,
                     "type": "column",
                     "databaseName": row[5].strip() if row[5] else "",
                     "tableName": row[6].strip() if row[6] else "",
                     "columnName": row[7].strip() if row[7] else ""
                 }
+                metadata = get_column_metadata(cur, target_id)
+                if metadata:
+                    node["metadata"] = metadata
+                nodes[target_id] = node
 
             edge_id = f"{source_id}->{target_id}"
             edges.append({
@@ -299,22 +350,30 @@ def get_column_lineage(cur, column_id, direction, max_depth):
             target_id = row[4].strip() if row[4] else ""
 
             if source_id not in nodes:
-                nodes[source_id] = {
+                node = {
                     "id": source_id,
                     "type": "column",
                     "databaseName": row[1].strip() if row[1] else "",
                     "tableName": row[2].strip() if row[2] else "",
                     "columnName": row[3].strip() if row[3] else ""
                 }
+                metadata = get_column_metadata(cur, source_id)
+                if metadata:
+                    node["metadata"] = metadata
+                nodes[source_id] = node
 
             if target_id not in nodes:
-                nodes[target_id] = {
+                node = {
                     "id": target_id,
                     "type": "column",
                     "databaseName": row[5].strip() if row[5] else "",
                     "tableName": row[6].strip() if row[6] else "",
                     "columnName": row[7].strip() if row[7] else ""
                 }
+                metadata = get_column_metadata(cur, target_id)
+                if metadata:
+                    node["metadata"] = metadata
+                nodes[target_id] = node
 
             edge_id = f"{source_id}->{target_id}"
             if not any(e["source"] == source_id and e["target"] == target_id for e in edges):
@@ -394,13 +453,17 @@ def get_lineage(asset_id):
 
                 # Add the root node if not already present
                 if asset_id not in nodes and len(parts) >= 3:
-                    nodes[asset_id] = {
+                    node = {
                         "id": asset_id,
                         "type": "column",
                         "databaseName": parts[0],
                         "tableName": parts[1],
                         "columnName": parts[2]
                     }
+                    metadata = get_column_metadata(cur, asset_id)
+                    if metadata:
+                        node["metadata"] = metadata
+                    nodes[asset_id] = node
 
         return jsonify({
             "assetId": asset_id,

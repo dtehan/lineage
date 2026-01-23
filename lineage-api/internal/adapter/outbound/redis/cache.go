@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/your-org/lineage-api/internal/domain"
+	"github.com/lineage-api/internal/domain"
 )
 
 // Config holds Redis connection configuration.

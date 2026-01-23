@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 import { AppShell } from './components/layout/AppShell';
 import { ExplorePage } from './features/ExplorePage';
@@ -30,7 +29,6 @@ export default function App() {
           </Routes>
         </AppShell>
       </BrowserRouter>
-      <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>
   );
 }

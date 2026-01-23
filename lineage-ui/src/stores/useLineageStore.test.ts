@@ -12,7 +12,7 @@ describe('useLineageStore', () => {
       maxDepth: 5,
       direction: 'both',
       highlightedNodeIds: new Set(),
-      expandedTables: new Set(),
+      expandedTables: new Map(),
     });
   });
 
@@ -71,22 +71,29 @@ describe('useLineageStore', () => {
 
   // TC-STATE-004: toggleTableExpanded
   describe('toggleTableExpanded', () => {
-    it('adds table to expandedTables on first toggle', () => {
-      useLineageStore.getState().toggleTableExpanded('table1');
-      expect(useLineageStore.getState().expandedTables.has('table1')).toBe(true);
+    it('sets table to collapsed on first toggle when default is expanded', () => {
+      // Default is expanded (true), first toggle should collapse it (false)
+      useLineageStore.getState().toggleTableExpanded('table1', true);
+      expect(useLineageStore.getState().expandedTables.get('table1')).toBe(false);
     });
 
-    it('removes table from expandedTables on second toggle', () => {
-      useLineageStore.getState().toggleTableExpanded('table1');
-      useLineageStore.getState().toggleTableExpanded('table1');
-      expect(useLineageStore.getState().expandedTables.has('table1')).toBe(false);
+    it('toggles table back to expanded on second toggle', () => {
+      useLineageStore.getState().toggleTableExpanded('table1', true);
+      useLineageStore.getState().toggleTableExpanded('table1', true);
+      expect(useLineageStore.getState().expandedTables.get('table1')).toBe(true);
     });
 
-    it('can have multiple tables expanded', () => {
-      useLineageStore.getState().toggleTableExpanded('table1');
-      useLineageStore.getState().toggleTableExpanded('table2');
-      expect(useLineageStore.getState().expandedTables.has('table1')).toBe(true);
-      expect(useLineageStore.getState().expandedTables.has('table2')).toBe(true);
+    it('can toggle multiple tables independently', () => {
+      // Both default to expanded, first toggle collapses each
+      useLineageStore.getState().toggleTableExpanded('table1', true);
+      useLineageStore.getState().toggleTableExpanded('table2', true);
+      expect(useLineageStore.getState().expandedTables.get('table1')).toBe(false);
+      expect(useLineageStore.getState().expandedTables.get('table2')).toBe(false);
+
+      // Toggle table1 back to expanded, table2 stays collapsed
+      useLineageStore.getState().toggleTableExpanded('table1', true);
+      expect(useLineageStore.getState().expandedTables.get('table1')).toBe(true);
+      expect(useLineageStore.getState().expandedTables.get('table2')).toBe(false);
     });
   });
 

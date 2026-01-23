@@ -4,6 +4,16 @@
 
 This test plan covers the React frontend application for the Data Lineage visualization tool. The application uses React, React Flow with ELKjs for graph visualization, TanStack Query for server state, and Zustand for client state management.
 
+### Testing Frameworks
+
+| Framework | Purpose |
+|-----------|---------|
+| **Vitest** | Unit tests, component tests, hook tests |
+| **React Testing Library** | Component rendering and interaction tests |
+| **Playwright** | End-to-end tests, visual regression tests, accessibility audits |
+| **MSW (Mock Service Worker)** | API mocking for integration tests |
+| **axe-core** | Automated accessibility testing |
+
 ---
 
 ## 1. Unit Tests
@@ -17,16 +27,18 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Description** | Verify getNodeWidth calculates correct width based on node label length |
 | **Preconditions** | layoutEngine.ts utility module is available |
 | **Test Steps** | 1. Create a LineageNode with a short label (5 characters)<br>2. Call getNodeWidth with the node<br>3. Create a LineageNode with a long label (30 characters)<br>4. Call getNodeWidth with the node |
-| **Expected Results** | - Short label returns minimum width of 150<br>- Long label returns calculated width (label.length * 8 + 40) |
+| **Expected Results** | - Short label returns minimum width of 280px (per visualization spec)<br>- Long label returns calculated width auto-expanding for long names |
+| **Edge Cases** | - Empty string label<br>- Single character label<br>- Label with special characters<br>- Unicode characters in label |
 
 #### TC-UNIT-002: getNodeHeight Function
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-UNIT-002 |
-| **Description** | Verify getNodeHeight returns correct height based on node type |
+| **Description** | Verify getNodeHeight returns correct height based on node type and column count |
 | **Preconditions** | layoutEngine.ts utility module is available |
-| **Test Steps** | 1. Create a column type LineageNode<br>2. Call getNodeHeight<br>3. Create a table type LineageNode<br>4. Call getNodeHeight |
-| **Expected Results** | - Column node returns height of 40<br>- Table node returns height of 60 |
+| **Test Steps** | 1. Create a column type LineageNode<br>2. Call getNodeHeight<br>3. Create a table type LineageNode with 5 columns<br>4. Call getNodeHeight |
+| **Expected Results** | - Column node returns height of 28px (column row height)<br>- Table node returns: headerHeight(40) + (columns.length * 28) + padding(16) |
+| **Edge Cases** | - Table with 0 columns<br>- Table with 100+ columns<br>- Collapsed table node |
 
 #### TC-UNIT-003: getNodeLabel Function
 | Field | Description |
@@ -36,6 +48,7 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Preconditions** | layoutEngine.ts utility module is available |
 | **Test Steps** | 1. Create column node with databaseName="db1", tableName="table1", columnName="col1"<br>2. Call getNodeLabel<br>3. Create table node with databaseName="db1", tableName="table1"<br>4. Call getNodeLabel<br>5. Create database node with databaseName="db1"<br>6. Call getNodeLabel |
 | **Expected Results** | - Column node returns "table1.col1"<br>- Table node returns "db1.table1"<br>- Database node returns "db1" |
+| **Edge Cases** | - Names with dots<br>- Names with spaces<br>- Very long names (truncation behavior)<br>- Empty names |
 
 #### TC-UNIT-004: getEdgeColor Function
 | Field | Description |
@@ -43,8 +56,9 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Test Case ID** | TC-UNIT-004 |
 | **Description** | Verify getEdgeColor returns correct colors for different transformation types |
 | **Preconditions** | layoutEngine.ts utility module is available |
-| **Test Steps** | 1. Create edge with transformationType="DIRECT"<br>2. Create edge with transformationType="AGGREGATION"<br>3. Create edge with transformationType="CALCULATION"<br>4. Create edge with no transformationType |
-| **Expected Results** | - DIRECT returns "#10b981" (green)<br>- AGGREGATION returns "#f59e0b" (amber)<br>- CALCULATION returns "#8b5cf6" (purple)<br>- Default returns "#64748b" (slate) |
+| **Test Steps** | 1. Create edge with transformationType="direct"<br>2. Create edge with transformationType="derived"<br>3. Create edge with transformationType="aggregated"<br>4. Create edge with transformationType="joined"<br>5. Create edge with transformationType="unknown" |
+| **Expected Results** | - Direct returns "#22C55E" (green-500)<br>- Derived returns "#3B82F6" (blue-500)<br>- Aggregated returns "#A855F7" (purple-500)<br>- Joined returns "#06B6D4" (cyan-500)<br>- Unknown returns "#9CA3AF" (gray-400) |
+| **Edge Cases** | - Undefined transformationType<br>- Null transformationType<br>- Invalid string value |
 
 #### TC-UNIT-005: groupByTable Function
 | Field | Description |
@@ -54,6 +68,7 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Preconditions** | layoutEngine.ts utility module is available |
 | **Test Steps** | 1. Create array of column nodes from different tables<br>2. Call groupByTable<br>3. Verify the returned Map structure |
 | **Expected Results** | - Returns Map with keys in format "databaseName.tableName"<br>- Each key maps to array of column nodes belonging to that table<br>- Non-column nodes are excluded |
+| **Edge Cases** | - Empty array input<br>- All nodes from same table<br>- Mixed node types (columns, tables, databases)<br>- Duplicate column entries |
 
 #### TC-UNIT-006: getReactFlowNodeType Function
 | Field | Description |
@@ -64,179 +79,402 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Test Steps** | 1. Call with column type node<br>2. Call with table type node<br>3. Call with database type node |
 | **Expected Results** | - Column returns "columnNode"<br>- Table returns "tableNode"<br>- Database returns "databaseNode" |
 
-### 1.2 TypeScript Type Validation
-
-#### TC-UNIT-007: Database Interface Validation
+#### TC-UNIT-007: getEdgeStyleByConfidence Function
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-UNIT-007 |
-| **Description** | Verify Database interface accepts valid objects and rejects invalid ones |
-| **Preconditions** | TypeScript compilation environment |
-| **Test Steps** | 1. Create object with required fields (id, name)<br>2. Create object with all optional fields<br>3. Create object missing required field |
-| **Expected Results** | - Valid objects pass type checking<br>- Missing required fields cause compilation error |
+| **Description** | Verify confidence-based edge styling calculations |
+| **Preconditions** | confidenceStyles.ts utility module is available |
+| **Test Steps** | 1. Call with confidence=95 (90-100% range)<br>2. Call with confidence=75 (70-89% range)<br>3. Call with confidence=60 (50-69% range)<br>4. Call with confidence=40 (below 50% range) |
+| **Expected Results** | - 95%: saturation 100%, opacity 1.0<br>- 75%: saturation 75%, opacity 0.9<br>- 60%: saturation 50%, opacity 0.8<br>- 40%: saturation 25%, opacity 0.7 |
+| **Edge Cases** | - Confidence of exactly 90, 70, 50<br>- Confidence of 0<br>- Confidence of 100<br>- Negative confidence<br>- Confidence > 100 |
 
-#### TC-UNIT-008: LineageNode Interface Validation
+#### TC-UNIT-008: calculateClusterBounds Function
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-UNIT-008 |
-| **Description** | Verify LineageNode interface enforces correct type discriminator |
-| **Preconditions** | TypeScript compilation environment |
-| **Test Steps** | 1. Create node with type="column"<br>2. Create node with type="table"<br>3. Create node with type="database"<br>4. Create node with invalid type |
-| **Expected Results** | - Valid types compile successfully<br>- Invalid type causes compilation error |
+| **Description** | Verify cluster boundary calculation for database grouping |
+| **Preconditions** | useDatabaseClusters.ts hook is available |
+| **Test Steps** | 1. Create node bounds map with multiple nodes<br>2. Call calculateClusterBounds with table IDs<br>3. Verify returned bounds object |
+| **Expected Results** | - Returns object with x, y, width, height<br>- Bounds encompass all nodes in cluster<br>- Padding is applied correctly |
+| **Edge Cases** | - Single node cluster<br>- Empty cluster<br>- Overlapping nodes<br>- Nodes with negative positions |
 
-#### TC-UNIT-009: ImpactedAsset Interface Validation
+#### TC-UNIT-009: Search Scoring Functions
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-UNIT-009 |
-| **Description** | Verify ImpactedAsset interface validates impactType discriminator |
+| **Description** | Verify search result scoring and ranking |
+| **Preconditions** | searchUtils.ts utility module is available |
+| **Test Steps** | 1. Search for "cust" against "customer_id"<br>2. Search for "customer" against "customer_id"<br>3. Search for "id" against "customer_id" |
+| **Expected Results** | - Exact match scores highest<br>- "starts with" match scores second<br>- "contains" match scores lowest<br>- Results sorted by score descending |
+| **Edge Cases** | - Case insensitive matching<br>- Empty search query<br>- No matches found<br>- Special regex characters in query |
+
+### 1.2 TypeScript Type Validation
+
+#### TC-UNIT-010: TableNodeData Interface Validation
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-UNIT-010 |
+| **Description** | Verify TableNodeData interface enforces required fields |
 | **Preconditions** | TypeScript compilation environment |
-| **Test Steps** | 1. Create ImpactedAsset with impactType="direct"<br>2. Create ImpactedAsset with impactType="indirect"<br>3. Create ImpactedAsset with invalid impactType |
-| **Expected Results** | - "direct" and "indirect" compile<br>- Invalid impactType causes error |
+| **Test Steps** | 1. Create object with all required fields<br>2. Create object missing databaseName<br>3. Create object with invalid assetType |
+| **Expected Results** | - Valid objects pass type checking<br>- Missing required fields cause compilation error<br>- Invalid assetType ('invalid') causes error |
+
+#### TC-UNIT-011: EdgeData Interface Validation
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-UNIT-011 |
+| **Description** | Verify EdgeData interface validates transformationType |
+| **Preconditions** | TypeScript compilation environment |
+| **Test Steps** | 1. Create EdgeData with transformationType="direct"<br>2. Create EdgeData with transformationType="derived"<br>3. Create EdgeData with invalid transformationType |
+| **Expected Results** | - Valid transformation types compile<br>- Invalid type causes compilation error |
+
+#### TC-UNIT-012: LineageVisualizationState Interface Validation
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-UNIT-012 |
+| **Description** | Verify LineageVisualizationState interface for Zustand store |
+| **Preconditions** | TypeScript compilation environment |
+| **Test Steps** | 1. Verify viewMode accepts 'graph' or 'table'<br>2. Verify panelContent accepts 'node', 'edge', or null<br>3. Verify highlightedNodeIds is Set<string> |
+| **Expected Results** | - All state properties have correct types<br>- All action functions have correct signatures |
 
 ---
 
 ## 2. Component Tests
 
-### 2.1 AssetBrowser Component
+### 2.1 Table Node Component
 
-#### TC-COMP-001: AssetBrowser Initial Render
+#### TC-COMP-001: TableNode Structure Rendering
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-COMP-001 |
+| **Description** | Verify TableNode renders with correct structure per visualization spec |
+| **Preconditions** | Mock useLineageStore, TableNode component available |
+| **Test Steps** | 1. Render TableNode with mock data (3 columns)<br>2. Verify header shows "database_name.table_name"<br>3. Verify expand/collapse icon is present<br>4. Verify all columns are rendered |
+| **Expected Results** | - Header contains database and table name<br>- Expand/collapse button visible<br>- All 3 column rows rendered<br>- Node width is minimum 280px |
+| **Edge Cases** | - Table with no columns<br>- Table with 50+ columns<br>- Very long database/table names |
+
+#### TC-COMP-002: TableNode Column Row Design
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-002 |
+| **Description** | Verify column rows have correct structure |
+| **Preconditions** | TableNode component rendered |
+| **Test Steps** | 1. Inspect column row for left handle (target)<br>2. Verify column name styling (14px, semibold, slate-800)<br>3. Verify data type styling (12px, regular, slate-500, right-aligned)<br>4. Verify right handle (source) |
+| **Expected Results** | - Left handle: 8px circle at vertical center<br>- Column name: correct font styling<br>- Data type: correct positioning and styling<br>- Right handle: 8px circle at vertical center |
+
+#### TC-COMP-003: TableNode State Styling
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-003 |
+| **Description** | Verify TableNode applies correct styles for each state |
+| **Preconditions** | TableNode component with various states |
+| **Test Steps** | 1. Render default state<br>2. Render hovered state<br>3. Render selected state<br>4. Render highlighted (in path) state<br>5. Render dimmed state |
+| **Expected Results** | - Default: bg #FFFFFF, border #E2E8F0<br>- Hovered: bg #F8FAFC, border #CBD5E1<br>- Selected: bg #EFF6FF, border #3B82F6<br>- Highlighted: bg #F0FDF4, border #22C55E<br>- Dimmed: 20% opacity |
+
+#### TC-COMP-004: TableNode Expand/Collapse
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-004 |
+| **Description** | Verify table expand/collapse functionality |
+| **Preconditions** | TableNode with columns rendered |
+| **Test Steps** | 1. Verify default expanded state shows all columns<br>2. Click collapse button<br>3. Verify columns are hidden<br>4. Click expand button<br>5. Verify columns are visible again |
+| **Expected Results** | - Default state: all columns visible (isExpanded: true)<br>- Collapsed: only header visible<br>- Icon changes between expand/collapse states |
+
+### 2.2 Lineage Edge Component
+
+#### TC-COMP-005: LineageEdge Type Rendering
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-005 |
+| **Description** | Verify edges render with correct colors per transformation type |
+| **Preconditions** | LineageEdge component available |
+| **Test Steps** | 1. Render edge with type="direct"<br>2. Render edge with type="derived"<br>3. Render edge with type="aggregated"<br>4. Render edge with type="joined"<br>5. Render edge with type="unknown" |
+| **Expected Results** | - Direct: #22C55E (green-500)<br>- Derived: #3B82F6 (blue-500)<br>- Aggregated: #A855F7 (purple-500)<br>- Joined: #06B6D4 (cyan-500)<br>- Unknown: #9CA3AF (gray-400) |
+
+#### TC-COMP-006: LineageEdge Visual Specifications
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-006 |
+| **Description** | Verify edge visual specifications |
+| **Preconditions** | LineageEdge component rendered |
+| **Test Steps** | 1. Verify edge is Bezier curve<br>2. Verify default stroke width is 2px<br>3. Verify arrow marker end is 8px<br>4. Verify no animation by default |
+| **Expected Results** | - Edge type is bezier<br>- Stroke width: 2px<br>- Arrowhead marker: 8px<br>- animated: false by default |
+
+#### TC-COMP-007: LineageEdge State Styling
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-007 |
+| **Description** | Verify edge applies correct styles for each state |
+| **Preconditions** | LineageEdge component with various states |
+| **Test Steps** | 1. Render default state<br>2. Render hovered state<br>3. Render selected state<br>4. Render in highlighted path<br>5. Render dimmed state |
+| **Expected Results** | - Default: solid line, type color<br>- Hovered: 3px stroke, animated dashes<br>- Selected: 3px stroke, animated dashes, glow effect<br>- In path: full opacity, animated<br>- Dimmed: 10% opacity |
+
+#### TC-COMP-008: LineageEdge Confidence Styling
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-008 |
+| **Description** | Verify edge color fades based on confidence score |
+| **Preconditions** | LineageEdge with confidence scores |
+| **Test Steps** | 1. Render edge with confidence=95<br>2. Render edge with confidence=75<br>3. Render edge with confidence=55<br>4. Render edge with confidence=30 |
+| **Expected Results** | - 95%: 100% saturation, opacity 1.0<br>- 75%: 75% saturation, opacity 0.9<br>- 55%: 50% saturation, opacity 0.8<br>- 30%: 25% saturation, opacity 0.7 |
+
+#### TC-COMP-009: LineageEdge Label Display
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-009 |
+| **Description** | Verify edge label shows on hover/selection |
+| **Preconditions** | LineageEdge component |
+| **Test Steps** | 1. Render edge, verify no label visible<br>2. Hover over edge<br>3. Verify transformation type label appears at midpoint<br>4. Select edge<br>5. Verify label remains visible |
+| **Expected Results** | - Default: no label<br>- Hovered: label at edge midpoint<br>- Selected: label visible<br>- Label shows transformation type |
+
+### 2.3 Detail Panel Component
+
+#### TC-COMP-010: DetailPanel Node Content
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-010 |
+| **Description** | Verify panel displays correct content for node selection |
+| **Preconditions** | LineageGraphPanel component available |
+| **Test Steps** | 1. Select a column node<br>2. Verify panel slides out from right (400px width)<br>3. Verify header shows full qualified name<br>4. Verify Metadata section shows data type, nullable, PK/FK<br>5. Verify Lineage Stats section shows upstream/downstream counts |
+| **Expected Results** | - Panel width: 400px<br>- Header: db.table.column format<br>- Metadata section present<br>- Lineage Stats section present<br>- Action buttons visible |
+
+#### TC-COMP-011: DetailPanel Edge Content
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-011 |
+| **Description** | Verify panel displays correct content for edge selection |
+| **Preconditions** | LineageGraphPanel component available |
+| **Test Steps** | 1. Select an edge<br>2. Verify header shows "Connection Details"<br>3. Verify Source and Target column names<br>4. Verify Transformation type and confidence score<br>5. Verify SQL viewer with transformation query |
+| **Expected Results** | - Header: "Connection Details"<br>- Source/Target full names<br>- Transformation type displayed<br>- Confidence bar visual<br>- SQL viewer present |
+
+#### TC-COMP-012: SQL Viewer Specifications
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-012 |
+| **Description** | Verify SQL viewer meets visual specifications |
+| **Preconditions** | SqlViewer component rendered with SQL |
+| **Test Steps** | 1. Render SQL viewer with long query<br>2. Verify max height is 200px with scroll<br>3. Verify monospace font, 13px<br>4. Verify syntax highlighting for keywords<br>5. Verify line numbers present<br>6. Verify copy button in top-right |
+| **Expected Results** | - Max height: 200px, scrollable<br>- Font: monospace, 13px<br>- Background: #1E293B, Text: #E2E8F0<br>- Line numbers: 40px gutter<br>- Copy button functional |
+| **Edge Cases** | - Empty SQL<br>- Very long single line<br>- SQL with special characters<br>- Multiline complex query |
+
+#### TC-COMP-013: DetailPanel Close Behavior
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-013 |
+| **Description** | Verify panel close interactions |
+| **Preconditions** | Panel is open |
+| **Test Steps** | 1. Click close (X) button<br>2. Verify panel closes<br>3. Open panel, press Escape key<br>4. Verify panel closes<br>5. Open panel, click canvas background<br>6. Verify panel closes |
+| **Expected Results** | - X button closes panel<br>- Escape key closes panel<br>- Canvas click closes panel and clears selection |
+
+### 2.4 Toolbar Component
+
+#### TC-COMP-014: Toolbar Layout
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-014 |
+| **Description** | Verify toolbar contains all required controls |
+| **Preconditions** | LineageGraphToolbar component rendered |
+| **Test Steps** | 1. Verify View Toggle (Graph/Table tabs)<br>2. Verify Search input with placeholder<br>3. Verify Direction dropdown<br>4. Verify Depth slider<br>5. Verify Fit to View button<br>6. Verify Export button<br>7. Verify Fullscreen button<br>8. Verify Legend toggle |
+| **Expected Results** | All controls present and accessible |
+
+#### TC-COMP-015: View Toggle
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-015 |
+| **Description** | Verify view toggle switches between Graph and Table views |
+| **Preconditions** | Toolbar with view toggle |
+| **Test Steps** | 1. Verify Graph tab is default active<br>2. Click Table tab<br>3. Verify Table view renders<br>4. Click Graph tab<br>5. Verify Graph view renders |
+| **Expected Results** | - Default: Graph view active<br>- Tab click switches views<br>- Active tab has distinct styling |
+
+#### TC-COMP-016: Direction Dropdown
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-016 |
+| **Description** | Verify direction dropdown options and selection |
+| **Preconditions** | Toolbar with direction dropdown |
+| **Test Steps** | 1. Verify default is "Both"<br>2. Open dropdown<br>3. Verify options: Upstream, Downstream, Both<br>4. Select "Upstream"<br>5. Verify selection triggers graph update |
+| **Expected Results** | - Options: Upstream, Downstream, Both<br>- Selection updates store direction<br>- Graph refetches with new direction |
+
+#### TC-COMP-017: Depth Slider
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-017 |
+| **Description** | Verify depth slider functionality |
+| **Preconditions** | Toolbar with depth slider |
+| **Test Steps** | 1. Verify default value is 3<br>2. Verify range is 1-10<br>3. Slide to value 7<br>4. Verify API refetch with maxDepth=7<br>5. Verify loading indicator during fetch |
+| **Expected Results** | - Default: 3, Range: 1-10<br>- Slider updates maxDepth in store<br>- Triggers API refetch<br>- Loading indicator shown |
+| **Edge Cases** | - Rapid slider changes (debouncing)<br>- API error during refetch |
+
+#### TC-COMP-018: Export Functionality
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-018 |
+| **Description** | Verify export options and downloads |
+| **Preconditions** | Graph rendered with nodes |
+| **Test Steps** | 1. Click Export button<br>2. Verify menu shows PNG, SVG, JSON options<br>3. Click PNG<br>4. Verify PNG downloads<br>5. Click SVG<br>6. Verify SVG downloads<br>7. Click JSON<br>8. Verify JSON with graph data downloads |
+| **Expected Results** | - Export menu with 3 options<br>- PNG: rasterized graph image<br>- SVG: vector graph image<br>- JSON: graph nodes and edges data |
+
+#### TC-COMP-019: Fullscreen Toggle
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-019 |
+| **Description** | Verify fullscreen mode toggle |
+| **Preconditions** | Graph container rendered |
+| **Test Steps** | 1. Click fullscreen button<br>2. Verify graph enters fullscreen<br>3. Press Escape or click button again<br>4. Verify exits fullscreen |
+| **Expected Results** | - Button toggles fullscreen<br>- Escape exits fullscreen<br>- Graph re-fits view on mode change |
+
+### 2.5 Graph Search Component
+
+#### TC-COMP-020: Search Autocomplete Behavior
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-020 |
+| **Description** | Verify search autocomplete functionality |
+| **Preconditions** | LineageGraphSearch component with nodes |
+| **Test Steps** | 1. Type "cust" in search input<br>2. Verify dropdown appears with matching columns<br>3. Verify results show database.table.column format<br>4. Verify data type shown for each result<br>5. Verify max 10 results displayed |
+| **Expected Results** | - Dropdown appears as user types<br>- Results formatted as db.table.column<br>- Data type visible<br>- Max 10 results shown |
+
+#### TC-COMP-021: Search Result Selection
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-021 |
+| **Description** | Verify search result selection behavior |
+| **Preconditions** | Search with results displayed |
+| **Test Steps** | 1. Click on a search result<br>2. Verify graph pans to center on node<br>3. Verify graph zooms appropriately<br>4. Verify node is selected<br>5. Verify path highlighting activates |
+| **Expected Results** | - Graph centers on selected node<br>- Appropriate zoom level<br>- Node selected<br>- Lineage path highlighted |
+
+#### TC-COMP-022: Search Keyboard Navigation
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-022 |
+| **Description** | Verify keyboard navigation in search |
+| **Preconditions** | Search with results displayed |
+| **Test Steps** | 1. Press Down arrow to highlight first result<br>2. Press Down arrow to move to next<br>3. Press Up arrow to move back<br>4. Press Enter to select highlighted result<br>5. Press Escape to close dropdown |
+| **Expected Results** | - Arrow keys navigate results<br>- Enter selects highlighted result<br>- Escape closes dropdown<br>- Focus returns to input on close |
+| **Edge Cases** | - Empty results<br>- Single result<br>- Arrow key at list boundaries |
+
+### 2.6 Table View Component
+
+#### TC-COMP-023: Table View Structure
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-023 |
+| **Description** | Verify table view renders correct columns |
+| **Preconditions** | LineageTableView component with data |
+| **Test Steps** | 1. Verify Source Column header<br>2. Verify Target Column header<br>3. Verify Type header<br>4. Verify Depth header<br>5. Verify Confidence header<br>6. Verify Query ID column |
+| **Expected Results** | All columns present with correct headers |
+
+#### TC-COMP-024: Table View Sorting
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-024 |
+| **Description** | Verify column sorting functionality |
+| **Preconditions** | Table view with multiple rows |
+| **Test Steps** | 1. Click Source Column header<br>2. Verify ascending sort<br>3. Click again<br>4. Verify descending sort<br>5. Click Confidence header<br>6. Verify numeric sort |
+| **Expected Results** | - Header click toggles sort<br>- Ascending/descending indicators<br>- Correct sort order applied |
+
+#### TC-COMP-025: Table View Filtering
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-025 |
+| **Description** | Verify table filtering functionality |
+| **Preconditions** | Table view with multiple rows |
+| **Test Steps** | 1. Enter text in filter input<br>2. Verify rows filtered across all columns<br>3. Use Type dropdown filter<br>4. Use Depth range filter<br>5. Use Confidence range filter |
+| **Expected Results** | - Text search filters all columns<br>- Dropdown filters by type<br>- Range filters work correctly |
+
+#### TC-COMP-026: Table View Row Click
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-026 |
+| **Description** | Verify row click highlights corresponding edge |
+| **Preconditions** | Table view and graph view available |
+| **Test Steps** | 1. Click on a row in table view<br>2. Switch to graph view<br>3. Verify corresponding edge is highlighted |
+| **Expected Results** | - Row click selects edge<br>- Edge highlighted in graph view<br>- Bidirectional sync works |
+
+#### TC-COMP-027: Table View Pagination
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-027 |
+| **Description** | Verify table pagination |
+| **Preconditions** | Table view with 100+ rows |
+| **Test Steps** | 1. Verify 50 rows per page default<br>2. Click next page<br>3. Verify page 2 loads<br>4. Change rows per page to 100<br>5. Verify row count updates |
+| **Expected Results** | - Default 50 rows per page<br>- Pagination controls work<br>- Rows per page configurable |
+| **Edge Cases** | - Fewer rows than page size<br>- Last page with partial rows |
+
+### 2.7 Cluster Background Component
+
+#### TC-COMP-028: Database Cluster Rendering
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-028 |
+| **Description** | Verify database cluster backgrounds render |
+| **Preconditions** | ClusterBackground component with clusters |
+| **Test Steps** | 1. Render graph with tables from multiple databases<br>2. Verify background regions appear<br>3. Verify each database has distinct color<br>4. Verify database label in cluster header<br>5. Verify dashed border style |
+| **Expected Results** | - Semi-transparent backgrounds<br>- Distinct colors per database<br>- Database names visible<br>- Border: 1px dashed rgba(0,0,0,0.1) |
+
+#### TC-COMP-029: Cluster Toggle
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-029 |
+| **Description** | Verify cluster visibility toggle |
+| **Preconditions** | Graph with clusters visible |
+| **Test Steps** | 1. Verify clusters visible by default<br>2. Press Ctrl+G<br>3. Verify clusters hidden<br>4. Press Ctrl+G again<br>5. Verify clusters visible |
+| **Expected Results** | - Keyboard shortcut toggles clusters<br>- Store state updates<br>- UI reflects toggle state |
+
+### 2.8 Asset Browser Component
+
+#### TC-COMP-030: AssetBrowser Initial Render
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-030 |
 | **Description** | Verify AssetBrowser renders loading state initially and displays database list |
 | **Preconditions** | Mock useDatabases hook, render AssetBrowser component |
 | **Test Steps** | 1. Render AssetBrowser with loading state<br>2. Wait for data to load<br>3. Verify database list is displayed |
 | **Expected Results** | - LoadingSpinner displays during loading<br>- "Databases" heading is visible<br>- Database items render with Database icon |
 
-#### TC-COMP-002: AssetBrowser Database Expansion
+#### TC-COMP-031: AssetBrowser Database Expansion
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-COMP-002 |
+| **Test Case ID** | TC-COMP-031 |
 | **Description** | Verify clicking a database expands to show tables |
 | **Preconditions** | AssetBrowser rendered with mock database data |
 | **Test Steps** | 1. Click on a database item<br>2. Verify tables are fetched<br>3. Verify table list is displayed<br>4. Click database again to collapse |
 | **Expected Results** | - ChevronRight changes to ChevronDown on expand<br>- Tables are displayed under the database<br>- ChevronDown changes back to ChevronRight on collapse |
 
-#### TC-COMP-003: AssetBrowser Table Expansion
+#### TC-COMP-032: AssetBrowser Column Selection
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-COMP-003 |
-| **Description** | Verify clicking a table expands to show columns |
-| **Preconditions** | AssetBrowser with expanded database showing tables |
-| **Test Steps** | 1. Click on a table item<br>2. Verify columns are fetched<br>3. Verify column list is displayed with type information |
-| **Expected Results** | - Columns are displayed with column name and type<br>- Columns icon is purple colored<br>- Column type appears in smaller, lighter text |
-
-#### TC-COMP-004: AssetBrowser Column Selection
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-004 |
+| **Test Case ID** | TC-COMP-032 |
 | **Description** | Verify clicking a column calls setSelectedAssetId |
-| **Preconditions** | AssetBrowser with expanded table showing columns, mock useLineageStore |
+| **Preconditions** | AssetBrowser with expanded table showing columns |
 | **Test Steps** | 1. Click on a column item<br>2. Verify setSelectedAssetId is called with correct column id |
 | **Expected Results** | - setSelectedAssetId is called once<br>- Called with the correct column.id value |
 
-### 2.2 LineageGraph Component
+### 2.9 Layout Components
 
-#### TC-COMP-005: LineageGraph Loading State
+#### TC-COMP-033: AppShell Sidebar Toggle
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-COMP-005 |
-| **Description** | Verify LineageGraph displays loading spinner while fetching data |
-| **Preconditions** | Mock useLineage hook to return loading state |
-| **Test Steps** | 1. Render LineageGraph with assetId<br>2. Verify loading spinner is displayed |
-| **Expected Results** | - LoadingSpinner component is rendered<br>- Container has flex centering classes |
-
-#### TC-COMP-006: LineageGraph Error State
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-006 |
-| **Description** | Verify LineageGraph displays error message on API failure |
-| **Preconditions** | Mock useLineage hook to return error |
-| **Test Steps** | 1. Render LineageGraph with assetId<br>2. Mock API error response<br>3. Verify error message is displayed |
-| **Expected Results** | - Error message "Failed to load lineage: [error]" is visible<br>- Text has red color styling |
-
-#### TC-COMP-007: LineageGraph Successful Render
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-007 |
-| **Description** | Verify LineageGraph renders ReactFlow with nodes and edges |
-| **Preconditions** | Mock useLineage hook with valid graph data |
-| **Test Steps** | 1. Render LineageGraph with assetId<br>2. Wait for layout to complete<br>3. Verify ReactFlow component renders<br>4. Verify nodes and edges are present |
-| **Expected Results** | - ReactFlow component is rendered<br>- Background, Controls, and MiniMap are visible<br>- Nodes are positioned according to ELK layout |
-
-#### TC-COMP-008: LineageGraph Node Hover Highlighting
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-008 |
-| **Description** | Verify hovering over a node highlights connected nodes |
-| **Preconditions** | LineageGraph rendered with multiple connected nodes |
-| **Test Steps** | 1. Simulate mouse enter on a node<br>2. Verify setHighlightedNodeIds is called<br>3. Simulate mouse leave<br>4. Verify highlighting is cleared |
-| **Expected Results** | - On hover: highlighted set contains node and its connected nodes<br>- On leave: highlighted set is empty |
-
-### 2.3 ColumnNode Component
-
-#### TC-COMP-009: ColumnNode Default Render
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-009 |
-| **Description** | Verify ColumnNode renders with correct structure and styling |
-| **Preconditions** | Mock useLineageStore with default state |
-| **Test Steps** | 1. Render ColumnNode with data prop<br>2. Verify database.table label is displayed<br>3. Verify column name is displayed<br>4. Verify handles are present |
-| **Expected Results** | - Database and table name shown in smaller text<br>- Column name shown in medium font weight<br>- Left (target) and right (source) handles present<br>- Default border is slate-300 |
-
-#### TC-COMP-010: ColumnNode Selected State
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-010 |
-| **Description** | Verify ColumnNode displays selected styling when selectedAssetId matches |
-| **Preconditions** | Mock useLineageStore with selectedAssetId matching node id |
-| **Test Steps** | 1. Render ColumnNode with id matching selectedAssetId<br>2. Verify selected styling is applied |
-| **Expected Results** | - Background is blue-100<br>- Border is blue-500<br>- Ring-2 with blue-300 is applied |
-
-#### TC-COMP-011: ColumnNode Highlighted State
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-011 |
-| **Description** | Verify ColumnNode displays highlighted styling when in highlightedNodeIds |
-| **Preconditions** | Mock useLineageStore with highlightedNodeIds containing node id |
-| **Test Steps** | 1. Render ColumnNode with id in highlightedNodeIds set<br>2. Verify highlighted styling is applied |
-| **Expected Results** | - Background is blue-50<br>- Border is blue-400 |
-
-### 2.4 TableNode Component
-
-#### TC-COMP-012: TableNode Render
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-012 |
-| **Description** | Verify TableNode renders with correct structure |
-| **Preconditions** | None |
-| **Test Steps** | 1. Render TableNode with data prop<br>2. Verify database name is displayed<br>3. Verify table name is displayed in bold<br>4. Verify handles are present |
-| **Expected Results** | - Database name in smaller text<br>- Table name in semibold font<br>- Border is slate-400<br>- Background is slate-100 |
-
-### 2.5 Layout Components
-
-#### TC-COMP-013: AppShell Sidebar Toggle
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-COMP-013 |
+| **Test Case ID** | TC-COMP-033 |
 | **Description** | Verify AppShell shows/hides sidebar based on sidebarOpen state |
 | **Preconditions** | Mock useUIStore |
 | **Test Steps** | 1. Render AppShell with sidebarOpen=true<br>2. Verify Sidebar is visible<br>3. Mock sidebarOpen=false<br>4. Verify Sidebar is hidden |
 | **Expected Results** | - Sidebar renders when sidebarOpen is true<br>- Sidebar not rendered when sidebarOpen is false |
 
-#### TC-COMP-014: Header Search Submission
+#### TC-COMP-034: Header Search Submission
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-COMP-014 |
+| **Test Case ID** | TC-COMP-034 |
 | **Description** | Verify Header search form navigates to search page with query |
 | **Preconditions** | Mock useNavigate and useUIStore |
 | **Test Steps** | 1. Enter search query in input<br>2. Submit the form<br>3. Verify navigation occurs |
 | **Expected Results** | - Navigate called with "/search?q=[encoded query]"<br>- Empty/whitespace query does not navigate |
 
-#### TC-COMP-015: Sidebar Navigation
+#### TC-COMP-035: Sidebar Navigation
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-COMP-015 |
+| **Test Case ID** | TC-COMP-035 |
 | **Description** | Verify Sidebar NavLinks have correct active styling |
 | **Preconditions** | Render Sidebar within BrowserRouter |
 | **Test Steps** | 1. Render Sidebar at "/" route<br>2. Verify Explore link is active<br>3. Navigate to "/search"<br>4. Verify Search link is active |
@@ -293,7 +531,7 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Description** | Verify useLineage uses default direction and maxDepth |
 | **Preconditions** | Mock API client |
 | **Test Steps** | 1. Call useLineage with only assetId<br>2. Verify query parameters |
-| **Expected Results** | - direction=both (default)<br>- maxDepth=5 (default)<br>- Correct URL encoding of assetId |
+| **Expected Results** | - direction=both (default)<br>- maxDepth=3 (default per spec)<br>- Correct URL encoding of assetId |
 
 #### TC-INT-006: useLineage with Custom Options
 | Field | Description |
@@ -344,222 +582,9 @@ This test plan covers the React frontend application for the Data Lineage visual
 
 ---
 
-## 4. End-to-End User Flow Tests
+## 4. State Management Tests
 
-### 4.1 Navigation Flows
-
-#### TC-E2E-001: Initial Application Load
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-001 |
-| **Description** | Verify application loads and displays ExplorePage |
-| **Preconditions** | Application running, backend available |
-| **Test Steps** | 1. Navigate to root URL (/)<br>2. Wait for page to load<br>3. Verify ExplorePage components are visible |
-| **Expected Results** | - Sidebar is visible<br>- Header is visible<br>- AssetBrowser panel is displayed<br>- "Select a column to view its lineage" placeholder shown |
-
-#### TC-E2E-002: Navigate to Lineage Page via URL
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-002 |
-| **Description** | Verify direct navigation to lineage page with assetId |
-| **Preconditions** | Application running, valid assetId |
-| **Test Steps** | 1. Navigate to /lineage/{assetId}<br>2. Wait for lineage data to load<br>3. Verify LineagePage is displayed |
-| **Expected Results** | - Header shows "Lineage: {assetId}"<br>- Depth and Direction controls are visible<br>- LineageGraph renders with nodes |
-
-#### TC-E2E-003: Navigate to Impact Page
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-003 |
-| **Description** | Verify navigation to impact analysis page |
-| **Preconditions** | Application running, valid assetId |
-| **Test Steps** | 1. Navigate to /impact/{assetId}<br>2. Wait for impact data to load<br>3. Verify ImpactPage is displayed |
-| **Expected Results** | - Impact analysis data is displayed<br>- Summary statistics are visible |
-
-#### TC-E2E-004: Search Navigation Flow
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-004 |
-| **Description** | Verify search from header navigates to search page |
-| **Preconditions** | Application running |
-| **Test Steps** | 1. Enter search query in header input<br>2. Press Enter or submit form<br>3. Verify navigation to /search |
-| **Expected Results** | - URL changes to /search?q={query}<br>- SearchPage is displayed<br>- Search results are fetched and displayed |
-
-### 4.2 Asset Selection Flows
-
-#### TC-E2E-005: Browse and Select Column
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-005 |
-| **Description** | Verify full flow of browsing to and selecting a column |
-| **Preconditions** | Application running with populated database |
-| **Test Steps** | 1. Click on a database in AssetBrowser<br>2. Wait for tables to load<br>3. Click on a table<br>4. Wait for columns to load<br>5. Click on a column |
-| **Expected Results** | - Each level expands to show children<br>- Clicking column triggers lineage load<br>- LineageGraph displays for selected column |
-
-#### TC-E2E-006: Change Lineage Direction
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-006 |
-| **Description** | Verify changing direction updates lineage graph |
-| **Preconditions** | LineagePage displayed with asset selected |
-| **Test Steps** | 1. Select "Upstream Only" from direction dropdown<br>2. Wait for graph to update<br>3. Select "Downstream Only"<br>4. Wait for graph to update |
-| **Expected Results** | - Graph refetches with new direction<br>- Nodes change based on direction<br>- Layout recalculates |
-
-#### TC-E2E-007: Change Lineage Depth
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-007 |
-| **Description** | Verify changing depth updates lineage graph |
-| **Preconditions** | LineagePage displayed with asset selected |
-| **Test Steps** | 1. Change depth from 5 to 10<br>2. Wait for graph to update<br>3. Change depth to 1<br>4. Wait for graph to update |
-| **Expected Results** | - Increasing depth may show more nodes<br>- Decreasing depth shows fewer nodes<br>- Graph re-layouts after each change |
-
-### 4.3 Search Flows
-
-#### TC-E2E-008: Search for Table
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-008 |
-| **Description** | Verify searching for a table returns relevant results |
-| **Preconditions** | Application running, searchable data exists |
-| **Test Steps** | 1. Navigate to /search<br>2. Enter table name in search<br>3. Wait for results<br>4. Verify table appears in results |
-| **Expected Results** | - Search results display<br>- Results show type indicator (table)<br>- Results show database and table name |
-
-#### TC-E2E-009: Search Result Selection
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-E2E-009 |
-| **Description** | Verify clicking search result navigates to lineage view |
-| **Preconditions** | Search results displayed |
-| **Test Steps** | 1. Click on a search result<br>2. Verify navigation occurs<br>3. Verify lineage is displayed |
-| **Expected Results** | - Navigation to lineage view for selected asset<br>- LineageGraph loads and displays |
-
----
-
-## 5. Graph Rendering Tests
-
-### 5.1 ELKjs Layout Tests
-
-#### TC-GRAPH-001: Layout Direction
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-001 |
-| **Description** | Verify ELK layout respects direction option |
-| **Preconditions** | layoutGraph function available |
-| **Test Steps** | 1. Call layoutGraph with direction="RIGHT"<br>2. Verify node positions flow left to right<br>3. Call layoutGraph with direction="DOWN"<br>4. Verify node positions flow top to bottom |
-| **Expected Results** | - RIGHT: upstream nodes have lower x values<br>- DOWN: upstream nodes have lower y values |
-
-#### TC-GRAPH-002: Node Spacing
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-002 |
-| **Description** | Verify ELK layout respects nodeSpacing option |
-| **Preconditions** | layoutGraph function available |
-| **Test Steps** | 1. Call layoutGraph with nodeSpacing=50<br>2. Measure spacing between nodes in same layer<br>3. Call layoutGraph with nodeSpacing=100<br>4. Measure spacing again |
-| **Expected Results** | - Nodes in same layer have minimum spacing as specified<br>- Increased spacing results in larger gaps |
-
-#### TC-GRAPH-003: Layer Spacing
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-003 |
-| **Description** | Verify ELK layout respects layerSpacing option |
-| **Preconditions** | layoutGraph function available |
-| **Test Steps** | 1. Call layoutGraph with layerSpacing=150<br>2. Measure distance between layers<br>3. Call layoutGraph with layerSpacing=300<br>4. Measure distance again |
-| **Expected Results** | - Distance between connected nodes in different layers matches layerSpacing |
-
-#### TC-GRAPH-004: Complex Graph Layout
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-004 |
-| **Description** | Verify ELK handles complex DAG with multiple paths |
-| **Preconditions** | Graph with diamond pattern (A->B, A->C, B->D, C->D) |
-| **Test Steps** | 1. Create nodes and edges for diamond pattern<br>2. Call layoutGraph<br>3. Verify no node overlaps<br>4. Verify edges don't cross unnecessarily |
-| **Expected Results** | - All nodes have unique positions<br>- No visual overlaps between nodes<br>- Edge crossing is minimized |
-
-### 5.2 Node Rendering Tests
-
-#### TC-GRAPH-005: React Flow Node Types Registration
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-005 |
-| **Description** | Verify custom node types are correctly registered |
-| **Preconditions** | LineageGraph component |
-| **Test Steps** | 1. Render LineageGraph with column and table nodes<br>2. Verify ColumnNode renders for column type<br>3. Verify TableNode renders for table type |
-| **Expected Results** | - columnNode type uses ColumnNode component<br>- tableNode type uses TableNode component |
-
-#### TC-GRAPH-006: Node Position Updates
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-006 |
-| **Description** | Verify nodes can be dragged and positions update |
-| **Preconditions** | LineageGraph rendered with nodes |
-| **Test Steps** | 1. Drag a node to new position<br>2. Verify onNodesChange is called<br>3. Verify node position updates |
-| **Expected Results** | - Node visually moves during drag<br>- Position state updates after drag |
-
-### 5.3 Edge Rendering Tests
-
-#### TC-GRAPH-007: Edge Animation for Low Confidence
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-007 |
-| **Description** | Verify edges with low confidence score are animated |
-| **Preconditions** | Edge with confidenceScore < 0.8 |
-| **Test Steps** | 1. Create edge with confidenceScore=0.5<br>2. Call layoutGraph<br>3. Verify edge has animated=true |
-| **Expected Results** | - Edge with score < 0.8 has animated property true<br>- Edge with score >= 0.8 has animated false |
-
-#### TC-GRAPH-008: Edge Arrow Markers
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-008 |
-| **Description** | Verify edges have correct arrow markers |
-| **Preconditions** | Edges created by layoutGraph |
-| **Test Steps** | 1. Create edges with different transformation types<br>2. Call layoutGraph<br>3. Verify markerEnd configuration |
-| **Expected Results** | - All edges have markerEnd with type="arrowclosed"<br>- Arrow color matches edge stroke color |
-
-### 5.4 Zoom and Pan Tests
-
-#### TC-GRAPH-009: Zoom Limits
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-009 |
-| **Description** | Verify zoom is constrained to minZoom/maxZoom |
-| **Preconditions** | LineageGraph rendered |
-| **Test Steps** | 1. Zoom out to minimum<br>2. Verify cannot zoom below 0.1<br>3. Zoom in to maximum<br>4. Verify cannot zoom above 2 |
-| **Expected Results** | - Zoom stops at minZoom=0.1<br>- Zoom stops at maxZoom=2 |
-
-#### TC-GRAPH-010: Fit View on Load
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-010 |
-| **Description** | Verify graph fits to view with padding on initial load |
-| **Preconditions** | LineageGraph component |
-| **Test Steps** | 1. Render LineageGraph with nodes<br>2. Verify fitView is applied<br>3. Verify padding is 0.2 |
-| **Expected Results** | - All nodes visible in viewport<br>- Appropriate padding around graph |
-
-#### TC-GRAPH-011: Pan Functionality
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-011 |
-| **Description** | Verify graph can be panned by dragging background |
-| **Preconditions** | LineageGraph rendered with nodes |
-| **Test Steps** | 1. Click and drag on background<br>2. Verify viewport moves<br>3. Release and verify position persists |
-| **Expected Results** | - Viewport scrolls with drag<br>- Nodes maintain relative positions |
-
-### 5.5 MiniMap Tests
-
-#### TC-GRAPH-012: MiniMap Node Colors
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-GRAPH-012 |
-| **Description** | Verify MiniMap shows selected node in different color |
-| **Preconditions** | LineageGraph with selected asset |
-| **Test Steps** | 1. Render LineageGraph with assetId<br>2. Examine MiniMap node colors |
-| **Expected Results** | - Selected node (matching assetId) is blue (#3b82f6)<br>- Other nodes are slate (#94a3b8) |
-
----
-
-## 6. State Management Tests
-
-### 6.1 useLineageStore Tests
+### 4.1 useLineageStore Tests
 
 #### TC-STATE-001: setSelectedAssetId
 | Field | Description |
@@ -586,7 +611,7 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Description** | Verify lineage options update correctly |
 | **Preconditions** | useLineageStore available |
 | **Test Steps** | 1. Call setMaxDepth(10)<br>2. Verify maxDepth is 10<br>3. Call setDirection("upstream")<br>4. Verify direction is "upstream" |
-| **Expected Results** | - maxDepth updates from default 5<br>- direction updates from default "both" |
+| **Expected Results** | - maxDepth updates from default 3<br>- direction updates from default "both" |
 
 #### TC-STATE-004: toggleTableExpanded
 | Field | Description |
@@ -597,259 +622,1236 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Test Steps** | 1. Call toggleTableExpanded("table1")<br>2. Verify table1 is in expandedTables<br>3. Call toggleTableExpanded("table1") again<br>4. Verify table1 is removed |
 | **Expected Results** | - First call adds to Set<br>- Second call removes from Set |
 
-#### TC-STATE-005: setHighlightedNodeIds
+#### TC-STATE-005: setHighlightedPath
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-STATE-005 |
-| **Description** | Verify setHighlightedNodeIds updates highlighted set |
+| **Description** | Verify setHighlightedPath updates both node and edge sets |
 | **Preconditions** | useLineageStore available |
-| **Test Steps** | 1. Create Set with node ids<br>2. Call setHighlightedNodeIds(set)<br>3. Verify state updated<br>4. Call with empty Set<br>5. Verify cleared |
-| **Expected Results** | - highlightedNodeIds matches provided Set<br>- Empty set clears highlighting |
+| **Test Steps** | 1. Create Set with node ids<br>2. Create Set with edge ids<br>3. Call setHighlightedPath(nodeIds, edgeIds)<br>4. Verify both sets updated |
+| **Expected Results** | - highlightedNodeIds matches provided Set<br>- highlightedEdgeIds matches provided Set |
 
-### 6.2 useUIStore Tests
-
-#### TC-STATE-006: toggleSidebar
+#### TC-STATE-006: clearHighlight
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-STATE-006 |
+| **Description** | Verify clearHighlight resets highlighting state |
+| **Preconditions** | Highlighted path set in store |
+| **Test Steps** | 1. Set highlighted path<br>2. Call clearHighlight<br>3. Verify both sets empty |
+| **Expected Results** | - highlightedNodeIds is empty Set<br>- highlightedEdgeIds is empty Set |
+
+### 4.2 LineageVisualizationState Tests
+
+#### TC-STATE-007: viewMode Toggle
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-STATE-007 |
+| **Description** | Verify setViewMode toggles between graph and table |
+| **Preconditions** | useLineageStore with visualization state |
+| **Test Steps** | 1. Verify default is 'graph'<br>2. Call setViewMode('table')<br>3. Verify viewMode is 'table'<br>4. Call setViewMode('graph')<br>5. Verify viewMode is 'graph' |
+| **Expected Results** | - Default: 'graph'<br>- setViewMode updates correctly |
+
+#### TC-STATE-008: Panel State Management
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-STATE-008 |
+| **Description** | Verify panel open/close state |
+| **Preconditions** | useLineageStore with visualization state |
+| **Test Steps** | 1. Verify default isPanelOpen is false<br>2. Call openPanel('node')<br>3. Verify isPanelOpen is true, panelContent is 'node'<br>4. Call openPanel('edge')<br>5. Verify panelContent is 'edge'<br>6. Call closePanel<br>7. Verify isPanelOpen is false |
+| **Expected Results** | - Panel state managed correctly<br>- panelContent reflects selection type |
+
+#### TC-STATE-009: Search State Management
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-STATE-009 |
+| **Description** | Verify search query and results state |
+| **Preconditions** | useLineageStore with search state |
+| **Test Steps** | 1. Call setSearchQuery("test")<br>2. Verify searchQuery is "test"<br>3. Verify searchResults updates<br>4. Call focusOnColumn("col-123")<br>5. Verify focus action triggered |
+| **Expected Results** | - searchQuery updates<br>- searchResults computed/updated<br>- focusOnColumn triggers graph pan/zoom |
+
+#### TC-STATE-010: Fullscreen State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-STATE-010 |
+| **Description** | Verify fullscreen toggle state |
+| **Preconditions** | useLineageStore with visualization state |
+| **Test Steps** | 1. Verify default isFullscreen is false<br>2. Call toggleFullscreen<br>3. Verify isFullscreen is true<br>4. Call toggleFullscreen<br>5. Verify isFullscreen is false |
+| **Expected Results** | - Toggle inverts boolean each call |
+
+#### TC-STATE-011: Database Clusters State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-STATE-011 |
+| **Description** | Verify database clusters toggle state |
+| **Preconditions** | useLineageStore with visualization state |
+| **Test Steps** | 1. Verify default showDatabaseClusters is true<br>2. Call toggleDatabaseClusters<br>3. Verify showDatabaseClusters is false |
+| **Expected Results** | - Default: true (visible)<br>- Toggle inverts state |
+
+### 4.3 useUIStore Tests
+
+#### TC-STATE-012: toggleSidebar
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-STATE-012 |
 | **Description** | Verify toggleSidebar toggles sidebarOpen state |
 | **Preconditions** | useUIStore available |
 | **Test Steps** | 1. Get initial sidebarOpen (true)<br>2. Call toggleSidebar<br>3. Verify sidebarOpen is false<br>4. Call toggleSidebar again<br>5. Verify sidebarOpen is true |
 | **Expected Results** | - Each call inverts the boolean value |
 
-#### TC-STATE-007: setSidebarOpen
+#### TC-STATE-013: Store Independence
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-STATE-007 |
-| **Description** | Verify setSidebarOpen sets explicit value |
-| **Preconditions** | useUIStore available |
-| **Test Steps** | 1. Call setSidebarOpen(false)<br>2. Verify sidebarOpen is false<br>3. Call setSidebarOpen(true)<br>4. Verify sidebarOpen is true |
-| **Expected Results** | - Direct value assignment works |
-
-#### TC-STATE-008: setSearchQuery
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-STATE-008 |
-| **Description** | Verify setSearchQuery updates search state |
-| **Preconditions** | useUIStore available |
-| **Test Steps** | 1. Call setSearchQuery("test query")<br>2. Verify searchQuery updated<br>3. Call setSearchQuery("")<br>4. Verify searchQuery is empty |
-| **Expected Results** | - searchQuery updates to provided string |
-
-### 6.3 Store Persistence and Reset
-
-#### TC-STATE-009: Store Independence
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-STATE-009 |
+| **Test Case ID** | TC-STATE-013 |
 | **Description** | Verify useLineageStore and useUIStore are independent |
 | **Preconditions** | Both stores available |
 | **Test Steps** | 1. Update useLineageStore state<br>2. Verify useUIStore unchanged<br>3. Update useUIStore state<br>4. Verify useLineageStore unchanged |
 | **Expected Results** | - Changes to one store don't affect other |
 
-#### TC-STATE-010: Store Subscription
+---
+
+## 5. Hooks Tests
+
+### 5.1 useLineageHighlight Hook
+
+#### TC-HOOK-001: Upstream Node Traversal
 | Field | Description |
 |-------|-------------|
-| **Test Case ID** | TC-STATE-010 |
-| **Description** | Verify components re-render on store updates |
-| **Preconditions** | Component using useLineageStore |
-| **Test Steps** | 1. Render component with store selector<br>2. Update selected state<br>3. Verify component re-renders |
-| **Expected Results** | - Component updates when subscribed state changes<br>- Component doesn't update for unsubscribed state changes |
+| **Test Case ID** | TC-HOOK-001 |
+| **Description** | Verify getUpstreamNodes traverses correctly |
+| **Preconditions** | useLineageHighlight hook with graph data |
+| **Test Steps** | 1. Create graph with A->B->C->D chain<br>2. Call getUpstreamNodes for D<br>3. Verify returns {A, B, C} |
+| **Expected Results** | - All upstream nodes found recursively<br>- Does not include the starting node |
+
+#### TC-HOOK-002: Downstream Node Traversal
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-002 |
+| **Description** | Verify getDownstreamNodes traverses correctly |
+| **Preconditions** | useLineageHighlight hook with graph data |
+| **Test Steps** | 1. Create graph with A->B->C->D chain<br>2. Call getDownstreamNodes for A<br>3. Verify returns {B, C, D} |
+| **Expected Results** | - All downstream nodes found recursively<br>- Does not include the starting node |
+
+#### TC-HOOK-003: Diamond Pattern Traversal
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-003 |
+| **Description** | Verify traversal handles diamond pattern |
+| **Preconditions** | Graph with A->B, A->C, B->D, C->D |
+| **Test Steps** | 1. Call getUpstreamNodes for D<br>2. Verify returns {A, B, C}<br>3. Call getDownstreamNodes for A<br>4. Verify returns {B, C, D} |
+| **Expected Results** | - Both paths found<br>- No duplicate nodes in result |
+
+#### TC-HOOK-004: Cycle Detection
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-004 |
+| **Description** | Verify traversal handles cycles without infinite loop |
+| **Preconditions** | Graph with cycle: A->B->C->A |
+| **Test Steps** | 1. Call getUpstreamNodes for any node<br>2. Verify returns without hanging<br>3. Verify each node appears once |
+| **Expected Results** | - Function completes<br>- No infinite recursion<br>- Visited set prevents duplicates |
+
+#### TC-HOOK-005: highlightPath Function
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-005 |
+| **Description** | Verify highlightPath updates node and edge states |
+| **Preconditions** | useLineageHighlight hook, graph rendered |
+| **Test Steps** | 1. Call highlightPath with selected column ID<br>2. Verify connected nodes have opacity 1<br>3. Verify unconnected nodes have opacity 0.2<br>4. Verify connected edges are animated<br>5. Verify unconnected edges have opacity 0.1 |
+| **Expected Results** | - Connected elements: full opacity, animated<br>- Unconnected elements: dimmed |
+
+### 5.2 useElkLayout Hook
+
+#### TC-HOOK-006: Basic Layout
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-006 |
+| **Description** | Verify ELK layout positions nodes |
+| **Preconditions** | useElkLayout hook available |
+| **Test Steps** | 1. Provide nodes and edges<br>2. Call layout function<br>3. Verify all nodes have x, y positions |
+| **Expected Results** | - All nodes positioned<br>- No overlapping positions<br>- Positions are finite numbers |
+
+#### TC-HOOK-007: Port Configuration
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-007 |
+| **Description** | Verify ELK ports created for column handles |
+| **Preconditions** | useElkLayout with table nodes |
+| **Test Steps** | 1. Create table node with 3 columns<br>2. Call createElkPorts<br>3. Verify 6 ports created (2 per column) |
+| **Expected Results** | - Target ports on WEST side<br>- Source ports on EAST side<br>- Port IDs include column IDs |
+
+#### TC-HOOK-008: Hierarchical Clustering
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-008 |
+| **Description** | Verify ELK handles database grouping |
+| **Preconditions** | Tables from multiple databases |
+| **Test Steps** | 1. Create nodes from 3 databases<br>2. Call layout with hierarchyHandling<br>3. Verify tables grouped by database |
+| **Expected Results** | - Tables from same database positioned near each other<br>- Cluster boundaries respected |
+
+### 5.3 useGraphSearch Hook
+
+#### TC-HOOK-009: Search Filtering
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-009 |
+| **Description** | Verify search filters nodes by query |
+| **Preconditions** | useGraphSearch with nodes |
+| **Test Steps** | 1. Set query to "customer"<br>2. Verify results include customer_id, customer_name<br>3. Verify results exclude unrelated columns |
+| **Expected Results** | - Results match query<br>- Results sorted by relevance |
+
+#### TC-HOOK-010: Focus on Column
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-010 |
+| **Description** | Verify focusOnColumn centers and selects |
+| **Preconditions** | useGraphSearch with graph instance |
+| **Test Steps** | 1. Call focusOnColumn with column ID<br>2. Verify fitView called with node<br>3. Verify node is selected |
+| **Expected Results** | - Graph pans to node<br>- Appropriate zoom level<br>- Node selected in store |
+
+### 5.4 useDatabaseClusters Hook
+
+#### TC-HOOK-011: Cluster Identification
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-011 |
+| **Description** | Verify clusters identified from nodes |
+| **Preconditions** | useDatabaseClusters with nodes |
+| **Test Steps** | 1. Provide nodes from 3 databases<br>2. Call hook<br>3. Verify 3 clusters returned |
+| **Expected Results** | - Each database has a cluster<br>- Cluster contains table IDs<br>- Background color assigned |
+
+#### TC-HOOK-012: Cluster Bounds Calculation
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-HOOK-012 |
+| **Description** | Verify cluster bounds encompass all tables |
+| **Preconditions** | Clusters with positioned nodes |
+| **Test Steps** | 1. Position 3 tables in cluster<br>2. Calculate bounds<br>3. Verify bounds include all tables with padding |
+| **Expected Results** | - Bounds x,y at min positions minus padding<br>- Bounds width,height cover all nodes plus padding |
 
 ---
 
-## 7. Accessibility and Responsive Design Tests
+## 6. Graph Rendering Tests
 
-### 7.1 Keyboard Navigation
+### 6.1 ELKjs Layout Tests
+
+#### TC-GRAPH-001: Layout Direction
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-001 |
+| **Description** | Verify ELK layout respects direction option |
+| **Preconditions** | layoutGraph function available |
+| **Test Steps** | 1. Call layoutGraph with direction="RIGHT"<br>2. Verify node positions flow left to right<br>3. Call layoutGraph with direction="DOWN"<br>4. Verify node positions flow top to bottom |
+| **Expected Results** | - RIGHT: upstream nodes have lower x values<br>- DOWN: upstream nodes have lower y values |
+
+#### TC-GRAPH-002: Node Spacing
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-002 |
+| **Description** | Verify ELK layout respects nodeSpacing (60px per spec) |
+| **Preconditions** | layoutGraph function available |
+| **Test Steps** | 1. Call layoutGraph with nodes in same layer<br>2. Measure spacing between nodes<br>3. Verify minimum 60px spacing |
+| **Expected Results** | - Nodes in same layer have >= 60px spacing |
+
+#### TC-GRAPH-003: Layer Spacing
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-003 |
+| **Description** | Verify ELK layout respects layerSpacing (120px per spec) |
+| **Preconditions** | layoutGraph function available |
+| **Test Steps** | 1. Call layoutGraph with connected nodes<br>2. Measure distance between layers<br>3. Verify minimum 120px between layers |
+| **Expected Results** | - Connected nodes in different layers have >= 120px spacing |
+
+#### TC-GRAPH-004: Complex Graph Layout
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-004 |
+| **Description** | Verify ELK handles complex DAG with multiple paths |
+| **Preconditions** | Graph with diamond pattern (A->B, A->C, B->D, C->D) |
+| **Test Steps** | 1. Create nodes and edges for diamond pattern<br>2. Call layoutGraph<br>3. Verify no node overlaps<br>4. Verify edges don't cross unnecessarily |
+| **Expected Results** | - All nodes have unique positions<br>- No visual overlaps between nodes<br>- Edge crossing is minimized |
+
+#### TC-GRAPH-005: Fan-Out Pattern
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-005 |
+| **Description** | Verify layout handles fan-out (A->B, A->C, A->D, A->E) |
+| **Preconditions** | Graph with single source, multiple targets |
+| **Test Steps** | 1. Create fan-out graph<br>2. Call layoutGraph<br>3. Verify targets spread vertically<br>4. Verify no overlaps |
+| **Expected Results** | - Source on left<br>- Targets spread on right<br>- No overlapping |
+
+#### TC-GRAPH-006: Fan-In Pattern
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-006 |
+| **Description** | Verify layout handles fan-in (A->E, B->E, C->E, D->E) |
+| **Preconditions** | Graph with multiple sources, single target |
+| **Test Steps** | 1. Create fan-in graph<br>2. Call layoutGraph<br>3. Verify sources spread vertically<br>4. Verify no overlaps |
+| **Expected Results** | - Sources spread on left<br>- Target on right<br>- No overlapping |
+
+### 6.2 Node Rendering Tests
+
+#### TC-GRAPH-007: React Flow Node Types Registration
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-007 |
+| **Description** | Verify custom node types are correctly registered |
+| **Preconditions** | LineageGraph component |
+| **Test Steps** | 1. Render LineageGraph with table nodes<br>2. Verify TableNode component renders<br>3. Verify node has correct structure |
+| **Expected Results** | - tableNode type uses TableNode component<br>- Node renders with header and column rows |
+
+#### TC-GRAPH-008: Dynamic Node Sizing
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-008 |
+| **Description** | Verify nodes resize based on content |
+| **Preconditions** | TableNode with varying column counts |
+| **Test Steps** | 1. Render node with 2 columns<br>2. Measure height<br>3. Render node with 10 columns<br>4. Measure height |
+| **Expected Results** | - Height: 40 + (columnCount * 28) + 16<br>- Width: minimum 280px, auto-expands |
+
+#### TC-GRAPH-009: Node Memoization
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-009 |
+| **Description** | Verify nodes are memoized for performance |
+| **Preconditions** | TableNode wrapped in React.memo |
+| **Test Steps** | 1. Render node<br>2. Change unrelated state<br>3. Verify node doesn't re-render |
+| **Expected Results** | - Node only re-renders when props change<br>- Parent state changes don't cause re-render |
+
+### 6.3 Edge Rendering Tests
+
+#### TC-GRAPH-010: Edge Connection Points
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-010 |
+| **Description** | Verify edges connect at column-level handles |
+| **Preconditions** | Graph with column-level edges |
+| **Test Steps** | 1. Render edge between two columns<br>2. Verify source handle at source column<br>3. Verify target handle at target column |
+| **Expected Results** | - Edge starts at source column's right handle<br>- Edge ends at target column's left handle |
+
+#### TC-GRAPH-011: Bezier Curve Edges
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-011 |
+| **Description** | Verify edges render as Bezier curves |
+| **Preconditions** | LineageEdge component |
+| **Test Steps** | 1. Render edge<br>2. Inspect SVG path<br>3. Verify curve type |
+| **Expected Results** | - Edge uses bezier curve path<br>- Smooth curve between nodes |
+
+#### TC-GRAPH-012: Edge Animation States
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-012 |
+| **Description** | Verify edge animations on hover/selection |
+| **Preconditions** | Edge rendered |
+| **Test Steps** | 1. Verify no animation by default<br>2. Hover over edge<br>3. Verify dashed animation starts<br>4. Select edge<br>5. Verify animation continues |
+| **Expected Results** | - Default: no animation<br>- Hover/Selected: animated dashes |
+
+### 6.4 Zoom and Pan Tests
+
+#### TC-GRAPH-013: Zoom Limits
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-013 |
+| **Description** | Verify zoom is constrained to minZoom/maxZoom |
+| **Preconditions** | LineageGraph rendered |
+| **Test Steps** | 1. Zoom out to minimum<br>2. Verify cannot zoom below 0.1<br>3. Zoom in to maximum<br>4. Verify cannot zoom above 2 |
+| **Expected Results** | - Zoom stops at minZoom=0.1<br>- Zoom stops at maxZoom=2 |
+
+#### TC-GRAPH-014: Fit View on Load
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-014 |
+| **Description** | Verify graph fits to view with padding on initial load |
+| **Preconditions** | LineageGraph component |
+| **Test Steps** | 1. Render LineageGraph with nodes<br>2. Verify fitView is applied<br>3. Verify padding is 0.2 |
+| **Expected Results** | - All nodes visible in viewport<br>- Appropriate padding around graph |
+
+#### TC-GRAPH-015: Pan Functionality
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-015 |
+| **Description** | Verify graph can be panned by dragging background |
+| **Preconditions** | LineageGraph rendered with nodes |
+| **Test Steps** | 1. Click and drag on background<br>2. Verify viewport moves<br>3. Release and verify position persists |
+| **Expected Results** | - Viewport scrolls with drag<br>- Nodes maintain relative positions |
+
+### 6.5 MiniMap Tests
+
+#### TC-GRAPH-016: MiniMap Node Colors
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-016 |
+| **Description** | Verify MiniMap shows selected node in different color |
+| **Preconditions** | LineageGraph with selected asset |
+| **Test Steps** | 1. Render LineageGraph with assetId<br>2. Examine MiniMap node colors |
+| **Expected Results** | - Selected node (matching assetId) is blue (#3b82f6)<br>- Other nodes are slate (#94a3b8) |
+
+#### TC-GRAPH-017: MiniMap Viewport Indicator
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-GRAPH-017 |
+| **Description** | Verify MiniMap shows current viewport |
+| **Preconditions** | LineageGraph with many nodes |
+| **Test Steps** | 1. Render large graph<br>2. Pan to different area<br>3. Verify MiniMap viewport indicator updates |
+| **Expected Results** | - Viewport rectangle shows current view<br>- Updates on pan/zoom |
+
+---
+
+## 7. End-to-End Tests (Playwright)
+
+### 7.1 Navigation Flows
+
+#### TC-E2E-001: Initial Application Load
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-001 |
+| **Framework** | Playwright |
+| **Description** | Verify application loads and displays ExplorePage |
+| **Preconditions** | Application running, backend available |
+| **Test Steps** | 1. Navigate to root URL (/)<br>2. Wait for page to load<br>3. Verify ExplorePage components are visible |
+| **Expected Results** | - Sidebar is visible<br>- Header is visible<br>- AssetBrowser panel is displayed<br>- "Select a column to view its lineage" placeholder shown |
+| **Playwright Code** |
+```typescript
+test('initial application load', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('navigation')).toBeVisible();
+  await expect(page.getByRole('banner')).toBeVisible();
+  await expect(page.getByText('Databases')).toBeVisible();
+  await expect(page.getByText('Select a column to view its lineage')).toBeVisible();
+});
+```
+
+#### TC-E2E-002: Navigate to Lineage Page via URL
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-002 |
+| **Framework** | Playwright |
+| **Description** | Verify direct navigation to lineage page with assetId |
+| **Preconditions** | Application running, valid assetId |
+| **Test Steps** | 1. Navigate to /lineage/{assetId}<br>2. Wait for lineage data to load<br>3. Verify LineagePage is displayed |
+| **Expected Results** | - Header shows "Lineage: {assetId}"<br>- Depth and Direction controls are visible<br>- LineageGraph renders with nodes |
+| **Playwright Code** |
+```typescript
+test('navigate to lineage page', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await expect(page.getByText('Lineage: db1.table1.column1')).toBeVisible();
+  await expect(page.getByLabel('Depth')).toBeVisible();
+  await expect(page.getByLabel('Direction')).toBeVisible();
+  await expect(page.locator('.react-flow')).toBeVisible();
+});
+```
+
+#### TC-E2E-003: Search Navigation Flow
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-003 |
+| **Framework** | Playwright |
+| **Description** | Verify search from header navigates to search page |
+| **Preconditions** | Application running |
+| **Test Steps** | 1. Enter search query in header input<br>2. Press Enter or submit form<br>3. Verify navigation to /search |
+| **Expected Results** | - URL changes to /search?q={query}<br>- SearchPage is displayed<br>- Search results are fetched and displayed |
+| **Playwright Code** |
+```typescript
+test('search navigation', async ({ page }) => {
+  await page.goto('/');
+  await page.getByPlaceholder('Search').fill('customer');
+  await page.getByPlaceholder('Search').press('Enter');
+  await expect(page).toHaveURL(/\/search\?q=customer/);
+  await expect(page.getByText('Search Results')).toBeVisible();
+});
+```
+
+### 7.2 Asset Selection Flows
+
+#### TC-E2E-004: Browse and Select Column
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-004 |
+| **Framework** | Playwright |
+| **Description** | Verify full flow of browsing to and selecting a column |
+| **Preconditions** | Application running with populated database |
+| **Test Steps** | 1. Click on a database in AssetBrowser<br>2. Wait for tables to load<br>3. Click on a table<br>4. Wait for columns to load<br>5. Click on a column |
+| **Expected Results** | - Each level expands to show children<br>- Clicking column triggers lineage load<br>- LineageGraph displays for selected column |
+| **Playwright Code** |
+```typescript
+test('browse and select column', async ({ page }) => {
+  await page.goto('/');
+
+  // Expand database
+  await page.getByText('sales_db').click();
+  await expect(page.getByText('customers')).toBeVisible();
+
+  // Expand table
+  await page.getByText('customers').click();
+  await expect(page.getByText('customer_id')).toBeVisible();
+
+  // Select column
+  await page.getByText('customer_id').click();
+  await expect(page.locator('.react-flow')).toBeVisible();
+  await expect(page.locator('.react-flow__node')).toHaveCount.greaterThan(0);
+});
+```
+
+#### TC-E2E-005: Change Lineage Direction
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-005 |
+| **Framework** | Playwright |
+| **Description** | Verify changing direction updates lineage graph |
+| **Preconditions** | LineagePage displayed with asset selected |
+| **Test Steps** | 1. Select "Upstream" from direction dropdown<br>2. Wait for graph to update<br>3. Select "Downstream"<br>4. Wait for graph to update |
+| **Expected Results** | - Graph refetches with new direction<br>- Nodes change based on direction<br>- Layout recalculates |
+| **Playwright Code** |
+```typescript
+test('change lineage direction', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  const initialNodeCount = await page.locator('.react-flow__node').count();
+
+  await page.getByLabel('Direction').selectOption('upstream');
+  await page.waitForResponse(resp => resp.url().includes('direction=upstream'));
+
+  await page.getByLabel('Direction').selectOption('downstream');
+  await page.waitForResponse(resp => resp.url().includes('direction=downstream'));
+});
+```
+
+#### TC-E2E-006: Change Lineage Depth
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-006 |
+| **Framework** | Playwright |
+| **Description** | Verify changing depth updates lineage graph |
+| **Preconditions** | LineagePage displayed with asset selected |
+| **Test Steps** | 1. Change depth slider from 3 to 7<br>2. Wait for graph to update<br>3. Verify more nodes appear |
+| **Expected Results** | - Increasing depth may show more nodes<br>- Decreasing depth shows fewer nodes<br>- Graph re-layouts after each change |
+| **Playwright Code** |
+```typescript
+test('change lineage depth', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Change depth using slider
+  const slider = page.getByRole('slider', { name: 'Depth' });
+  await slider.fill('7');
+
+  // Wait for API call with new depth
+  await page.waitForResponse(resp => resp.url().includes('maxDepth=7'));
+});
+```
+
+### 7.3 Graph Interaction Flows
+
+#### TC-E2E-007: Column Selection and Path Highlighting
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-007 |
+| **Framework** | Playwright |
+| **Description** | Verify selecting a column highlights lineage path |
+| **Preconditions** | Graph with multiple nodes rendered |
+| **Test Steps** | 1. Click on a column node<br>2. Verify path highlighting activates<br>3. Verify unrelated nodes are dimmed<br>4. Click canvas background<br>5. Verify highlighting clears |
+| **Expected Results** | - Selected column highlighted<br>- Upstream/downstream path visible<br>- Unrelated nodes at 20% opacity<br>- Canvas click clears all |
+| **Playwright Code** |
+```typescript
+test('path highlighting on selection', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Click a node
+  await page.locator('.react-flow__node').first().click();
+
+  // Verify highlighting (check for dimmed class on other nodes)
+  await expect(page.locator('.react-flow__node.dimmed')).toHaveCount.greaterThan(0);
+
+  // Click background to clear
+  await page.locator('.react-flow__pane').click();
+  await expect(page.locator('.react-flow__node.dimmed')).toHaveCount(0);
+});
+```
+
+#### TC-E2E-008: Detail Panel Opens on Selection
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-008 |
+| **Framework** | Playwright |
+| **Description** | Verify detail panel opens when node/edge selected |
+| **Preconditions** | Graph rendered |
+| **Test Steps** | 1. Click on a node<br>2. Verify panel slides out<br>3. Verify node details shown<br>4. Click on an edge<br>5. Verify edge details shown |
+| **Expected Results** | - Panel width: 400px<br>- Node: shows metadata, lineage stats<br>- Edge: shows transformation details |
+| **Playwright Code** |
+```typescript
+test('detail panel opens on selection', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Click node
+  await page.locator('.react-flow__node').first().click();
+
+  // Verify panel
+  await expect(page.getByRole('complementary')).toBeVisible();
+  await expect(page.getByText('Column Details')).toBeVisible();
+
+  // Close and click edge
+  await page.getByRole('button', { name: 'Close' }).click();
+  await page.locator('.react-flow__edge').first().click();
+  await expect(page.getByText('Connection Details')).toBeVisible();
+});
+```
+
+#### TC-E2E-009: Graph Search and Focus
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-009 |
+| **Framework** | Playwright |
+| **Description** | Verify search focuses on found column |
+| **Preconditions** | Graph with searchable columns |
+| **Test Steps** | 1. Type in graph search input<br>2. Select result from autocomplete<br>3. Verify graph centers on column<br>4. Verify column is selected |
+| **Expected Results** | - Autocomplete shows matching columns<br>- Graph pans/zooms to selection<br>- Column is highlighted |
+| **Playwright Code** |
+```typescript
+test('graph search and focus', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Use graph search
+  await page.getByPlaceholder('Search columns').fill('order_id');
+  await expect(page.getByRole('listbox')).toBeVisible();
+
+  // Select result
+  await page.getByRole('option', { name: /order_id/ }).click();
+
+  // Verify selection
+  await expect(page.locator('.react-flow__node.selected')).toBeVisible();
+});
+```
+
+#### TC-E2E-010: View Toggle Graph to Table
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-010 |
+| **Framework** | Playwright |
+| **Description** | Verify switching between Graph and Table views |
+| **Preconditions** | Lineage page with data |
+| **Test Steps** | 1. Verify Graph view is default<br>2. Click Table tab<br>3. Verify table displays<br>4. Click Graph tab<br>5. Verify graph displays |
+| **Expected Results** | - Tab click switches views<br>- Data consistent between views<br>- State preserved on switch |
+| **Playwright Code** |
+```typescript
+test('view toggle', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow');
+
+  // Switch to table
+  await page.getByRole('tab', { name: 'Table' }).click();
+  await expect(page.getByRole('table')).toBeVisible();
+
+  // Switch back to graph
+  await page.getByRole('tab', { name: 'Graph' }).click();
+  await expect(page.locator('.react-flow')).toBeVisible();
+});
+```
+
+### 7.4 Keyboard Navigation
+
+#### TC-E2E-011: Keyboard Shortcuts
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-011 |
+| **Framework** | Playwright |
+| **Description** | Verify keyboard shortcuts work |
+| **Preconditions** | Graph rendered |
+| **Test Steps** | 1. Press 'F' - verify fit to view<br>2. Press '+' - verify zoom in<br>3. Press '-' - verify zoom out<br>4. Press 'Escape' - verify clear selection<br>5. Press Ctrl+F - verify search focused |
+| **Expected Results** | All shortcuts trigger correct actions |
+| **Playwright Code** |
+```typescript
+test('keyboard shortcuts', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Fit to view
+  await page.keyboard.press('f');
+
+  // Zoom
+  await page.keyboard.press('+');
+  await page.keyboard.press('-');
+
+  // Select node then escape
+  await page.locator('.react-flow__node').first().click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.react-flow__node.selected')).toHaveCount(0);
+
+  // Focus search
+  await page.keyboard.press('Control+f');
+  await expect(page.getByPlaceholder('Search columns')).toBeFocused();
+});
+```
+
+#### TC-E2E-012: Tab Navigation Through Nodes
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-012 |
+| **Framework** | Playwright |
+| **Description** | Verify Tab key navigates between nodes |
+| **Preconditions** | Graph with multiple nodes |
+| **Test Steps** | 1. Click on graph<br>2. Press Tab<br>3. Verify focus moves to next node<br>4. Press Enter<br>5. Verify node is selected |
+| **Expected Results** | - Tab moves focus between nodes<br>- Enter selects focused node<br>- Focus visible indicator shown |
+| **Playwright Code** |
+```typescript
+test('tab navigation', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Focus graph area
+  await page.locator('.react-flow').click();
+
+  // Tab through nodes
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.react-flow__node:focus')).toBeVisible();
+
+  // Select with Enter
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.react-flow__node.selected')).toBeVisible();
+});
+```
+
+### 7.5 Export and Fullscreen
+
+#### TC-E2E-013: Export Graph as PNG
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-013 |
+| **Framework** | Playwright |
+| **Description** | Verify PNG export downloads file |
+| **Preconditions** | Graph rendered |
+| **Test Steps** | 1. Click Export button<br>2. Select PNG option<br>3. Verify download initiated |
+| **Expected Results** | - PNG file downloaded<br>- File contains graph image |
+| **Playwright Code** |
+```typescript
+test('export as PNG', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Set up download listener
+  const downloadPromise = page.waitForEvent('download');
+
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByRole('menuitem', { name: 'PNG' }).click();
+
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toContain('.png');
+});
+```
+
+#### TC-E2E-014: Fullscreen Mode
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-014 |
+| **Framework** | Playwright |
+| **Description** | Verify fullscreen toggle works |
+| **Preconditions** | Graph rendered |
+| **Test Steps** | 1. Click fullscreen button<br>2. Verify fullscreen mode<br>3. Press Escape<br>4. Verify normal mode |
+| **Expected Results** | - Graph container fills screen<br>- Escape exits fullscreen |
+| **Playwright Code** |
+```typescript
+test('fullscreen mode', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  await page.getByRole('button', { name: 'Fullscreen' }).click();
+
+  // Check fullscreen state
+  const isFullscreen = await page.evaluate(() => document.fullscreenElement !== null);
+  expect(isFullscreen).toBe(true);
+
+  await page.keyboard.press('Escape');
+  const isNormal = await page.evaluate(() => document.fullscreenElement === null);
+  expect(isNormal).toBe(true);
+});
+```
+
+### 7.6 Edge Cases and Error Handling
+
+#### TC-E2E-015: Empty Lineage Graph
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-015 |
+| **Framework** | Playwright |
+| **Description** | Verify handling of column with no lineage |
+| **Preconditions** | Column with no upstream/downstream |
+| **Test Steps** | 1. Navigate to isolated column<br>2. Verify appropriate message shown |
+| **Expected Results** | - Graph shows single node<br>- Message indicates no lineage found |
+| **Playwright Code** |
+```typescript
+test('empty lineage', async ({ page }) => {
+  await page.goto('/lineage/db1.isolated_table.column1');
+  await page.waitForSelector('.react-flow');
+
+  await expect(page.locator('.react-flow__node')).toHaveCount(1);
+  await expect(page.getByText('No lineage connections found')).toBeVisible();
+});
+```
+
+#### TC-E2E-016: API Error Handling
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-016 |
+| **Framework** | Playwright |
+| **Description** | Verify error message on API failure |
+| **Preconditions** | Mock API to return error |
+| **Test Steps** | 1. Navigate with invalid assetId<br>2. Verify error message displayed |
+| **Expected Results** | - Error message visible<br>- Retry option available |
+| **Playwright Code** |
+```typescript
+test('API error handling', async ({ page }) => {
+  // Route to return error
+  await page.route('**/api/v1/lineage/**', route => {
+    route.fulfill({ status: 500, body: 'Internal Server Error' });
+  });
+
+  await page.goto('/lineage/invalid-asset');
+  await expect(page.getByText('Failed to load lineage')).toBeVisible();
+});
+```
+
+#### TC-E2E-017: Large Graph Performance
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-017 |
+| **Framework** | Playwright |
+| **Description** | Verify performance with 100+ nodes |
+| **Preconditions** | Asset with deep lineage |
+| **Test Steps** | 1. Navigate to asset with 100+ nodes<br>2. Measure render time<br>3. Test pan/zoom responsiveness |
+| **Expected Results** | - Initial render < 3 seconds<br>- Pan/zoom responsive<br>- Warning shown for large graphs |
+| **Playwright Code** |
+```typescript
+test('large graph performance', async ({ page }) => {
+  const startTime = Date.now();
+
+  await page.goto('/lineage/large-lineage-asset?maxDepth=10');
+  await page.waitForSelector('.react-flow__node');
+
+  const renderTime = Date.now() - startTime;
+  expect(renderTime).toBeLessThan(3000);
+
+  // Check for warning if > 100 nodes
+  const nodeCount = await page.locator('.react-flow__node').count();
+  if (nodeCount > 100) {
+    await expect(page.getByText('Large graph')).toBeVisible();
+  }
+});
+```
+
+#### TC-E2E-018: Network Offline Handling
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-018 |
+| **Framework** | Playwright |
+| **Description** | Verify behavior when network goes offline |
+| **Preconditions** | Graph loaded, then network fails |
+| **Test Steps** | 1. Load lineage graph<br>2. Simulate offline<br>3. Try to change depth<br>4. Verify cached data still shown |
+| **Expected Results** | - Cached data remains visible<br>- Error message for new requests<br>- Retry when back online |
+| **Playwright Code** |
+```typescript
+test('offline handling', async ({ page, context }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Go offline
+  await context.setOffline(true);
+
+  // Try to fetch new data
+  await page.getByLabel('Depth').selectOption('10');
+
+  await expect(page.getByText('Network error')).toBeVisible();
+
+  // Graph should still show cached data
+  await expect(page.locator('.react-flow__node')).toHaveCount.greaterThan(0);
+});
+```
+
+#### TC-E2E-019: Concurrent User Actions
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-E2E-019 |
+| **Framework** | Playwright |
+| **Description** | Verify rapid user actions don't break UI |
+| **Preconditions** | Graph loaded |
+| **Test Steps** | 1. Rapidly click multiple nodes<br>2. Rapidly change depth multiple times<br>3. Verify final state is correct |
+| **Expected Results** | - UI remains responsive<br>- Final state reflects last action<br>- No duplicate API calls |
+| **Playwright Code** |
+```typescript
+test('rapid user actions', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Rapidly change depth
+  const slider = page.getByRole('slider', { name: 'Depth' });
+  for (let i = 1; i <= 10; i++) {
+    await slider.fill(String(i));
+  }
+
+  // Wait for debounced request
+  await page.waitForTimeout(500);
+
+  // Verify only final value requested
+  await expect(slider).toHaveValue('10');
+});
+```
+
+---
+
+## 8. Accessibility Tests
+
+### 8.1 Keyboard Navigation
 
 #### TC-A11Y-001: AssetBrowser Keyboard Navigation
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-001 |
+| **Framework** | Playwright + axe-core |
 | **Description** | Verify AssetBrowser can be navigated with keyboard |
 | **Preconditions** | AssetBrowser rendered |
 | **Test Steps** | 1. Tab to first database<br>2. Press Enter to expand<br>3. Tab to table<br>4. Press Enter to expand<br>5. Tab to column<br>6. Press Enter to select |
 | **Expected Results** | - All items are focusable<br>- Enter activates items<br>- Focus is visible |
 
-#### TC-A11Y-002: Header Search Focus
+#### TC-A11Y-002: Graph Keyboard Navigation
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-002 |
-| **Description** | Verify search input is keyboard accessible |
-| **Preconditions** | Header rendered |
-| **Test Steps** | 1. Tab to search input<br>2. Type query<br>3. Press Enter to submit |
-| **Expected Results** | - Input receives focus<br>- Typing works<br>- Enter submits form |
+| **Description** | Verify graph nodes are keyboard accessible |
+| **Preconditions** | Graph rendered |
+| **Test Steps** | 1. Tab into graph<br>2. Use Tab to navigate nodes<br>3. Press Enter to select<br>4. Press Escape to deselect |
+| **Expected Results** | - Nodes are focusable<br>- Enter selects focused node<br>- Escape clears selection |
 
-#### TC-A11Y-003: Sidebar Navigation Focus
+#### TC-A11Y-003: Dropdown Controls
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-003 |
-| **Description** | Verify sidebar links are keyboard navigable |
-| **Preconditions** | Sidebar rendered |
-| **Test Steps** | 1. Tab through sidebar links<br>2. Press Enter on link<br>3. Verify navigation |
-| **Expected Results** | - Each NavLink is focusable<br>- Enter activates navigation<br>- Active state is visible |
+| **Description** | Verify toolbar dropdowns are keyboard accessible |
+| **Preconditions** | Toolbar rendered |
+| **Test Steps** | 1. Tab to Direction dropdown<br>2. Press Enter to open<br>3. Use arrow keys to navigate<br>4. Press Enter to select |
+| **Expected Results** | - Dropdowns focusable<br>- Arrow keys navigate options<br>- Enter selects option |
 
-#### TC-A11Y-004: Dropdown Controls
+### 8.2 Screen Reader Support
+
+#### TC-A11Y-004: ARIA Labels on Graph
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-004 |
-| **Description** | Verify LineagePage dropdowns are keyboard accessible |
-| **Preconditions** | LineagePage rendered |
-| **Test Steps** | 1. Tab to Depth dropdown<br>2. Use arrow keys to change value<br>3. Tab to Direction dropdown<br>4. Use arrow keys to change value |
-| **Expected Results** | - Dropdowns are focusable<br>- Arrow keys navigate options<br>- Selection updates on change |
+| **Description** | Verify graph has appropriate ARIA labels |
+| **Preconditions** | Graph rendered |
+| **Test Steps** | 1. Inspect graph container<br>2. Verify role="application"<br>3. Verify aria-label="Lineage graph"<br>4. Inspect nodes for aria-labels |
+| **Expected Results** | - Graph: role="application", aria-label="Lineage graph"<br>- Nodes: role="button", aria-label with full column name<br>- Edges: role="img", aria-label describing connection |
 
-### 7.2 Screen Reader Support
-
-#### TC-A11Y-005: Semantic HTML Structure
+#### TC-A11Y-005: Screen Reader Announcements
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-005 |
-| **Description** | Verify proper semantic HTML elements are used |
-| **Preconditions** | Application rendered |
-| **Test Steps** | 1. Inspect DOM structure<br>2. Verify header uses <header><br>3. Verify navigation uses <nav><br>4. Verify main content uses <main><br>5. Verify sidebar uses <aside> |
-| **Expected Results** | - Semantic elements used appropriately<br>- Landmarks are properly defined |
+| **Description** | Verify appropriate announcements on interactions |
+| **Preconditions** | Screen reader simulation |
+| **Test Steps** | 1. Focus node<br>2. Verify announcement<br>3. Select node<br>4. Verify selection announcement |
+| **Expected Results** | - Focus: announces column name, table, type, connection count<br>- Selection: announces "Selected {column}, {n} upstream, {m} downstream"<br>- Highlight: announces "Highlighting lineage path with {n} nodes" |
 
-#### TC-A11Y-006: Button Labels
+#### TC-A11Y-006: Loading State Announcements
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-006 |
-| **Description** | Verify icon-only buttons have accessible labels |
-| **Preconditions** | Components rendered |
-| **Test Steps** | 1. Check sidebar toggle button<br>2. Check sidebar navigation icons<br>3. Verify aria-label or title attributes |
-| **Expected Results** | - Icon buttons have title attribute<br>- Screen readers can announce button purpose |
+| **Description** | Verify loading states are announced |
+| **Preconditions** | Component in loading state |
+| **Test Steps** | 1. Trigger loading state<br>2. Verify aria-live region<br>3. Verify announcement |
+| **Expected Results** | - Loading spinner has role="status"<br>- Screen reader announces "Loading lineage data" |
 
-#### TC-A11Y-007: Loading State Announcements
+#### TC-A11Y-007: Error Announcements
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-007 |
-| **Description** | Verify loading states are announced to screen readers |
-| **Preconditions** | Component in loading state |
-| **Test Steps** | 1. Trigger loading state<br>2. Check for aria-live region<br>3. Verify loading announcement |
-| **Expected Results** | - Loading spinner has role="status" or aria-live<br>- Screen reader announces loading |
+| **Description** | Verify errors are announced |
+| **Preconditions** | Error state triggered |
+| **Test Steps** | 1. Trigger API error<br>2. Verify role="alert"<br>3. Verify error announced |
+| **Expected Results** | - Error uses role="alert"<br>- Screen reader announces error message |
 
-#### TC-A11Y-008: Error Messages
+### 8.3 Color Contrast
+
+#### TC-A11Y-008: Text Contrast Ratios
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-008 |
-| **Description** | Verify error messages are accessible |
-| **Preconditions** | Error state triggered |
-| **Test Steps** | 1. Trigger API error<br>2. Verify error message is announced<br>3. Check for role="alert" |
-| **Expected Results** | - Error messages use appropriate ARIA roles<br>- Screen readers announce errors |
+| **Framework** | axe-core |
+| **Description** | Verify text meets WCAG AA contrast requirements |
+| **Test Steps** | 1. Run axe-core on all pages<br>2. Check contrast ratios |
+| **Expected Results** | - Primary text >= 4.5:1 ratio<br>- Large text >= 3:1 ratio<br>- No contrast violations |
+| **Playwright Code** |
+```typescript
+import AxeBuilder from '@axe-core/playwright';
 
-### 7.3 Color Contrast
+test('color contrast', async ({ page }) => {
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
 
-#### TC-A11Y-009: Text Contrast Ratios
+  const results = await new AxeBuilder({ page })
+    .withRules(['color-contrast'])
+    .analyze();
+
+  expect(results.violations).toHaveLength(0);
+});
+```
+
+#### TC-A11Y-009: Focus Indicator Visibility
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-009 |
-| **Description** | Verify text meets WCAG AA contrast requirements |
-| **Preconditions** | Application rendered |
-| **Test Steps** | 1. Test slate-700 text on white (#334155 on #ffffff)<br>2. Test slate-500 text on white (#64748b on #ffffff)<br>3. Test slate-400 text on white (#94a3b8 on #ffffff)<br>4. Test white text on slate-900 |
-| **Expected Results** | - Primary text has >= 4.5:1 contrast ratio<br>- Large text has >= 3:1 contrast ratio |
+| **Description** | Verify focus indicators are visible |
+| **Preconditions** | Interactive elements rendered |
+| **Test Steps** | 1. Tab through elements<br>2. Verify focus ring visible<br>3. Check ring contrast |
+| **Expected Results** | - Focus ring visible on all interactive elements<br>- Ring contrasts with background<br>- Ring width >= 2px |
 
-#### TC-A11Y-010: Focus Indicator Visibility
+### 8.4 Full Page Accessibility Audit
+
+#### TC-A11Y-010: Full Page axe Audit
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-A11Y-010 |
-| **Description** | Verify focus indicators are visible |
-| **Preconditions** | Interactive elements rendered |
-| **Test Steps** | 1. Tab through interactive elements<br>2. Verify focus ring is visible<br>3. Check contrast against background |
-| **Expected Results** | - Focus ring visible on all interactive elements<br>- Ring color contrasts with background |
+| **Framework** | Playwright + axe-core |
+| **Description** | Run full accessibility audit on all pages |
+| **Test Steps** | 1. Navigate to each page<br>2. Run axe-core audit<br>3. Report violations |
+| **Expected Results** | - No critical violations<br>- No serious violations<br>- Minor violations documented |
+| **Playwright Code** |
+```typescript
+const pages = ['/', '/lineage/test-asset', '/search?q=test', '/impact/test-asset'];
 
-### 7.4 Responsive Design
+for (const url of pages) {
+  test(`accessibility audit: ${url}`, async ({ page }) => {
+    await page.goto(url);
+    await page.waitForLoadState('networkidle');
 
-#### TC-RESP-001: Mobile Viewport (320px)
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-RESP-001 |
-| **Description** | Verify application usable at minimum mobile width |
-| **Preconditions** | Application running |
-| **Test Steps** | 1. Set viewport to 320px width<br>2. Verify sidebar can be toggled<br>3. Verify main content is accessible<br>4. Verify no horizontal scroll |
-| **Expected Results** | - UI remains functional<br>- Content doesn't overflow horizontally<br>- Touch targets are adequate size |
+    const results = await new AxeBuilder({ page }).analyze();
 
-#### TC-RESP-002: Tablet Viewport (768px)
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-RESP-002 |
-| **Description** | Verify layout adapts to tablet width |
-| **Preconditions** | Application running |
-| **Test Steps** | 1. Set viewport to 768px width<br>2. Verify sidebar behavior<br>3. Verify AssetBrowser width<br>4. Verify graph area sizing |
-| **Expected Results** | - Layout uses available space effectively<br>- Sidebar may auto-collapse or resize |
-
-#### TC-RESP-003: Desktop Viewport (1920px)
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-RESP-003 |
-| **Description** | Verify layout works on large displays |
-| **Preconditions** | Application running |
-| **Test Steps** | 1. Set viewport to 1920px width<br>2. Verify content doesn't stretch excessively<br>3. Verify graph has adequate space |
-| **Expected Results** | - Content has maximum width constraints where appropriate<br>- Graph area uses full available space |
-
-#### TC-RESP-004: Height Constraints
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-RESP-004 |
-| **Description** | Verify application handles limited viewport height |
-| **Preconditions** | Application running |
-| **Test Steps** | 1. Set viewport height to 600px<br>2. Verify AssetBrowser scrolls internally<br>3. Verify graph area fills available space |
-| **Expected Results** | - Internal scroll for overflow content<br>- No content cut off without scroll |
-
-#### TC-RESP-005: Orientation Change
-| Field | Description |
-|-------|-------------|
-| **Test Case ID** | TC-RESP-005 |
-| **Description** | Verify application handles orientation change |
-| **Preconditions** | Application in mobile/tablet emulation |
-| **Test Steps** | 1. Start in portrait orientation<br>2. Rotate to landscape<br>3. Verify layout updates<br>4. Verify graph re-fits |
-| **Expected Results** | - Layout adapts to new dimensions<br>- Graph fitView updates |
+    expect(results.violations.filter(v =>
+      v.impact === 'critical' || v.impact === 'serious'
+    )).toHaveLength(0);
+  });
+}
+```
 
 ---
 
-## 8. Performance Tests
+## 9. Visual Regression Tests (Playwright)
 
-### 8.1 Graph Performance
+### 9.1 Component Screenshots
+
+#### TC-VIS-001: TableNode Visual States
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-001 |
+| **Framework** | Playwright |
+| **Description** | Capture and compare TableNode visual states |
+| **Test Steps** | 1. Render default state<br>2. Capture screenshot<br>3. Render hovered state<br>4. Capture screenshot<br>5. Render selected state<br>6. Capture screenshot |
+| **Expected Results** | - Screenshots match baseline<br>- Visual changes on state detected |
+| **Playwright Code** |
+```typescript
+test('TableNode visual states', async ({ page }) => {
+  await page.goto('/storybook/table-node');
+
+  // Default state
+  await expect(page.locator('.table-node')).toHaveScreenshot('table-node-default.png');
+
+  // Hover state
+  await page.locator('.table-node').hover();
+  await expect(page.locator('.table-node')).toHaveScreenshot('table-node-hover.png');
+
+  // Selected state
+  await page.locator('.table-node').click();
+  await expect(page.locator('.table-node')).toHaveScreenshot('table-node-selected.png');
+});
+```
+
+#### TC-VIS-002: Edge Type Colors
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-002 |
+| **Framework** | Playwright |
+| **Description** | Verify edge colors match specification |
+| **Test Steps** | 1. Render each edge type<br>2. Capture screenshots<br>3. Compare to baselines |
+| **Expected Results** | - Direct: green (#22C55E)<br>- Derived: blue (#3B82F6)<br>- Aggregated: purple (#A855F7)<br>- Joined: cyan (#06B6D4) |
+
+#### TC-VIS-003: Confidence Color Fading
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-003 |
+| **Framework** | Playwright |
+| **Description** | Verify confidence-based color fading |
+| **Test Steps** | 1. Render edges with confidence 95, 75, 55, 35<br>2. Capture screenshots<br>3. Verify color saturation decreases |
+| **Expected Results** | - Visual fade progression visible<br>- Lower confidence = more faded |
+
+#### TC-VIS-004: Detail Panel Layout
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-004 |
+| **Framework** | Playwright |
+| **Description** | Verify detail panel matches specification |
+| **Test Steps** | 1. Open panel for node<br>2. Capture screenshot<br>3. Open panel for edge<br>4. Capture screenshot |
+| **Expected Results** | - Panel width: 400px<br>- Layout matches spec diagrams<br>- SQL viewer styled correctly |
+
+#### TC-VIS-005: Database Cluster Backgrounds
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-005 |
+| **Framework** | Playwright |
+| **Description** | Verify cluster backgrounds render correctly |
+| **Test Steps** | 1. Render graph with 3 databases<br>2. Capture screenshot<br>3. Toggle clusters off<br>4. Capture screenshot |
+| **Expected Results** | - Distinct background colors per database<br>- Dashed borders visible<br>- Database labels shown |
+
+### 9.2 Responsive Screenshots
+
+#### TC-VIS-006: Mobile Layout (320px)
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-006 |
+| **Framework** | Playwright |
+| **Description** | Verify mobile layout |
+| **Test Steps** | 1. Set viewport to 320x568<br>2. Navigate to each page<br>3. Capture screenshots |
+| **Expected Results** | - No horizontal overflow<br>- Touch targets adequate<br>- Sidebar collapsible |
+| **Playwright Code** |
+```typescript
+test('mobile layout', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto('/');
+
+  await expect(page).toHaveScreenshot('mobile-explore.png');
+
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow');
+  await expect(page).toHaveScreenshot('mobile-lineage.png');
+});
+```
+
+#### TC-VIS-007: Tablet Layout (768px)
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-007 |
+| **Framework** | Playwright |
+| **Description** | Verify tablet layout |
+| **Test Steps** | 1. Set viewport to 768x1024<br>2. Navigate to each page<br>3. Capture screenshots |
+| **Expected Results** | - Layout adapts appropriately<br>- Sidebar behavior correct<br>- Graph has adequate space |
+
+#### TC-VIS-008: Desktop Layout (1920px)
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-VIS-008 |
+| **Framework** | Playwright |
+| **Description** | Verify desktop layout |
+| **Test Steps** | 1. Set viewport to 1920x1080<br>2. Navigate to each page<br>3. Capture screenshots |
+| **Expected Results** | - Content properly constrained<br>- Graph uses available space<br>- No excessive stretching |
+
+---
+
+## 10. Performance Tests
+
+### 10.1 Graph Performance
 
 #### TC-PERF-001: Large Graph Rendering
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-PERF-001 |
-| **Description** | Verify graph renders efficiently with 100+ nodes |
-| **Preconditions** | Test data with 100+ nodes and edges |
-| **Test Steps** | 1. Load lineage with 100+ nodes<br>2. Measure initial render time<br>3. Test pan and zoom responsiveness |
-| **Expected Results** | - Initial render < 3 seconds<br>- Pan/zoom maintains 30+ FPS<br>- No significant jank |
+| **Framework** | Playwright |
+| **Description** | Measure rendering time for large graphs |
+| **Test Steps** | 1. Load graph with 50, 100, 200 nodes<br>2. Measure initial render time<br>3. Measure interaction responsiveness |
+| **Expected Results** | - 50 nodes: < 1 second<br>- 100 nodes: < 2 seconds<br>- 200 nodes: < 5 seconds, warning shown |
+| **Playwright Code** |
+```typescript
+test('large graph rendering', async ({ page }) => {
+  // 50 nodes
+  let start = Date.now();
+  await page.goto('/lineage/medium-asset?maxDepth=5');
+  await page.waitForSelector('.react-flow__node');
+  expect(Date.now() - start).toBeLessThan(1000);
+
+  // 100 nodes
+  start = Date.now();
+  await page.goto('/lineage/large-asset?maxDepth=7');
+  await page.waitForSelector('.react-flow__node');
+  expect(Date.now() - start).toBeLessThan(2000);
+});
+```
 
 #### TC-PERF-002: Layout Calculation Time
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-PERF-002 |
-| **Description** | Verify ELK layout completes in reasonable time |
-| **Preconditions** | Various graph sizes |
-| **Test Steps** | 1. Measure layout time for 10 nodes<br>2. Measure layout time for 50 nodes<br>3. Measure layout time for 100 nodes |
+| **Description** | Measure ELK layout calculation time |
+| **Test Steps** | 1. Provide 10, 50, 100 nodes<br>2. Measure layout time<br>3. Verify within thresholds |
 | **Expected Results** | - 10 nodes: < 100ms<br>- 50 nodes: < 500ms<br>- 100 nodes: < 2000ms |
 
-### 8.2 API Performance
-
-#### TC-PERF-003: Query Caching Effectiveness
+#### TC-PERF-003: Pan/Zoom FPS
 | Field | Description |
 |-------|-------------|
 | **Test Case ID** | TC-PERF-003 |
-| **Description** | Verify TanStack Query caching reduces API calls |
-| **Preconditions** | Application running with network monitoring |
-| **Test Steps** | 1. Load database list<br>2. Navigate away and back<br>3. Monitor network requests |
-| **Expected Results** | - Second visit uses cached data<br>- No duplicate API calls within staleTime |
+| **Framework** | Playwright |
+| **Description** | Measure frame rate during interactions |
+| **Test Steps** | 1. Load large graph<br>2. Perform continuous pan<br>3. Measure frame rate |
+| **Expected Results** | - Maintains >= 30 FPS during pan<br>- No visible jank |
+
+### 10.2 API Performance
+
+#### TC-PERF-004: Query Caching
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-PERF-004 |
+| **Framework** | Playwright |
+| **Description** | Verify TanStack Query caching |
+| **Test Steps** | 1. Load lineage<br>2. Navigate away<br>3. Navigate back<br>4. Count network requests |
+| **Expected Results** | - Second visit uses cache<br>- No duplicate requests within staleTime |
+| **Playwright Code** |
+```typescript
+test('query caching', async ({ page }) => {
+  let requestCount = 0;
+  await page.route('**/api/v1/lineage/**', route => {
+    requestCount++;
+    route.continue();
+  });
+
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+  expect(requestCount).toBe(1);
+
+  await page.goto('/');
+  await page.goto('/lineage/db1.table1.column1');
+  await page.waitForSelector('.react-flow__node');
+
+  // Should use cache, no new request
+  expect(requestCount).toBe(1);
+});
+```
+
+#### TC-PERF-005: Debounced Depth Changes
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-PERF-005 |
+| **Description** | Verify depth slider changes are debounced |
+| **Test Steps** | 1. Rapidly change depth 10 times<br>2. Count API requests<br>3. Verify only 1-2 requests made |
+| **Expected Results** | - Rapid changes debounced<br>- Only final value fetched |
 
 ---
 
 ## Test Environment Requirements
 
 ### Dependencies for Testing
-- Vitest (specified in package.json)
-- @testing-library/react
-- @testing-library/jest-dom
-- @testing-library/user-event
-- msw (Mock Service Worker) for API mocking
-- @axe-core/react for accessibility testing
 
-### Test Configuration
+```json
+{
+  "devDependencies": {
+    "vitest": "^1.1.0",
+    "@testing-library/react": "^14.0.0",
+    "@testing-library/jest-dom": "^6.0.0",
+    "@testing-library/user-event": "^14.0.0",
+    "@playwright/test": "^1.40.0",
+    "@axe-core/playwright": "^4.8.0",
+    "msw": "^2.0.0"
+  }
+}
+```
+
+### Vitest Configuration
+
 ```typescript
 // vitest.config.ts
 import { defineConfig } from 'vitest/config';
@@ -870,37 +1872,111 @@ export default defineConfig({
 });
 ```
 
+### Playwright Configuration
+
+```typescript
+// playwright.config.ts
+import { defineConfig, devices } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './e2e',
+  fullyParallel: true,
+  forbidOnly: !!process.env.CI,
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+  reporter: 'html',
+  use: {
+    baseURL: 'http://localhost:5173',
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+  },
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
+    },
+    {
+      name: 'mobile-safari',
+      use: { ...devices['iPhone 12'] },
+    },
+  ],
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:5173',
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
 ### Mock Data Fixtures
+
 Create fixtures in `/src/test/fixtures/` for:
 - databases.json
 - tables.json
 - columns.json
-- lineageGraph.json
+- lineageGraph.json (various sizes: small, medium, large)
 - impactAnalysis.json
 - searchResults.json
+
+### MSW Handlers
+
+```typescript
+// src/test/mocks/handlers.ts
+import { http, HttpResponse } from 'msw';
+import databases from '../fixtures/databases.json';
+import lineageGraph from '../fixtures/lineageGraph.json';
+
+export const handlers = [
+  http.get('/api/v1/assets/databases', () => {
+    return HttpResponse.json({ databases });
+  }),
+
+  http.get('/api/v1/lineage/:assetId', ({ params, request }) => {
+    const url = new URL(request.url);
+    const direction = url.searchParams.get('direction') || 'both';
+    const maxDepth = url.searchParams.get('maxDepth') || '3';
+
+    return HttpResponse.json({
+      assetId: params.assetId,
+      graph: lineageGraph,
+    });
+  }),
+];
+```
 
 ---
 
 ## Test Execution Priority
 
 ### P0 - Critical (Must pass for release)
-- TC-COMP-001 through TC-COMP-008 (Core component rendering)
-- TC-INT-001 through TC-INT-008 (API integration)
-- TC-E2E-001 through TC-E2E-005 (Core user flows)
-- TC-STATE-001 through TC-STATE-008 (State management)
+- TC-COMP-001 through TC-COMP-015 (Core component rendering)
+- TC-INT-001 through TC-INT-010 (API integration)
+- TC-E2E-001 through TC-E2E-010 (Core user flows)
+- TC-STATE-001 through TC-STATE-011 (State management)
 
 ### P1 - High (Should pass for release)
-- TC-UNIT-001 through TC-UNIT-009 (Utility functions)
-- TC-GRAPH-001 through TC-GRAPH-012 (Graph rendering)
-- TC-A11Y-001 through TC-A11Y-008 (Accessibility)
+- TC-UNIT-001 through TC-UNIT-012 (Utility functions)
+- TC-COMP-016 through TC-COMP-035 (Extended components)
+- TC-HOOK-001 through TC-HOOK-012 (Custom hooks)
+- TC-GRAPH-001 through TC-GRAPH-017 (Graph rendering)
+- TC-A11Y-001 through TC-A11Y-010 (Accessibility)
 
 ### P2 - Medium (Nice to have for release)
-- TC-E2E-006 through TC-E2E-009 (Extended user flows)
-- TC-RESP-001 through TC-RESP-005 (Responsive design)
-- TC-PERF-001 through TC-PERF-003 (Performance)
-
-### P3 - Low (Can be deferred)
-- TC-A11Y-009, TC-A11Y-010 (Advanced accessibility)
+- TC-E2E-011 through TC-E2E-019 (Extended E2E flows)
+- TC-VIS-001 through TC-VIS-008 (Visual regression)
+- TC-PERF-001 through TC-PERF-005 (Performance)
 
 ---
 
@@ -913,8 +1989,28 @@ Create fixtures in `/src/test/fixtures/` for:
 - Lineage edges connecting columns across tables
 
 ### Complex Lineage Scenarios
-1. Linear chain (A -> B -> C -> D)
-2. Diamond pattern (A -> B, A -> C, B -> D, C -> D)
-3. Fan-out (A -> B, A -> C, A -> D, A -> E)
-4. Fan-in (A -> E, B -> E, C -> E, D -> E)
-5. Mixed complexity (combination of above)
+1. **Linear chain**: A -> B -> C -> D
+2. **Diamond pattern**: A -> B, A -> C, B -> D, C -> D
+3. **Fan-out**: A -> B, A -> C, A -> D, A -> E
+4. **Fan-in**: A -> E, B -> E, C -> E, D -> E
+5. **Mixed complexity**: combination of above
+6. **Cycle (for edge case)**: A -> B -> C -> A (should be handled gracefully)
+
+### Graph Size Scenarios
+1. **Small**: 5 nodes, 4 edges
+2. **Medium**: 50 nodes, 60 edges
+3. **Large**: 100+ nodes, 150+ edges (should show warning)
+4. **Empty**: 1 node, 0 edges (isolated column)
+
+---
+
+## Test Metrics and Coverage Targets
+
+| Category | Target Coverage |
+|----------|-----------------|
+| Utility Functions | 100% |
+| Custom Hooks | 90% |
+| Components | 85% |
+| Integration (API) | 90% |
+| E2E Critical Paths | 100% |
+| Accessibility | 100% WCAG AA |

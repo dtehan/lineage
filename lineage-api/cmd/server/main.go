@@ -9,11 +9,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/your-org/lineage-api/internal/application"
-	httpAdapter "github.com/your-org/lineage-api/internal/adapter/inbound/http"
-	"github.com/your-org/lineage-api/internal/adapter/outbound/redis"
-	"github.com/your-org/lineage-api/internal/adapter/outbound/teradata"
-	"github.com/your-org/lineage-api/internal/infrastructure/config"
+	"github.com/lineage-api/internal/application"
+	httpAdapter "github.com/lineage-api/internal/adapter/inbound/http"
+	"github.com/lineage-api/internal/adapter/outbound/teradata"
+	"github.com/lineage-api/internal/infrastructure/config"
 )
 
 func main() {
@@ -30,27 +29,14 @@ func main() {
 	}
 	defer db.Close()
 
-	// Redis connection
-	cache, err := redis.NewCacheRepository(cfg.Redis)
-	if err != nil {
-		log.Printf("Warning: Redis not available, caching disabled: %v", err)
-		cache = nil
-	}
-
-	// Use NoOpCache if Redis is not available
-	var cacheRepo = redis.NewNoOpCache()
-	if cache != nil {
-		cacheRepo = cache
-	}
-
 	// Repositories
 	assetRepo := teradata.NewAssetRepository(db)
-	lineageRepo := teradata.NewLineageRepository(db)
+	lineageRepo := teradata.NewLineageRepository(db, assetRepo)
 	searchRepo := teradata.NewSearchRepository(db)
 
 	// Services
 	assetService := application.NewAssetService(assetRepo)
-	lineageService := application.NewLineageService(lineageRepo, assetRepo, cacheRepo)
+	lineageService := application.NewLineageService(lineageRepo)
 	searchService := application.NewSearchService(searchRepo)
 
 	// HTTP Handler
@@ -68,7 +54,7 @@ func main() {
 
 	// Graceful shutdown
 	go func() {
-		log.Printf("Server starting on %s", server.Addr)
+		log.Printf("Server starting on port %s", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}

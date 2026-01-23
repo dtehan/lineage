@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/your-org/lineage-api/internal/domain"
+	"github.com/lineage-api/internal/domain"
 )
 
 // AssetRepository implements domain.AssetRepository using Teradata.
@@ -125,8 +125,7 @@ func (r *AssetRepository) ListTables(ctx context.Context, databaseName string) (
 			table_name,
 			table_kind,
 			create_timestamp,
-			comment_string,
-			row_count
+			comment_string
 		FROM demo_user.LIN_TABLE
 		WHERE database_name = ?
 		  AND is_active = 'Y'
@@ -144,7 +143,6 @@ func (r *AssetRepository) ListTables(ctx context.Context, databaseName string) (
 		var t domain.Table
 		var commentString sql.NullString
 		var createTimestamp sql.NullTime
-		var rowCount sql.NullInt64
 
 		err := rows.Scan(
 			&t.ID,
@@ -153,7 +151,6 @@ func (r *AssetRepository) ListTables(ctx context.Context, databaseName string) (
 			&t.TableKind,
 			&createTimestamp,
 			&commentString,
-			&rowCount,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan table row: %w", err)
@@ -164,9 +161,6 @@ func (r *AssetRepository) ListTables(ctx context.Context, databaseName string) (
 		}
 		if commentString.Valid {
 			t.CommentString = commentString.String
-		}
-		if rowCount.Valid {
-			t.RowCount = rowCount.Int64
 		}
 
 		tables = append(tables, t)
@@ -184,8 +178,7 @@ func (r *AssetRepository) GetTable(ctx context.Context, databaseName, tableName 
 			table_name,
 			table_kind,
 			create_timestamp,
-			comment_string,
-			row_count
+			comment_string
 		FROM demo_user.LIN_TABLE
 		WHERE database_name = ?
 		  AND table_name = ?
@@ -195,7 +188,6 @@ func (r *AssetRepository) GetTable(ctx context.Context, databaseName, tableName 
 	var t domain.Table
 	var commentString sql.NullString
 	var createTimestamp sql.NullTime
-	var rowCount sql.NullInt64
 
 	err := r.db.QueryRowContext(ctx, query, databaseName, tableName).Scan(
 		&t.ID,
@@ -204,7 +196,6 @@ func (r *AssetRepository) GetTable(ctx context.Context, databaseName, tableName 
 		&t.TableKind,
 		&createTimestamp,
 		&commentString,
-		&rowCount,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -218,9 +209,6 @@ func (r *AssetRepository) GetTable(ctx context.Context, databaseName, tableName 
 	}
 	if commentString.Valid {
 		t.CommentString = commentString.String
-	}
-	if rowCount.Valid {
-		t.RowCount = rowCount.Int64
 	}
 
 	return &t, nil
@@ -340,4 +328,107 @@ func (r *AssetRepository) GetColumn(ctx context.Context, databaseName, tableName
 	}
 
 	return &c, nil
+}
+
+// Search searches for assets matching the query.
+func (r *AssetRepository) Search(ctx context.Context, query string, assetTypes []domain.AssetType, limit int) ([]domain.SearchResult, error) {
+	// Build the search query with LIKE
+	searchPattern := "%" + query + "%"
+	var results []domain.SearchResult
+
+	// Search databases
+	if len(assetTypes) == 0 || containsAssetType(assetTypes, domain.AssetTypeDatabase) {
+		dbQuery := `
+			SELECT database_id, database_name
+			FROM demo_user.LIN_DATABASE
+			WHERE LOWER(database_name) LIKE LOWER(?)
+			  AND is_active = 'Y'
+		`
+		rows, err := r.db.QueryContext(ctx, dbQuery, searchPattern)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id, name string
+				if err := rows.Scan(&id, &name); err == nil {
+					results = append(results, domain.SearchResult{
+						ID:           id,
+						Type:         domain.AssetTypeDatabase,
+						DatabaseName: name,
+						MatchedOn:    "name",
+						Score:        1.0,
+					})
+				}
+			}
+		}
+	}
+
+	// Search tables
+	if len(assetTypes) == 0 || containsAssetType(assetTypes, domain.AssetTypeTable) {
+		tblQuery := `
+			SELECT table_id, database_name, table_name
+			FROM demo_user.LIN_TABLE
+			WHERE LOWER(table_name) LIKE LOWER(?)
+			  AND is_active = 'Y'
+		`
+		rows, err := r.db.QueryContext(ctx, tblQuery, searchPattern)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id, dbName, tblName string
+				if err := rows.Scan(&id, &dbName, &tblName); err == nil {
+					results = append(results, domain.SearchResult{
+						ID:           id,
+						Type:         domain.AssetTypeTable,
+						DatabaseName: dbName,
+						TableName:    tblName,
+						MatchedOn:    "tableName",
+						Score:        1.0,
+					})
+				}
+			}
+		}
+	}
+
+	// Search columns
+	if len(assetTypes) == 0 || containsAssetType(assetTypes, domain.AssetTypeColumn) {
+		colQuery := `
+			SELECT column_id, database_name, table_name, column_name
+			FROM demo_user.LIN_COLUMN
+			WHERE LOWER(column_name) LIKE LOWER(?)
+			  AND is_active = 'Y'
+		`
+		rows, err := r.db.QueryContext(ctx, colQuery, searchPattern)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var id, dbName, tblName, colName string
+				if err := rows.Scan(&id, &dbName, &tblName, &colName); err == nil {
+					results = append(results, domain.SearchResult{
+						ID:           id,
+						Type:         domain.AssetTypeColumn,
+						DatabaseName: dbName,
+						TableName:    tblName,
+						ColumnName:   colName,
+						MatchedOn:    "columnName",
+						Score:        1.0,
+					})
+				}
+			}
+		}
+	}
+
+	if len(results) > limit {
+		results = results[:limit]
+	}
+
+	return results, nil
+}
+
+func containsAssetType(types []domain.AssetType, t domain.AssetType) bool {
+	for _, at := range types {
+		if at == t {
+			return true
+		}
+	}
+	return false
 }

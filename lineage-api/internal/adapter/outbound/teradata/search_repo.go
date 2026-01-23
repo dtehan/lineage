@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/your-org/lineage-api/internal/domain"
+	"github.com/lineage-api/internal/domain"
 )
 
 // SearchRepository implements domain.SearchRepository using Teradata.

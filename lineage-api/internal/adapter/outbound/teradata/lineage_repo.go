@@ -4,34 +4,45 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
-	"github.com/your-org/lineage-api/internal/domain"
+	"github.com/lineage-api/internal/domain"
 )
 
 // LineageRepository implements domain.LineageRepository using Teradata.
 type LineageRepository struct {
-	db *sql.DB
+	db        *sql.DB
+	assetRepo domain.AssetRepository
 }
 
 // NewLineageRepository creates a new LineageRepository.
-func NewLineageRepository(db *sql.DB) *LineageRepository {
-	return &LineageRepository{db: db}
+func NewLineageRepository(db *sql.DB, assetRepo domain.AssetRepository) *LineageRepository {
+	return &LineageRepository{
+		db:        db,
+		assetRepo: assetRepo,
+	}
 }
 
 // GetLineageGraph returns the full lineage graph for an asset.
-func (r *LineageRepository) GetLineageGraph(ctx context.Context, assetID string, depth int) (*domain.LineageGraph, error) {
-	// Get both upstream and downstream, then combine into graph
-	upstream, err := r.GetUpstreamLineage(ctx, assetID, depth)
-	if err != nil {
-		return nil, err
+func (r *LineageRepository) GetLineageGraph(ctx context.Context, assetID string, direction string, maxDepth int) (*domain.LineageGraph, error) {
+	var upstream, downstream []domain.ColumnLineage
+	var err error
+
+	if direction == "upstream" || direction == "both" {
+		upstream, err = r.GetUpstreamLineage(ctx, assetID, maxDepth)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	downstream, err := r.GetDownstreamLineage(ctx, assetID, depth)
-	if err != nil {
-		return nil, err
+	if direction == "downstream" || direction == "both" {
+		downstream, err = r.GetDownstreamLineage(ctx, assetID, maxDepth)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return r.buildGraph(assetID, upstream, downstream), nil
+	return r.buildGraph(ctx, assetID, upstream, downstream), nil
 }
 
 // GetUpstreamLineage returns upstream lineage using recursive CTE.
@@ -231,15 +242,40 @@ func (r *LineageRepository) scanLineageRows(rows *sql.Rows) ([]domain.ColumnLine
 	return results, rows.Err()
 }
 
+// getColumnMetadata retrieves column metadata from the asset repository
+func (r *LineageRepository) getColumnMetadata(ctx context.Context, dbName, tableName, columnName string) map[string]any {
+	if r.assetRepo == nil {
+		return nil
+	}
+
+	col, err := r.assetRepo.GetColumn(ctx, dbName, tableName, columnName)
+	if err != nil {
+		return nil
+	}
+
+	return map[string]any{
+		"columnType":     col.ColumnType,
+		"nullable":       col.Nullable,
+		"columnPosition": col.ColumnPosition,
+	}
+}
+
 // buildGraph constructs a LineageGraph from upstream and downstream data.
-func (r *LineageRepository) buildGraph(rootID string, upstream, downstream []domain.ColumnLineage) *domain.LineageGraph {
+func (r *LineageRepository) buildGraph(ctx context.Context, rootID string, upstream, downstream []domain.ColumnLineage) *domain.LineageGraph {
 	nodeMap := make(map[string]domain.LineageNode)
 	var edges []domain.LineageEdge
 
 	// Add root node
-	nodeMap[rootID] = domain.LineageNode{
-		ID:   rootID,
-		Type: "column",
+	parts := strings.Split(rootID, ".")
+	if len(parts) == 3 {
+		nodeMap[rootID] = domain.LineageNode{
+			ID:           rootID,
+			Type:         "column",
+			DatabaseName: parts[0],
+			TableName:    parts[1],
+			ColumnName:   parts[2],
+			Metadata:     r.getColumnMetadata(ctx, parts[0], parts[1], parts[2]),
+		}
 	}
 
 	// Process upstream
@@ -252,6 +288,7 @@ func (r *LineageRepository) buildGraph(rootID string, upstream, downstream []dom
 				DatabaseName: l.SourceDatabase,
 				TableName:    l.SourceTable,
 				ColumnName:   l.SourceColumn,
+				Metadata:     r.getColumnMetadata(ctx, l.SourceDatabase, l.SourceTable, l.SourceColumn),
 			}
 		}
 		// Add target node
@@ -262,6 +299,7 @@ func (r *LineageRepository) buildGraph(rootID string, upstream, downstream []dom
 				DatabaseName: l.TargetDatabase,
 				TableName:    l.TargetTable,
 				ColumnName:   l.TargetColumn,
+				Metadata:     r.getColumnMetadata(ctx, l.TargetDatabase, l.TargetTable, l.TargetColumn),
 			}
 		}
 		// Add edge
@@ -283,6 +321,7 @@ func (r *LineageRepository) buildGraph(rootID string, upstream, downstream []dom
 				DatabaseName: l.SourceDatabase,
 				TableName:    l.SourceTable,
 				ColumnName:   l.SourceColumn,
+				Metadata:     r.getColumnMetadata(ctx, l.SourceDatabase, l.SourceTable, l.SourceColumn),
 			}
 		}
 		if _, exists := nodeMap[l.TargetColumnID]; !exists {
@@ -292,6 +331,7 @@ func (r *LineageRepository) buildGraph(rootID string, upstream, downstream []dom
 				DatabaseName: l.TargetDatabase,
 				TableName:    l.TargetTable,
 				ColumnName:   l.TargetColumn,
+				Metadata:     r.getColumnMetadata(ctx, l.TargetDatabase, l.TargetTable, l.TargetColumn),
 			}
 		}
 		edges = append(edges, domain.LineageEdge{

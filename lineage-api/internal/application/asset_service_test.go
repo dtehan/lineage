@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/your-org/lineage-api/internal/domain"
-	"github.com/your-org/lineage-api/internal/domain/mocks"
+	"github.com/lineage-api/internal/domain"
+	"github.com/lineage-api/internal/domain/mocks"
 )
 
 // TC-UNIT-015: AssetService ListDatabases

@@ -1,74 +1,66 @@
-// Package domain contains the core domain entities and repository interfaces.
 package domain
 
 import "time"
 
-// Database represents a database in the asset registry.
 type Database struct {
-	ID              string    `json:"id"`
-	Name            string    `json:"name"`
-	OwnerName       string    `json:"ownerName,omitempty"`
-	CreateTimestamp time.Time `json:"createTimestamp,omitempty"`
-	CommentString   string    `json:"commentString,omitempty"`
+	ID              string    `json:"id" db:"database_id"`
+	Name            string    `json:"name" db:"database_name"`
+	OwnerName       string    `json:"ownerName,omitempty" db:"owner_name"`
+	CreateTimestamp time.Time `json:"createTimestamp,omitempty" db:"create_timestamp"`
+	CommentString   string    `json:"commentString,omitempty" db:"comment_string"`
 }
 
-// Table represents a table or view in the asset registry.
 type Table struct {
-	ID              string    `json:"id"`
-	DatabaseName    string    `json:"databaseName"`
-	TableName       string    `json:"tableName"`
-	TableKind       string    `json:"tableKind"` // T=Table, V=View
-	CreateTimestamp time.Time `json:"createTimestamp,omitempty"`
-	CommentString   string    `json:"commentString,omitempty"`
-	RowCount        int64     `json:"rowCount,omitempty"`
+	ID              string    `json:"id" db:"table_id"`
+	DatabaseName    string    `json:"databaseName" db:"database_name"`
+	TableName       string    `json:"tableName" db:"table_name"`
+	TableKind       string    `json:"tableKind" db:"table_kind"`
+	CreateTimestamp time.Time `json:"createTimestamp,omitempty" db:"create_timestamp"`
+	CommentString   string    `json:"commentString,omitempty" db:"comment_string"`
+	RowCount        int64     `json:"rowCount,omitempty" db:"row_count"`
 }
 
-// Column represents a column in the asset registry.
 type Column struct {
-	ID             string `json:"id"`
-	DatabaseName   string `json:"databaseName"`
-	TableName      string `json:"tableName"`
-	ColumnName     string `json:"columnName"`
-	ColumnType     string `json:"columnType"`
-	ColumnLength   int    `json:"columnLength,omitempty"`
-	Nullable       bool   `json:"nullable"`
-	CommentString  string `json:"commentString,omitempty"`
-	ColumnPosition int    `json:"columnPosition"`
+	ID             string `json:"id" db:"column_id"`
+	DatabaseName   string `json:"databaseName" db:"database_name"`
+	TableName      string `json:"tableName" db:"table_name"`
+	ColumnName     string `json:"columnName" db:"column_name"`
+	ColumnType     string `json:"columnType" db:"column_type"`
+	ColumnLength   int    `json:"columnLength,omitempty" db:"column_length"`
+	Nullable       bool   `json:"nullable" db:"nullable"`
+	CommentString  string `json:"commentString,omitempty" db:"comment_string"`
+	ColumnPosition int    `json:"columnPosition" db:"column_position"`
 }
 
-// ColumnLineage represents a column-to-column lineage relationship.
 type ColumnLineage struct {
-	LineageID          string  `json:"lineageId"`
-	SourceColumnID     string  `json:"sourceColumnId"`
-	SourceDatabase     string  `json:"sourceDatabase"`
-	SourceTable        string  `json:"sourceTable"`
-	SourceColumn       string  `json:"sourceColumn"`
-	TargetColumnID     string  `json:"targetColumnId"`
-	TargetDatabase     string  `json:"targetDatabase"`
-	TargetTable        string  `json:"targetTable"`
-	TargetColumn       string  `json:"targetColumn"`
-	TransformationType string  `json:"transformationType"`
-	ConfidenceScore    float64 `json:"confidenceScore"`
+	LineageID          string  `json:"lineageId" db:"lineage_id"`
+	SourceColumnID     string  `json:"sourceColumnId" db:"source_column_id"`
+	SourceDatabase     string  `json:"sourceDatabase" db:"source_database"`
+	SourceTable        string  `json:"sourceTable" db:"source_table"`
+	SourceColumn       string  `json:"sourceColumn" db:"source_column"`
+	TargetColumnID     string  `json:"targetColumnId" db:"target_column_id"`
+	TargetDatabase     string  `json:"targetDatabase" db:"target_database"`
+	TargetTable        string  `json:"targetTable" db:"target_table"`
+	TargetColumn       string  `json:"targetColumn" db:"target_column"`
+	TransformationType string  `json:"transformationType" db:"transformation_type"`
+	ConfidenceScore    float64 `json:"confidenceScore" db:"confidence_score"`
 	Depth              int     `json:"depth,omitempty"`
 }
 
-// LineageGraph represents a graph of lineage nodes and edges.
 type LineageGraph struct {
 	Nodes []LineageNode `json:"nodes"`
 	Edges []LineageEdge `json:"edges"`
 }
 
-// LineageNode represents a node in the lineage graph.
 type LineageNode struct {
 	ID           string         `json:"id"`
-	Type         string         `json:"type"` // database, table, column
+	Type         string         `json:"type"`
 	DatabaseName string         `json:"databaseName"`
 	TableName    string         `json:"tableName,omitempty"`
 	ColumnName   string         `json:"columnName,omitempty"`
 	Metadata     map[string]any `json:"metadata,omitempty"`
 }
 
-// LineageEdge represents an edge in the lineage graph.
 type LineageEdge struct {
 	ID                 string  `json:"id"`
 	Source             string  `json:"source"`
@@ -77,7 +69,6 @@ type LineageEdge struct {
 	ConfidenceScore    float64 `json:"confidenceScore,omitempty"`
 }
 
-// AssetType represents the type of an asset.
 type AssetType string
 
 const (
@@ -86,7 +77,6 @@ const (
 	AssetTypeColumn   AssetType = "column"
 )
 
-// SearchResult represents a search result.
 type SearchResult struct {
 	ID           string    `json:"id"`
 	Type         AssetType `json:"type"`

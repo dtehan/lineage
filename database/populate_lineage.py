@@ -51,7 +51,46 @@ SELECT
     TRIM(c.DatabaseName) AS database_name,
     TRIM(c.TableName) AS table_name,
     TRIM(c.ColumnName) AS column_name,
-    TRIM(c.ColumnType) AS column_type,
+    CASE TRIM(c.ColumnType)
+        WHEN 'I' THEN 'INTEGER'
+        WHEN 'I1' THEN 'BYTEINT'
+        WHEN 'I2' THEN 'SMALLINT'
+        WHEN 'I8' THEN 'BIGINT'
+        WHEN 'F' THEN 'FLOAT'
+        WHEN 'D' THEN 'DECIMAL(' || TRIM(c.DecimalTotalDigits) || ',' || TRIM(c.DecimalFractionalDigits) || ')'
+        WHEN 'DA' THEN 'DATE'
+        WHEN 'TS' THEN 'TIMESTAMP(' || COALESCE(TRIM(c.DecimalFractionalDigits), '0') || ')'
+        WHEN 'TZ' THEN 'TIME WITH TIME ZONE'
+        WHEN 'SZ' THEN 'TIMESTAMP WITH TIME ZONE'
+        WHEN 'AT' THEN 'TIME(' || COALESCE(TRIM(c.DecimalFractionalDigits), '0') || ')'
+        WHEN 'CF' THEN 'CHAR(' || TRIM(c.ColumnLength) || ')'
+        WHEN 'CV' THEN 'VARCHAR(' || TRIM(c.ColumnLength) || ')'
+        WHEN 'CO' THEN 'CLOB'
+        WHEN 'BF' THEN 'BYTE(' || TRIM(c.ColumnLength) || ')'
+        WHEN 'BV' THEN 'VARBYTE(' || TRIM(c.ColumnLength) || ')'
+        WHEN 'BO' THEN 'BLOB'
+        WHEN 'N' THEN 'NUMBER'
+        WHEN 'AN' THEN 'ARRAY'
+        WHEN 'JN' THEN 'JSON'
+        WHEN 'DY' THEN 'INTERVAL DAY'
+        WHEN 'DH' THEN 'INTERVAL DAY TO HOUR'
+        WHEN 'DM' THEN 'INTERVAL DAY TO MINUTE'
+        WHEN 'DS' THEN 'INTERVAL DAY TO SECOND'
+        WHEN 'HR' THEN 'INTERVAL HOUR'
+        WHEN 'HM' THEN 'INTERVAL HOUR TO MINUTE'
+        WHEN 'HS' THEN 'INTERVAL HOUR TO SECOND'
+        WHEN 'MI' THEN 'INTERVAL MINUTE'
+        WHEN 'MS' THEN 'INTERVAL MINUTE TO SECOND'
+        WHEN 'SC' THEN 'INTERVAL SECOND'
+        WHEN 'MO' THEN 'INTERVAL MONTH'
+        WHEN 'YR' THEN 'INTERVAL YEAR'
+        WHEN 'YM' THEN 'INTERVAL YEAR TO MONTH'
+        WHEN 'PD' THEN 'PERIOD(DATE)'
+        WHEN 'PT' THEN 'PERIOD(TIME)'
+        WHEN 'PS' THEN 'PERIOD(TIMESTAMP)'
+        WHEN 'PM' THEN 'PERIOD(TIMESTAMP WITH TIME ZONE)'
+        ELSE TRIM(c.ColumnType)
+    END AS column_type,
     c.ColumnLength,
     c.DecimalTotalDigits,
     c.DecimalFractionalDigits,

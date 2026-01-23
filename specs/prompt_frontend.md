@@ -13,7 +13,7 @@ You should leverage Playwright for frontend testing.
 ## Instructions
 - study CLAUDE.md for project details
 - if a todo list does not already exist
-	- study specs/lineage_plan_frontend.md and build a plan, 
+	- study specs/lineage_visualization_spec.md to build a plan, 
 	- write the plan into a todo list 
 - pick the most important item from the todo plan
 - after making changes to the files, validate the changes

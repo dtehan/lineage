@@ -5,17 +5,15 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/your-org/lineage-api/internal/application"
+	"github.com/lineage-api/internal/application"
 )
 
-// Handler contains the HTTP handlers for the API.
 type Handler struct {
 	assetService   *application.AssetService
 	lineageService *application.LineageService
 	searchService  *application.SearchService
 }
 
-// NewHandler creates a new Handler.
 func NewHandler(
 	assetService *application.AssetService,
 	lineageService *application.LineageService,
@@ -28,7 +26,10 @@ func NewHandler(
 	}
 }
 
-// ListDatabases handles GET /api/v1/assets/databases
+func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
+	respondJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -44,7 +45,6 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListTables handles GET /api/v1/assets/databases/{database}/tables
 func (h *Handler) ListTables(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	databaseName := chi.URLParam(r, "database")
@@ -61,7 +61,6 @@ func (h *Handler) ListTables(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ListColumns handles GET /api/v1/assets/databases/{database}/tables/{table}/columns
 func (h *Handler) ListColumns(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	databaseName := chi.URLParam(r, "database")
@@ -79,7 +78,6 @@ func (h *Handler) ListColumns(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetLineage handles GET /api/v1/lineage/{assetId}
 func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
@@ -89,9 +87,10 @@ func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
 		direction = "both"
 	}
 
+	maxDepthStr := r.URL.Query().Get("maxDepth")
 	maxDepth := 5
-	if depthStr := r.URL.Query().Get("maxDepth"); depthStr != "" {
-		if d, err := strconv.Atoi(depthStr); err == nil {
+	if maxDepthStr != "" {
+		if d, err := strconv.Atoi(maxDepthStr); err == nil {
 			maxDepth = d
 		}
 	}
@@ -111,62 +110,56 @@ func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, response)
 }
 
-// GetUpstreamLineage handles GET /api/v1/lineage/{assetId}/upstream
 func (h *Handler) GetUpstreamLineage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
+	maxDepthStr := r.URL.Query().Get("maxDepth")
 	maxDepth := 10
-	if depthStr := r.URL.Query().Get("maxDepth"); depthStr != "" {
-		if d, err := strconv.Atoi(depthStr); err == nil {
+	if maxDepthStr != "" {
+		if d, err := strconv.Atoi(maxDepthStr); err == nil {
 			maxDepth = d
 		}
 	}
 
-	lineage, err := h.lineageService.GetUpstreamLineage(ctx, assetID, maxDepth)
+	response, err := h.lineageService.GetUpstreamLineage(ctx, assetID, maxDepth)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"assetId": assetID,
-		"lineage": lineage,
-	})
+	respondJSON(w, http.StatusOK, response)
 }
 
-// GetDownstreamLineage handles GET /api/v1/lineage/{assetId}/downstream
 func (h *Handler) GetDownstreamLineage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
+	maxDepthStr := r.URL.Query().Get("maxDepth")
 	maxDepth := 10
-	if depthStr := r.URL.Query().Get("maxDepth"); depthStr != "" {
-		if d, err := strconv.Atoi(depthStr); err == nil {
+	if maxDepthStr != "" {
+		if d, err := strconv.Atoi(maxDepthStr); err == nil {
 			maxDepth = d
 		}
 	}
 
-	lineage, err := h.lineageService.GetDownstreamLineage(ctx, assetID, maxDepth)
+	response, err := h.lineageService.GetDownstreamLineage(ctx, assetID, maxDepth)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"assetId": assetID,
-		"lineage": lineage,
-	})
+	respondJSON(w, http.StatusOK, response)
 }
 
-// GetImpactAnalysis handles GET /api/v1/lineage/{assetId}/impact
 func (h *Handler) GetImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
+	maxDepthStr := r.URL.Query().Get("maxDepth")
 	maxDepth := 10
-	if depthStr := r.URL.Query().Get("maxDepth"); depthStr != "" {
-		if d, err := strconv.Atoi(depthStr); err == nil {
+	if maxDepthStr != "" {
+		if d, err := strconv.Atoi(maxDepthStr); err == nil {
 			maxDepth = d
 		}
 	}
@@ -180,30 +173,27 @@ func (h *Handler) GetImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, response)
 }
 
-// Search handles GET /api/v1/search
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-
 	query := r.URL.Query().Get("q")
-	if query == "" {
-		respondError(w, http.StatusBadRequest, "query parameter 'q' is required")
-		return
-	}
 
-	assetTypes := r.URL.Query()["type"]
-
+	limitStr := r.URL.Query().Get("limit")
 	limit := 50
-	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+	if limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil {
 			limit = l
 		}
 	}
 
-	response, err := h.searchService.Search(ctx, application.SearchRequest{
+	assetTypes := r.URL.Query()["type"]
+
+	req := application.SearchRequest{
 		Query:      query,
 		AssetTypes: assetTypes,
 		Limit:      limit,
-	})
+	}
+
+	response, err := h.searchService.Search(ctx, req)
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

@@ -6,30 +6,74 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a column-level data lineage application for Teradata databases. The application visualizes data flow between database columns, enabling impact analysis for change management.
 
-**Status:** Planning phase. All specification documents are located in the `specs/` directory:
+**Status:** Implemented and functional. See `docs/user_guide.md` for comprehensive usage documentation.
 
-**Specification Files:**
-- `specs/lineage_plan_database.md` - Teradata schema and SQL
-- `specs/lineage_plan_backend.md` - Go backend implementation
-- `specs/lineage_plan_frontend.md` - React frontend implementation
+**Specification Files (in `specs/`):**
+- `lineage_plan_database.md` - Teradata schema and SQL
+- `lineage_plan_backend.md` - Go backend implementation
+- `lineage_plan_frontend.md` - React frontend implementation
+- `lineage_visualization_spec.md` - Lineage graph and UI/UX design
 
-**Test Plans:**
-- `specs/test_plan_database.md` - 73 test cases covering schema validation, data extraction, recursive CTEs, edge cases, and data integrity
-- `specs/test_plan_backend.md` - 79 test cases covering unit tests, integration tests, API endpoints, error handling, caching, and performance
-- `specs/test_plan_frontend.md` - 68 test cases covering components, hooks, E2E flows, graph rendering, state management, and accessibility
+**Test Plans (in `specs/`):**
+- `test_plan_database.md` - 73 test cases for schema, CTEs, edge cases
+- `test_plan_backend.md` - 79 test cases for API, caching, performance
+- `test_plan_frontend.md` - 68 test cases for components, E2E, accessibility
 
-**Coding Standards:**
-- `specs/coding_standards_go.md` - Go standards for formatting, naming, error handling, testing, and concurrency
-- `specs/coding_standards_typescript.md` - TypeScript/React standards for components, hooks, state management, and TanStack Query
-- `specs/coding_standards_sql.md` - Teradata SQL standards for naming, formatting, performance, partitioning, and anti-patterns
+**Coding Standards (in `specs/`):**
+- `coding_standards_go.md` - Go formatting, error handling, testing
+- `coding_standards_typescript.md` - TypeScript/React patterns
+- `coding_standards_sql.md` - Teradata SQL standards
 
 ## Technology Stack
 
-- **Backend:** Go with Chi router
-- **Frontend:** React with TypeScript, Vite, TanStack Query, Zustand
-- **Graph Visualization:** React Flow + ELKjs
-- **Database:** Teradata (stores both source data and lineage metadata in a `lineage` database)
-- **Caching:** Redis
+- **Backend:** Go with Chi router (or Python Flask for testing)
+- **Frontend:** React 18 with TypeScript, Vite, TanStack Query, Zustand
+- **Graph Visualization:** React Flow (@xyflow/react) + ELKjs
+- **Database:** Teradata (lineage metadata in `demo_user` database)
+- **Caching:** Redis (optional, falls back gracefully)
+- **Testing:** Vitest + React Testing Library (unit), Playwright (E2E)
+
+## Quick Start
+
+```bash
+# 1. Setup Python environment
+python3 -m venv .venv && source .venv/bin/activate
+pip install teradatasql flask flask-cors requests python-dotenv
+
+# 2. Configure database connection (copy and edit .env.example)
+cp .env.example .env
+# Edit .env with your Teradata credentials
+
+# 3. Setup database
+cd database && python setup_lineage_schema.py && python setup_test_data.py && python populate_lineage.py
+
+# 4. Start backend (Python Flask - recommended for testing)
+cd lineage-api && python python_server.py  # Runs on :8080
+
+# 5. Start frontend
+cd lineage-ui && npm install && npm run dev  # Runs on :3000
+```
+
+## Common Commands
+
+```bash
+# Backend
+cd lineage-api
+python python_server.py          # Start Python server
+go run cmd/server/main.go        # Start Go server
+make build && ./bin/server       # Build and run Go binary
+
+# Frontend
+cd lineage-ui
+npm run dev                      # Dev server with hot reload
+npm run build                    # Production build
+npm test                         # Run Vitest unit tests
+npx playwright test              # Run E2E tests
+
+# Database
+cd database
+python run_tests.py              # Run 73 database tests
+```
 
 ## Architecture
 
@@ -62,26 +106,39 @@ lineage-api/
 ```
 lineage-ui/
 ├── src/
-│   ├── api/                     # Axios client and TanStack Query hooks
+│   ├── api/
+│   │   ├── client.ts            # Axios client
+│   │   └── hooks/               # useAssets, useLineage, useSearch (TanStack Query)
 │   ├── components/
-│   │   ├── common/              # Shared UI components
+│   │   ├── common/              # Button, Input, LoadingSpinner, ErrorBoundary, Tooltip
 │   │   ├── layout/              # AppShell, Sidebar, Header
-│   │   └── domain/              # AssetBrowser, LineageGraph, ImpactAnalysis, Search
-│   ├── features/                # Page components
-│   ├── stores/                  # Zustand stores
-│   └── types/                   # TypeScript interfaces
+│   │   └── domain/
+│   │       ├── AssetBrowser/    # Hierarchical database/table/column browser
+│   │       ├── LineageGraph/    # Main graph visualization
+│   │       │   ├── TableNode/   # Table cards with column rows
+│   │       │   ├── hooks/       # useLineageHighlight, useDatabaseClusters, useGraphSearch
+│   │       │   ├── LineageTableView/  # Alternative tabular view
+│   │       │   ├── Toolbar.tsx  # Direction, depth, export controls
+│   │       │   └── DetailPanel.tsx    # Slide-out metadata panel
+│   │       ├── ImpactAnalysis/  # Impact summary and table
+│   │       └── Search/          # SearchBar, SearchResults
+│   ├── features/                # Page components (ExplorePage, LineagePage, etc.)
+│   ├── stores/                  # useLineageStore, useUIStore (Zustand)
+│   └── utils/graph/             # layoutEngine (ELKjs integration)
+├── e2e/                         # Playwright E2E tests
+└── vitest.config.ts
 ```
 
 ### Database Scripts
 
 ```
 database/
-├── db_config.py              # Database connection configuration
-├── setup_lineage_schema.py   # Creates lineage schema tables
-├── setup_test_data.py        # Populates test data for development
-├── insert_cte_test_data.py   # Inserts test data for CTE testing
-├── populate_lineage.py       # Populates lineage relationships
-└── run_tests.py              # Runs database test suite
+├── db_config.py              # Connection config (uses TD_HOST, TD_USER, TD_PASSWORD env vars)
+├── setup_lineage_schema.py   # Creates LIN_* tables and indexes
+├── setup_test_data.py        # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
+├── populate_lineage.py       # Extracts metadata and creates 93 lineage relationships
+├── insert_cte_test_data.py   # Edge cases: cycles, diamonds, fan-out
+└── run_tests.py              # 73 database tests
 ```
 
 ## Key Teradata Tables (in `lineage` database)
@@ -110,3 +167,45 @@ Uses recursive CTEs in Teradata to traverse the lineage graph:
 - Upstream: follows `target_column_id → source_column_id` relationships
 - Downstream: follows `source_column_id → target_column_id` relationships
 - Cycle detection via path tracking in the CTE
+
+## Testing
+
+| Suite | Count | Command |
+|-------|-------|---------|
+| Database (Python) | 73 | `cd database && python run_tests.py` |
+| Backend API (Python) | 20 | `cd lineage-api && python run_api_tests.py` |
+| Frontend Unit (Vitest) | 260+ | `cd lineage-ui && npm test` |
+| Frontend E2E (Playwright) | 21 | `cd lineage-ui && npx playwright test` |
+
+**Note:** Database tests have 29 skipped tests in ClearScape Analytics due to DBQL/index limitations.
+
+## Configuration
+
+The project supports configuration via `.env` file or environment variables. Environment variables take precedence.
+
+**Quick setup:** Copy `.env.example` to `.env` and update with your values:
+```bash
+cp .env.example .env
+```
+
+**Environment Variables:**
+
+| Variable | Used By | Description |
+|----------|---------|-------------|
+| `TD_HOST` | Python scripts | Teradata host |
+| `TD_USER` | Python scripts | Teradata username |
+| `TD_PASSWORD` | Python scripts | Teradata password |
+| `TD_DATABASE` | Python scripts | Default database |
+| `TERADATA_HOST` | Go/Python server | Teradata host (takes precedence over TD_*) |
+| `TERADATA_USER` | Go/Python server | Teradata username |
+| `TERADATA_PASSWORD` | Go/Python server | Teradata password |
+| `TERADATA_DATABASE` | Go/Python server | Default database |
+| `REDIS_ADDR` | Go server | Redis address (default: localhost:6379) |
+| `PORT` | Go server | HTTP port (default: 8080) |
+
+**Optional dependency for .env support in Python:**
+```bash
+pip install python-dotenv
+```
+
+The frontend proxies `/api/*` requests to `http://localhost:8080` via Vite config.

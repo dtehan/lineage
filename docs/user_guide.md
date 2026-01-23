@@ -58,24 +58,23 @@ python3 -m venv .venv
 source .venv/bin/activate
 
 # Install required packages
-pip install teradatasql flask flask-cors requests
+pip install teradatasql flask flask-cors requests python-dotenv
 ```
 
 ### Step 1: Database Setup
 
-The database connection is configured in `database/db_config.py`. For ClearScape Analytics (test environment):
+The database connection can be configured using a `.env` file or environment variables.
 
-```python
-# database/db_config.py
-CONFIG = {
-    'host': 'test-sad3sstx4u4llczi.env.clearscape.teradata.com',
-    'user': 'demo_user',
-    'password': 'password',
-    'database': 'demo_user'
-}
+**Option A: Using .env file (recommended)**
+
+Copy the example file and edit with your credentials:
+
+```bash
+cp .env.example .env
+# Edit .env with your Teradata credentials
 ```
 
-Alternatively, set environment variables:
+**Option B: Using environment variables**
 
 ```bash
 export TD_HOST="your-teradata-host"
@@ -83,6 +82,8 @@ export TD_USER="your-username"
 export TD_PASSWORD="your-password"
 export TD_DATABASE="demo_user"
 ```
+
+**Note:** Environment variables take precedence over `.env` file values.
 
 Create the lineage schema:
 
@@ -300,34 +301,118 @@ The Lineage Graph visualizes data relationships as an interactive directed graph
 
 | Element | Description |
 |---------|-------------|
-| **Column Nodes** | White rectangles showing database.table (small) and column name (large) |
-| **Table Nodes** | Slate-colored rectangles for table-level grouping |
-| **Edges** | Arrows connecting source to target, color-coded by transformation type |
-| **Selected Node** | Highlighted with blue border and ring |
-| **Highlighted Nodes** | Light blue border when hovering related nodes |
+| **Table Nodes** | White cards containing a header with `database.table` name and expandable column rows |
+| **Column Rows** | Rows within table nodes showing column name, data type, and connection handles |
+| **Edges** | Arrows connecting source columns to target columns, color-coded by transformation type |
+| **Selected Column** | Blue border on the table node, highlighted column row |
+| **Highlighted Path** | Green border on nodes in the lineage path, non-path nodes dimmed to 20% opacity |
+
+**Table Node Structure:**
+
+```
+┌─────────────────────────────────────┐
+│ ○ database_name.table_name      [▼] │  ← Header with expand/collapse
+├─────────────────────────────────────┤
+│ ● column_1          VARCHAR(100)    │  ← Column row with handles
+│ ● column_2          INTEGER         │
+│ ● column_3          TIMESTAMP       │
+└─────────────────────────────────────┘
+```
 
 **Edge Colors by Transformation Type:**
 
-| Type | Color |
-|------|-------|
-| DIRECT | Green |
-| AGGREGATION | Amber |
-| CALCULATION | Purple |
-| Default | Slate |
+| Type | Color | Hex Code |
+|------|-------|----------|
+| DIRECT | Green | `#22C55E` |
+| DERIVED | Blue | `#3B82F6` |
+| AGGREGATED | Purple | `#A855F7` |
+| JOINED | Cyan | `#06B6D4` |
+| CALCULATION | Violet | `#8B5CF6` |
+| Unknown | Gray | `#9CA3AF` |
+
+**Confidence-Based Styling:**
+
+Edges display confidence levels visually:
+- **90%+ confidence**: Full opacity, solid line
+- **70-89% confidence**: 90% opacity
+- **50-69% confidence**: 80% opacity
+- **Below 50%**: 70% opacity with dashed animation
 
 **Interactions:**
 
 - **Pan**: Click and drag on the background
-- **Zoom**: Scroll wheel (range: 0.1x to 2x)
-- **Select Node**: Click on a node to make it the new focus
-- **Hover**: Highlights connected nodes in the path
-- **Fit View**: Use the controls to fit all nodes in view
+- **Zoom**: Scroll wheel or +/- keys (range: 0.1x to 2x)
+- **Select Column**: Click a column row to highlight its full lineage path
+- **Select Edge**: Click an edge to view transformation details
+- **Clear Selection**: Click on empty space or press Escape
+- **Fit View**: Press F or use toolbar button
 - **MiniMap**: Corner minimap for navigation in large graphs
 
-**Controls (Lineage Page):**
+**Keyboard Shortcuts:**
 
-- **Direction Dropdown**: Switch between Upstream, Downstream, or Both
-- **Depth Dropdown**: Select traversal depth (1, 2, 3, 5, or 10 levels)
+| Shortcut | Action |
+|----------|--------|
+| `Escape` | Clear selection and close panel |
+| `F` | Fit graph to view |
+| `+` / `-` | Zoom in / out |
+| `Ctrl+F` or `/` | Focus search box |
+| `Ctrl+G` | Toggle database cluster backgrounds |
+
+### Toolbar Controls
+
+The lineage graph includes an advanced toolbar with the following controls:
+
+| Control | Description |
+|---------|-------------|
+| **View Mode Toggle** | Switch between Graph view (visual) and Table view (tabular list) |
+| **Search Box** | Autocomplete search for columns within the current lineage graph |
+| **Direction Dropdown** | Select Upstream, Downstream, or Both directions |
+| **Depth Slider** | Interactive slider to adjust traversal depth (1-10) |
+| **Fit View Button** | Automatically fit all nodes within the viewport (or press F) |
+| **Export Button** | Export the current lineage graph as PNG, SVG, or JSON |
+| **Fullscreen Button** | Toggle fullscreen mode for the graph view |
+
+**Search Autocomplete:**
+
+The search box provides real-time autocomplete as you type:
+- Minimum 2 characters to trigger search
+- Results show column name, table path, and data type
+- Use arrow keys to navigate results, Enter to select
+- Selected column is highlighted and centered in view
+- Press Escape to close the dropdown
+
+### Detail Panel
+
+When you click on a column or edge in the lineage graph, a **Detail Panel** slides in from the right side of the screen showing detailed information. Click the X button or press Escape to close the panel.
+
+**Column Details:**
+
+When a column is selected, the panel displays:
+- **Full Path**: `database.table.column` identifier with breadcrumb navigation
+- **Metadata Section**:
+  - Data type (e.g., VARCHAR(100), INTEGER)
+  - Nullable status (Yes/No badge)
+  - Primary key indicator (badge if applicable)
+- **Description**: Column description (if available in metadata)
+- **Lineage Statistics**:
+  - Count of upstream connections (data sources)
+  - Count of downstream connections (data consumers)
+
+**Quick Actions (Column Panel):**
+- **View Full Lineage**: Highlights the complete lineage path for this column
+- **View Impact Analysis**: Navigate to impact analysis page for change assessment
+
+**Edge/Connection Details:**
+
+When an edge (connection) is selected, the panel displays:
+- **Source Column**: Full path of the data source (`database.table.column`)
+- **Target Column**: Full path of the data destination
+- **Transformation Type**: Color-coded badge (DIRECT, DERIVED, AGGREGATED, JOINED, etc.)
+- **Confidence Score**: Visual progress bar showing confidence level (0-100%)
+  - Green (≥90%): High confidence
+  - Yellow (70-89%): Medium confidence
+  - Orange (50-69%): Low confidence
+  - Red (<50%): Very low confidence
 
 ### Impact Analysis
 
@@ -349,6 +434,61 @@ Lists all impacted assets with:
 - Database name
 - Depth level (how many hops from the source)
 - Impact type badge (Direct = depth 1, Indirect = depth 2+)
+
+### Graph Visualization Features
+
+The lineage graph includes several advanced features for exploring complex data flows:
+
+**View Modes:**
+
+| Mode | Description |
+|------|-------------|
+| **Graph View** | Interactive directed graph visualization using React Flow with ELKjs layout. Table nodes contain columns as rows with per-column edge connections. |
+| **Table View** | Tabular list of all lineage relationships with sorting, filtering, and CSV export capabilities |
+
+**Table View Features:**
+- Sortable columns (click header to sort)
+- Text filtering across all columns
+- Pagination (50 rows per page)
+- CSV export button
+- Click a row to highlight the corresponding edge in graph view
+
+**In-Graph Search:**
+
+Use the autocomplete search box in the toolbar to find and navigate to specific columns:
+- Type at least 2 characters to see matching results
+- Results are ranked by relevance (exact match > starts with > contains)
+- Selecting a result centers and highlights that column in the graph
+
+**Database Clustering:**
+
+Tables are visually grouped by their parent database with semi-transparent colored backgrounds:
+- Toggle visibility with Ctrl+G or the toolbar button
+- Each database gets a distinct background color
+- Database name label appears at the top of each cluster region
+- Helps understand cross-database data flows in complex lineage graphs
+
+**Path Highlighting:**
+
+When you click on a column:
+- The full upstream and downstream lineage path is highlighted
+- Nodes not in the path are dimmed to 20% opacity
+- Edges in the path become animated
+- Selected edges show a glow effect
+- Click on empty space or press Escape to clear the selection
+
+**Export Options:**
+
+Export the current lineage graph in multiple formats:
+- **PNG**: High-resolution raster image (2x pixel ratio)
+- **SVG**: Scalable vector graphic for editing
+- **JSON**: Raw graph data (nodes, edges, metadata)
+
+Files are downloaded with timestamp: `lineage-graph-YYYY-MM-DD.{format}`
+
+**Fullscreen Mode:**
+
+Toggle fullscreen mode for detailed analysis of complex lineages. The graph expands to fill the entire screen, hiding other UI elements.
 
 ### Search
 
@@ -407,9 +547,11 @@ Returns all databases with lineage data.
     {
       "id": "SALES_DW",
       "name": "SALES_DW",
-      "tableCount": 15
+      "ownerName": "dbc",
+      "commentString": "Sales data warehouse"
     }
-  ]
+  ],
+  "total": 5
 }
 ```
 
@@ -430,12 +572,13 @@ Returns tables in a database.
   "tables": [
     {
       "id": "SALES_DW.DIM_CUSTOMER",
-      "name": "DIM_CUSTOMER",
-      "database": "SALES_DW",
-      "columnCount": 10,
+      "databaseName": "SALES_DW",
+      "tableName": "DIM_CUSTOMER",
+      "tableKind": "T",
       "rowCount": 50000
     }
-  ]
+  ],
+  "total": 15
 }
 ```
 
@@ -457,12 +600,15 @@ Returns columns in a table.
   "columns": [
     {
       "id": "SALES_DW.DIM_CUSTOMER.customer_id",
-      "name": "customer_id",
-      "dataType": "INTEGER",
+      "databaseName": "SALES_DW",
+      "tableName": "DIM_CUSTOMER",
+      "columnName": "customer_id",
+      "columnType": "INTEGER",
       "nullable": false,
-      "comment": "Primary key"
+      "columnPosition": 1
     }
-  ]
+  ],
+  "total": 10
 }
 ```
 
@@ -482,21 +628,26 @@ Returns the lineage graph for an asset.
 **Response:**
 ```json
 {
+  "assetId": "SALES_DW.DIM_CUSTOMER.customer_id",
   "nodes": [
     {
       "id": "SALES_DW.DIM_CUSTOMER.customer_id",
-      "database": "SALES_DW",
-      "table": "DIM_CUSTOMER",
-      "column": "customer_id",
-      "dataType": "INTEGER"
+      "type": "column",
+      "databaseName": "SALES_DW",
+      "tableName": "DIM_CUSTOMER",
+      "columnName": "customer_id",
+      "metadata": {
+        "dataType": "INTEGER"
+      }
     }
   ],
   "edges": [
     {
+      "id": "edge-1",
       "source": "SALES_DW.STG_CUSTOMER.customer_id",
       "target": "SALES_DW.DIM_CUSTOMER.customer_id",
       "transformationType": "DIRECT",
-      "confidence": 1.0
+      "confidenceScore": 1.0
     }
   ]
 }
@@ -543,20 +694,30 @@ Returns detailed impact analysis.
 {
   "sourceAsset": "SALES_DW.DIM_CUSTOMER.customer_id",
   "totalImpactedAssets": 25,
-  "impactedDatabases": ["SALES_DW", "REPORTING"],
-  "impactByDepth": {
-    "1": 5,
-    "2": 10,
-    "3": 7,
-    "4": 3
-  },
   "impactedAssets": [
     {
       "id": "SALES_DW.FACT_SALES.customer_id",
+      "databaseName": "SALES_DW",
+      "tableName": "FACT_SALES",
+      "columnName": "customer_id",
       "depth": 1,
-      "path": ["SALES_DW.DIM_CUSTOMER.customer_id", "SALES_DW.FACT_SALES.customer_id"]
+      "impactType": "direct"
     }
-  ]
+  ],
+  "summary": {
+    "totalImpacted": 25,
+    "byDatabase": {
+      "SALES_DW": 20,
+      "REPORTING": 5
+    },
+    "byDepth": {
+      "1": 5,
+      "2": 10,
+      "3": 7,
+      "4": 3
+    },
+    "criticalCount": 3
+  }
 }
 ```
 
@@ -580,12 +741,14 @@ Searches for assets by name.
     {
       "id": "SALES_DW.DIM_CUSTOMER",
       "type": "table",
-      "name": "DIM_CUSTOMER",
-      "database": "SALES_DW",
-      "relevanceScore": 0.95
+      "databaseName": "SALES_DW",
+      "tableName": "DIM_CUSTOMER",
+      "matchedOn": "tableName",
+      "score": 0.95
     }
   ],
-  "totalCount": 15
+  "total": 15,
+  "query": "customer"
 }
 ```
 
@@ -691,18 +854,39 @@ Searches for assets by name.
 | **Asset** | A database, table, or column tracked in the lineage system |
 | **Upstream Lineage** | The source data that feeds into an asset |
 | **Downstream Lineage** | The targets that consume data from an asset |
-| **Transformation** | How data changes from source to target (e.g., copy, aggregate, calculate) |
+| **Transformation** | How data changes from source to target (e.g., DIRECT, DERIVED, AGGREGATED, JOINED) |
 | **Confidence Score** | A 0.0-1.0 measure of certainty about a lineage relationship |
 | **DBQL** | Database Query Log - Teradata's query logging system used to extract lineage |
 | **DAG** | Directed Acyclic Graph - the graph structure used to represent lineage |
 | **Impact Analysis** | Assessment of all downstream effects of changing an asset |
 | **Traversal Depth** | How many relationship levels to follow when building a lineage graph |
-| **Node** | A visual element representing an asset in the lineage graph |
-| **Edge** | A visual element representing a relationship between assets |
+| **Table Node** | A visual card representing a table, containing column rows with connection handles |
+| **Column Row** | A row within a table node showing column name, data type, and lineage indicators |
+| **Edge** | A visual arrow representing a data flow relationship between columns |
+| **Path Highlighting** | Visual emphasis of the complete lineage path when a column is selected |
+| **Database Cluster** | A colored background region grouping tables from the same database |
+| **Detail Panel** | A slide-out panel showing metadata for selected columns or edges |
+| **ELKjs** | Eclipse Layout Kernel for JavaScript - the library used for automatic graph layout |
+| **React Flow** | The React library used for rendering interactive node-based graphs |
 
 ---
 
 ## Configuration Reference
+
+### .env File Support
+
+The project supports configuration via a `.env` file in the project root. Copy the example file to get started:
+
+```bash
+cp .env.example .env
+# Edit .env with your credentials
+```
+
+**Configuration precedence (highest to lowest):**
+1. Environment variables
+2. `.env` file
+3. `config.yaml` (Go server only)
+4. Default values
 
 ### Environment Variables
 
@@ -715,15 +899,20 @@ Searches for assets by name.
 | `TD_PASSWORD` | Teradata password | (empty) |
 | `TD_DATABASE` | Default database | `demo_user` |
 
-**Backend API (Go):**
+**Backend API (Go and Python Flask):**
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TERADATA_HOST` | Teradata server hostname | - |
 | `TERADATA_USER` | Teradata username | - |
 | `TERADATA_PASSWORD` | Teradata password | - |
+| `TERADATA_DATABASE` | Teradata database name | `demo_user` |
+| `TERADATA_PORT` | Teradata port | `1025` |
 | `REDIS_ADDR` | Redis server address | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis password | (empty) |
+| `PORT` | HTTP server port | `8080` |
+
+**Note:** The Python Flask server supports both `TD_*` and `TERADATA_*` prefixes. `TERADATA_*` variables take precedence if both are set.
 
 **Frontend (Vite):**
 
@@ -753,7 +942,7 @@ teradata:
   port: 1025
   user: ${TERADATA_USER}
   password: ${TERADATA_PASSWORD}
-  database: lineage
+  database: ${TERADATA_DATABASE:demo_user}
 
 redis:
   addr: ${REDIS_ADDR:localhost:6379}
@@ -864,6 +1053,16 @@ The application includes comprehensive test suites for all components. Test plan
 - `specs/test_plan_backend.md` - 79 backend test cases
 - `specs/test_plan_frontend.md` - 68 frontend test cases
 
+**Test Summary:**
+
+| Test Suite | Tests | Description |
+|------------|-------|-------------|
+| Database (Python) | 73 | Schema validation, data extraction, recursive CTEs |
+| Backend API (Python) | 20 | API endpoint validation |
+| Frontend Unit (Vitest) | 260+ | Component, hook, and utility tests |
+| Frontend E2E (Playwright) | 21 | End-to-end user flow tests |
+| **Total** | **370+** | |
+
 ### Database Tests
 
 Run the database test suite (73 test cases covering schema validation, data extraction, recursive CTEs, edge cases, and data integrity):
@@ -932,6 +1131,44 @@ SUMMARY
 - Search functionality
 - Response structure validation
 - CORS and content-type headers
+
+### Frontend Unit Tests (Vitest)
+
+Run the Vitest unit test suite (260+ test cases):
+
+```bash
+cd lineage-ui/
+
+# Run all unit tests
+npm test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run with coverage
+npm run test:coverage
+```
+
+**Expected Output:**
+```
+ ✓ src/utils/graph/layoutEngine.test.ts (50 tests)
+ ✓ src/components/domain/LineageGraph/Toolbar.test.tsx (29 tests)
+ ✓ src/test/accessibility.test.tsx (28 tests)
+ ✓ src/components/domain/LineageGraph/DetailPanel.test.tsx (16 tests)
+ ✓ src/components/domain/LineageGraph/LineageGraph.test.tsx (18 tests)
+ ... (21 test files total)
+
+ Test Files  21 passed (21)
+      Tests  260+ passed
+```
+
+**Test Coverage:**
+- Layout engine (table grouping, edge colors, node positioning)
+- Graph components (TableNode, LineageEdge, DetailPanel, Toolbar)
+- Hooks (useLineageHighlight, useDatabaseClusters, useGraphSearch)
+- Store (useLineageStore state management)
+- API hooks (useLineage, useAssets, useSearch)
+- Accessibility (keyboard navigation, ARIA attributes)
 
 ### Frontend E2E Tests (Playwright)
 
@@ -1002,10 +1239,20 @@ python run_tests.py
 cd ../lineage-api/
 python run_api_tests.py
 
-# Frontend E2E tests
+# Frontend unit tests
 cd ../lineage-ui/
+npm test
+
+# Frontend E2E tests
 npx playwright test
 ```
+
+**Expected Results:**
+- Database tests: 44 passed, 29 skipped (ClearScape limitations)
+- Backend API tests: 20 passed
+- Frontend unit tests: 260+ passed
+- Frontend E2E tests: 21 passed
+- **Total: 345+ tests passed**
 
 ### Playwright Configuration
 

@@ -6,7 +6,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/your-org/lineage-api/internal/domain"
+	"github.com/lineage-api/internal/domain"
 )
 
 // ErrNotFound is returned when an item is not found.
@@ -143,6 +143,7 @@ type MockLineageRepository struct {
 	UpstreamData    map[string][]domain.ColumnLineage
 	DownstreamData  map[string][]domain.ColumnLineage
 	DirectData      map[string][]domain.ColumnLineage
+	GraphData       map[string]*domain.LineageGraph
 
 	// Error injection
 	GetLineageGraphErr      error
@@ -157,16 +158,22 @@ func NewMockLineageRepository() *MockLineageRepository {
 		UpstreamData:   make(map[string][]domain.ColumnLineage),
 		DownstreamData: make(map[string][]domain.ColumnLineage),
 		DirectData:     make(map[string][]domain.ColumnLineage),
+		GraphData:      make(map[string]*domain.LineageGraph),
 	}
 }
 
 // GetLineageGraph returns the full lineage graph for an asset.
-func (m *MockLineageRepository) GetLineageGraph(ctx context.Context, assetID string, depth int) (*domain.LineageGraph, error) {
+func (m *MockLineageRepository) GetLineageGraph(ctx context.Context, assetID string, direction string, depth int) (*domain.LineageGraph, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	if m.GetLineageGraphErr != nil {
 		return nil, m.GetLineageGraphErr
+	}
+
+	// If GraphData is set for this asset, use it directly
+	if graph, ok := m.GraphData[assetID]; ok {
+		return graph, nil
 	}
 
 	upstream := m.UpstreamData[assetID]

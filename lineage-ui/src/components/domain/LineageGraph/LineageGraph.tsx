@@ -1,4 +1,5 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
   Background,
@@ -6,6 +7,8 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
+  useReactFlow,
+  ReactFlowProvider,
   ConnectionMode,
   type Node,
   type Edge,
@@ -15,53 +18,224 @@ import '@xyflow/react/dist/style.css';
 import { useLineage } from '../../../api/hooks/useLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { layoutGraph } from '../../../utils/graph/layoutEngine';
-import { ColumnNode } from './ColumnNode';
-import { TableNode } from './TableNode';
+import { TableNode } from './TableNode/';
+import { LineageEdge } from './LineageEdge';
+import { Toolbar } from './Toolbar';
+import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
+import { Legend } from './Legend';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
+import { Map, ChevronUp, ChevronDown } from 'lucide-react';
+import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
+import { LineageTableView } from './LineageTableView';
+import {
+  useLineageHighlight,
+  useKeyboardShortcuts,
+  useLineageExport,
+} from './hooks';
 
 const nodeTypes = {
-  columnNode: ColumnNode,
   tableNode: TableNode,
 };
 
-interface LineageGraphProps {
+const edgeTypes = {
+  lineageEdge: LineageEdge,
+};
+
+interface LineageGraphInnerProps {
   assetId: string;
 }
 
-export function LineageGraph({ assetId }: LineageGraphProps) {
-  const { direction, maxDepth, setGraph, setHighlightedNodeIds } = useLineageStore();
+function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
+  const reactFlowInstance = useReactFlow();
+  const navigate = useNavigate();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [showMinimap, setShowMinimap] = useState(false);
+
+  const {
+    direction,
+    maxDepth,
+    viewMode,
+    setViewMode,
+    setDirection,
+    setMaxDepth,
+    setGraph,
+    selectedAssetId,
+    setSelectedAssetId,
+    selectedEdgeId,
+    setSelectedEdge,
+    setHighlightedPath,
+    clearHighlight,
+    isPanelOpen,
+    panelContent,
+    openPanel,
+    closePanel,
+    searchQuery,
+    setSearchQuery,
+    isFullscreen,
+    toggleFullscreen,
+    showDatabaseClusters,
+    nodes: storeNodes,
+    edges: storeEdges,
+  } = useLineageStore();
 
   const { data, isLoading, error } = useLineage(assetId, { direction, maxDepth });
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  // Use the lineage highlight hook
+  const { highlightPath } = useLineageHighlight({ nodes, edges });
+
+  // Use keyboard shortcuts hook
+  useKeyboardShortcuts({
+    reactFlowInstance,
+    enabled: viewMode === 'graph',
+  });
+
+  // Use export hook
+  const { exportJson } = useLineageExport({
+    wrapperRef,
+  });
+
+  // Create database clusters from nodes
+  const clusters = useDatabaseClustersFromNodes(nodes);
+
+  // Update nodes/edges when data changes
   useEffect(() => {
     if (data?.graph) {
-      layoutGraph(data.graph.nodes, data.graph.edges).then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-        setNodes(layoutedNodes);
-        setEdges(layoutedEdges);
-        setGraph(data.graph.nodes, data.graph.edges);
-      });
+      layoutGraph(data.graph.nodes, data.graph.edges).then(
+        ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+          setNodes(layoutedNodes);
+          setEdges(layoutedEdges);
+          setGraph(data.graph.nodes, data.graph.edges);
+        }
+      );
     }
   }, [data, setNodes, setEdges, setGraph]);
 
-  const onNodeMouseEnter = useCallback(
+  // Handle column selection from TableNode/ColumnRow
+  // This is called when a column row is clicked inside a table node
+  useEffect(() => {
+    if (selectedAssetId) {
+      const { highlightedNodes, highlightedEdges } = highlightPath(selectedAssetId);
+      setHighlightedPath(highlightedNodes, highlightedEdges);
+      openPanel('node');
+    }
+  }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
+
+  // Handle node click for selection and path highlighting
+  const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      // Highlight connected nodes
-      const connectedIds = new Set<string>([node.id]);
-      edges.forEach((edge) => {
-        if (edge.source === node.id) connectedIds.add(edge.target);
-        if (edge.target === node.id) connectedIds.add(edge.source);
-      });
-      setHighlightedNodeIds(connectedIds);
+      // For table nodes, column selection is handled by ColumnRow
+      // This handler is for non-table nodes (fallback)
+      if (node.type !== 'tableNode') {
+        setSelectedAssetId(node.id);
+      }
     },
-    [edges, setHighlightedNodeIds]
+    [setSelectedAssetId]
   );
 
-  const onNodeMouseLeave = useCallback(() => {
-    setHighlightedNodeIds(new Set());
-  }, [setHighlightedNodeIds]);
+  // Handle edge click
+  const onEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: Edge) => {
+      setSelectedEdge(edge.id);
+      openPanel('edge');
+    },
+    [setSelectedEdge, openPanel]
+  );
+
+  // Handle pane click to clear selection
+  const onPaneClick = useCallback(() => {
+    clearHighlight();
+    closePanel();
+  }, [clearHighlight, closePanel]);
+
+  // Handle fit view
+  const handleFitView = useCallback(() => {
+    reactFlowInstance.fitView({ padding: 0.2 });
+  }, [reactFlowInstance]);
+
+  // Handle export menu selection
+  const handleExport = useCallback(() => {
+    // For now, export as JSON by default
+    // Could show a dropdown menu for format selection
+    exportJson();
+  }, [exportJson]);
+
+  // Get column detail for panel
+  const getColumnDetail = useCallback(
+    (columnId: string): ColumnDetail | null => {
+      const node = storeNodes.find((n) => n.id === columnId);
+      if (!node || node.type !== 'column') return null;
+
+      // Count upstream and downstream
+      const upstreamCount = storeEdges.filter((e) => e.target === columnId).length;
+      const downstreamCount = storeEdges.filter((e) => e.source === columnId).length;
+
+      return {
+        id: node.id,
+        databaseName: node.databaseName,
+        tableName: node.tableName || '',
+        columnName: node.columnName || '',
+        dataType: (node.metadata?.columnType as string) || undefined,
+        nullable: (node.metadata?.nullable as boolean) || undefined,
+        isPrimaryKey: (node.metadata?.isPrimaryKey as boolean) || undefined,
+        description: (node.metadata?.description as string) || undefined,
+        upstreamCount,
+        downstreamCount,
+      };
+    },
+    [storeNodes, storeEdges]
+  );
+
+  // Get edge detail for panel
+  const getEdgeDetail = useCallback(
+    (edgeId: string): EdgeDetail | null => {
+      const edge = storeEdges.find((e) => e.id === edgeId);
+      if (!edge) return null;
+
+      const sourceNode = storeNodes.find((n) => n.id === edge.source);
+      const targetNode = storeNodes.find((n) => n.id === edge.target);
+
+      return {
+        id: edge.id,
+        sourceColumn: sourceNode
+          ? `${sourceNode.databaseName}.${sourceNode.tableName}.${sourceNode.columnName}`
+          : edge.source,
+        targetColumn: targetNode
+          ? `${targetNode.databaseName}.${targetNode.tableName}.${targetNode.columnName}`
+          : edge.target,
+        transformationType: edge.transformationType || 'unknown',
+        confidenceScore: edge.confidenceScore,
+      };
+    },
+    [storeNodes, storeEdges]
+  );
+
+  // Handle view full lineage from panel
+  const handleViewFullLineage = useCallback(
+    (columnId: string) => {
+      const { highlightedNodes, highlightedEdges } = highlightPath(columnId);
+      setHighlightedPath(highlightedNodes, highlightedEdges);
+    },
+    [highlightPath, setHighlightedPath]
+  );
+
+  // Handle impact analysis from panel - navigate to Impact Analysis page
+  const handleViewImpactAnalysis = useCallback((columnId: string) => {
+    navigate(`/impact/${encodeURIComponent(columnId)}`);
+  }, [navigate]);
+
+  // Handle table view row click
+  const handleTableRowClick = useCallback(
+    (edgeId: string) => {
+      setSelectedEdge(edgeId);
+      openPanel('edge');
+      // Optionally switch to graph view
+      setViewMode('graph');
+    },
+    [setSelectedEdge, openPanel, setViewMode]
+  );
 
   if (isLoading) {
     return (
@@ -79,32 +253,171 @@ export function LineageGraph({ assetId }: LineageGraphProps) {
     );
   }
 
+  // Handle empty lineage data - check edges since root node is always included
+  const hasNoLineageData = data && data.graph && data.graph.edges?.length === 0;
+  if (hasNoLineageData) {
+    // Parse the assetId to show a friendly name (format: database.table.column or database.table)
+    const assetParts = assetId.split('.');
+    const assetName = assetParts.length >= 2
+      ? `${assetParts[0]}.${assetParts[1]}${assetParts[2] ? '.' + assetParts[2] : ''}`
+      : assetId;
+
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-slate-500">
+        <svg
+          className="w-16 h-16 mb-4 text-slate-300"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.5}
+            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+          />
+        </svg>
+        <h3 className="text-lg font-medium text-slate-700 mb-2">No Lineage Data Available</h3>
+        <p className="text-sm text-slate-500 text-center max-w-md">
+          No lineage relationships have been discovered for <span className="font-mono text-slate-600">{assetName}</span>.
+        </p>
+        <p className="text-sm text-slate-400 mt-2 text-center max-w-md">
+          This column may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet.
+        </p>
+      </div>
+    );
+  }
+
+  // Get selected details for panel
+  const selectedColumn = selectedAssetId ? getColumnDetail(selectedAssetId) : null;
+  const selectedEdgeDetail = selectedEdgeId ? getEdgeDetail(selectedEdgeId) : null;
+
   return (
-    <div className="w-full h-full">
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeMouseEnter={onNodeMouseEnter}
-        onNodeMouseLeave={onNodeMouseLeave}
-        nodeTypes={nodeTypes}
-        connectionMode={ConnectionMode.Loose}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-        minZoom={0.1}
-        maxZoom={2}
-      >
-        <Background color="#e2e8f0" gap={16} />
-        <Controls />
-        <MiniMap
-          nodeColor={(node) => {
-            if (node.id === assetId) return '#3b82f6';
-            return '#94a3b8';
-          }}
-          maskColor="rgba(0, 0, 0, 0.1)"
-        />
-      </ReactFlow>
+    <div
+      ref={wrapperRef}
+      className={`flex flex-col h-full ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
+    >
+      {/* Toolbar */}
+      <Toolbar
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
+        direction={direction}
+        onDirectionChange={setDirection}
+        depth={maxDepth}
+        onDepthChange={setMaxDepth}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        onFitView={handleFitView}
+        onExport={handleExport}
+        onFullscreen={toggleFullscreen}
+        isLoading={isLoading}
+      />
+
+      {/* Graph View */}
+      {viewMode === 'graph' && (
+        <div className="flex-1 relative">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
+            onPaneClick={onPaneClick}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            connectionMode={ConnectionMode.Loose}
+            fitView
+            fitViewOptions={{ padding: 0.2 }}
+            minZoom={0.1}
+            maxZoom={2}
+            onlyRenderVisibleElements={nodes.length > 50}
+            proOptions={{ hideAttribution: true }}
+          >
+            {/* Database cluster backgrounds - rendered with viewport transform */}
+            {showDatabaseClusters && (
+              <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <ClusterBackground clusters={clusters} visible={showDatabaseClusters} />
+              </div>
+            )}
+
+            <Background color="#e2e8f0" gap={16} />
+            <Controls />
+            {showMinimap && (
+              <MiniMap
+                nodeColor={(node) => {
+                  // Highlight the focused asset
+                  if (nodes.some((n) => n.type === 'tableNode' && n.data)) {
+                    const tableData = node.data as { columns?: Array<{ id: string }> } | undefined;
+                    if (tableData?.columns?.some((col) => col.id === assetId)) {
+                      return '#3b82f6';
+                    }
+                  }
+                  return '#94a3b8';
+                }}
+                maskColor="rgba(0, 0, 0, 0.1)"
+                style={{ bottom: 56 }}
+              />
+            )}
+          </ReactFlow>
+          {/* Minimap Toggle */}
+          <div className="absolute bottom-4 right-4 z-10">
+            <div className="bg-white rounded-lg shadow-lg border border-slate-200 overflow-hidden">
+              <button
+                onClick={() => setShowMinimap(!showMinimap)}
+                className="flex items-center justify-between w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 transition-colors"
+                aria-expanded={showMinimap}
+                aria-label="Toggle minimap"
+              >
+                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Map size={14} />
+                  Minimap
+                </span>
+                {showMinimap ? (
+                  <ChevronDown size={14} className="text-slate-500 ml-2" />
+                ) : (
+                  <ChevronUp size={14} className="text-slate-500 ml-2" />
+                )}
+              </button>
+            </div>
+          </div>
+          <Legend />
+        </div>
+      )}
+
+      {/* Table View */}
+      {viewMode === 'table' && (
+        <div className="flex-1">
+          <LineageTableView
+            nodes={storeNodes}
+            edges={storeEdges}
+            onRowClick={handleTableRowClick}
+          />
+        </div>
+      )}
+
+      {/* Detail Panel */}
+      <DetailPanel
+        isOpen={isPanelOpen}
+        onClose={closePanel}
+        selectedColumn={panelContent === 'node' ? selectedColumn : undefined}
+        selectedEdge={panelContent === 'edge' ? selectedEdgeDetail : undefined}
+        onViewFullLineage={handleViewFullLineage}
+        onViewImpactAnalysis={handleViewImpactAnalysis}
+      />
     </div>
+  );
+}
+
+export interface LineageGraphProps {
+  assetId: string;
+}
+
+export function LineageGraph({ assetId }: LineageGraphProps) {
+  return (
+    <ReactFlowProvider>
+      <LineageGraphInner assetId={assetId} />
+    </ReactFlowProvider>
   );
 }

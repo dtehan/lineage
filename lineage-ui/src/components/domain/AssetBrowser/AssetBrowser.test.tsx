@@ -212,8 +212,9 @@ describe('AssetBrowser Component', () => {
         expect(screen.getByText('orders')).toBeInTheDocument();
       });
 
-      // Expand table
-      await user.click(screen.getByText('orders'));
+      // Expand table by clicking the expand button (chevron)
+      const expandTableButtons = screen.getAllByRole('button', { name: /expand table/i });
+      await user.click(expandTableButtons[0]); // Click first table's expand button
 
       // Columns should be visible with type information
       await waitFor(() => {
@@ -262,8 +263,9 @@ describe('AssetBrowser Component', () => {
         expect(screen.getByText('orders')).toBeInTheDocument();
       });
 
-      // Expand table
-      await user.click(screen.getByText('orders'));
+      // Expand table by clicking the expand button (chevron)
+      const expandTableButtons = screen.getAllByRole('button', { name: /expand table/i });
+      await user.click(expandTableButtons[0]); // Click first table's expand button
 
       await waitFor(() => {
         expect(screen.getByText('order_id')).toBeInTheDocument();

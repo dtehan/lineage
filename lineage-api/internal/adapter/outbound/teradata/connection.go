@@ -5,10 +5,9 @@ import (
 	"fmt"
 )
 
-// driverName is set by build tags (driver_odbc.go or driver_stub.go).
+// driverName is set by build-tagged init() in driver_*.go files
 var driverName string
 
-// Config holds Teradata connection configuration.
 type Config struct {
 	Host     string
 	Port     int
@@ -17,36 +16,26 @@ type Config struct {
 	Database string
 }
 
-// NewConnection creates a new connection to Teradata.
 func NewConnection(cfg Config) (*sql.DB, error) {
 	var connStr string
-	if driverName == "teradata" {
-		// Teradata GoSQL driver uses JSON connection string
-		connStr = fmt.Sprintf(
-			`{"host":"%s","user":"%s","password":"%s","database":"%s"}`,
-			cfg.Host,
-			cfg.User,
-			cfg.Password,
-			cfg.Database,
-		)
-	} else {
-		// ODBC driver uses traditional connection string
-		connStr = fmt.Sprintf(
-			"DRIVER={Teradata};DBCNAME=%s;UID=%s;PWD=%s;DATABASE=%s",
-			cfg.Host,
-			cfg.User,
-			cfg.Password,
-			cfg.Database,
-		)
+
+	switch driverName {
+	case "teradata":
+		// Teradata GoSQL driver connection string
+		connStr = fmt.Sprintf("%s/%s,%s", cfg.Host, cfg.User, cfg.Password)
+	case "odbc":
+		// ODBC connection string
+		connStr = fmt.Sprintf("Driver={Teradata};DBCName=%s;UID=%s;PWD=%s;Database=%s",
+			cfg.Host, cfg.User, cfg.Password, cfg.Database)
+	default:
+		// Stub driver for development without database
+		connStr = "stub"
 	}
 
 	db, err := sql.Open(driverName, connStr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open connection: %w", err)
+		return nil, fmt.Errorf("failed to open database connection: %w", err)
 	}
-
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
 
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)

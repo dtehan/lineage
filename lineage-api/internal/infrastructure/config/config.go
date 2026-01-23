@@ -1,9 +1,12 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/spf13/viper"
-	"github.com/your-org/lineage-api/internal/adapter/outbound/redis"
-	"github.com/your-org/lineage-api/internal/adapter/outbound/teradata"
+	"github.com/lineage-api/internal/adapter/outbound/redis"
+	"github.com/lineage-api/internal/adapter/outbound/teradata"
 )
 
 // Config holds all configuration for the application.
@@ -13,8 +16,12 @@ type Config struct {
 	Redis    redis.Config
 }
 
-// Load loads configuration from environment and config files.
+// Load loads configuration from .env file, environment variables, and config files.
+// Precedence (highest to lowest): environment variables > .env file > config.yaml > defaults
 func Load() (*Config, error) {
+	// Try to load .env file from current directory or project root
+	loadDotEnv()
+
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -46,4 +53,23 @@ func Load() (*Config, error) {
 			DB:       viper.GetInt("REDIS_DB"),
 		},
 	}, nil
+}
+
+// loadDotEnv attempts to load a .env file from current directory or parent directory.
+func loadDotEnv() {
+	// Check current directory first
+	if _, err := os.Stat(".env"); err == nil {
+		viper.SetConfigFile(".env")
+		viper.SetConfigType("dotenv")
+		_ = viper.MergeInConfig()
+		return
+	}
+
+	// Check parent directory (project root when running from lineage-api/)
+	parentEnv := filepath.Join("..", ".env")
+	if _, err := os.Stat(parentEnv); err == nil {
+		viper.SetConfigFile(parentEnv)
+		viper.SetConfigType("dotenv")
+		_ = viper.MergeInConfig()
+	}
 }

@@ -154,20 +154,21 @@ DDL_STATEMENTS = [
 ]
 
 # Index creation statements
+# Note: Teradata syntax is CREATE INDEX name (columns) ON table, not CREATE INDEX name ON table (columns)
 INDEX_STATEMENTS = [
-    "CREATE INDEX idx_lin_database_name ON demo_user.LIN_DATABASE (database_name)",
-    "CREATE INDEX idx_lin_table_db ON demo_user.LIN_TABLE (database_name)",
-    "CREATE INDEX idx_lin_table_name ON demo_user.LIN_TABLE (table_name)",
-    "CREATE INDEX idx_lin_column_db_tbl ON demo_user.LIN_COLUMN (database_name, table_name)",
-    "CREATE INDEX idx_lin_column_name ON demo_user.LIN_COLUMN (column_name)",
-    "CREATE INDEX idx_lin_col_lineage_source ON demo_user.LIN_COLUMN_LINEAGE (source_column_id)",
-    "CREATE INDEX idx_lin_col_lineage_target ON demo_user.LIN_COLUMN_LINEAGE (target_column_id)",
-    "CREATE INDEX idx_lin_col_lineage_src_db_tbl ON demo_user.LIN_COLUMN_LINEAGE (source_database, source_table)",
-    "CREATE INDEX idx_lin_col_lineage_tgt_db_tbl ON demo_user.LIN_COLUMN_LINEAGE (target_database, target_table)",
-    "CREATE INDEX idx_lin_tbl_lineage_source ON demo_user.LIN_TABLE_LINEAGE (source_table_id)",
-    "CREATE INDEX idx_lin_tbl_lineage_target ON demo_user.LIN_TABLE_LINEAGE (target_table_id)",
-    "CREATE INDEX idx_lin_query_user ON demo_user.LIN_QUERY (user_name)",
-    "CREATE INDEX idx_lin_query_time ON demo_user.LIN_QUERY (start_time)"
+    "CREATE INDEX idx_lin_database_name (database_name) ON demo_user.LIN_DATABASE",
+    "CREATE INDEX idx_lin_table_db (database_name) ON demo_user.LIN_TABLE",
+    "CREATE INDEX idx_lin_table_name (table_name) ON demo_user.LIN_TABLE",
+    "CREATE INDEX idx_lin_column_db_tbl (database_name, table_name) ON demo_user.LIN_COLUMN",
+    "CREATE INDEX idx_lin_column_name (column_name) ON demo_user.LIN_COLUMN",
+    "CREATE INDEX idx_lin_col_lineage_source (source_column_id) ON demo_user.LIN_COLUMN_LINEAGE",
+    "CREATE INDEX idx_lin_col_lineage_target (target_column_id) ON demo_user.LIN_COLUMN_LINEAGE",
+    "CREATE INDEX idx_lin_col_lineage_src_db_tbl (source_database, source_table) ON demo_user.LIN_COLUMN_LINEAGE",
+    "CREATE INDEX idx_lin_col_lineage_tgt_db_tbl (target_database, target_table) ON demo_user.LIN_COLUMN_LINEAGE",
+    "CREATE INDEX idx_lin_tbl_lineage_source (source_table_id) ON demo_user.LIN_TABLE_LINEAGE",
+    "CREATE INDEX idx_lin_tbl_lineage_target (target_table_id) ON demo_user.LIN_TABLE_LINEAGE",
+    "CREATE INDEX idx_lin_query_user (user_name) ON demo_user.LIN_QUERY",
+    "CREATE INDEX idx_lin_query_time (start_time) ON demo_user.LIN_QUERY"
 ]
 
 
