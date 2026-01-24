@@ -123,13 +123,86 @@ This creates a realistic data pipeline with 4 layers:
 
 ### Step 3: Populate Lineage Metadata
 
-Extract metadata from Teradata system views and populate lineage relationships:
+Extract metadata from Teradata system views and populate lineage relationships.
+
+**Choose your approach based on your environment:**
+
+| Environment | Approach | Command |
+|-------------|----------|---------|
+| **Test/Demo** | Manual mappings | `python3 populate_lineage.py --manual` |
+| **Production** | DBQL extraction | `python3 populate_lineage.py --dbql` |
+
+---
+
+#### Option A: Manual Mappings (Test/Demo Only)
+
+Use this for testing, demos, or environments without DBQL access (e.g., ClearScape Analytics free tier):
 
 ```bash
 python3 populate_lineage.py
+# or explicitly:
+python3 populate_lineage.py --manual
 ```
 
-This extracts databases, tables, and columns from DBC views and creates 93 column-level lineage relationships with transformation types (DIRECT, CALCULATION, AGGREGATION, JOIN).
+This extracts databases, tables, and columns from DBC views and creates 93 predefined column-level lineage relationships with transformation types (DIRECT, CALCULATION, AGGREGATION, JOIN).
+
+**When to use:**
+- Initial setup and testing
+- Demo environments
+- ClearScape Analytics (DBQL limited)
+- Development and debugging
+
+---
+
+#### Option B: DBQL-Based Extraction (Production)
+
+For production environments with DBQL (Database Query Log) enabled. This approach:
+- Automatically discovers lineage from actual query history
+- Supports incremental extraction (only processes new queries)
+- Uses watermarks to track extraction progress
+
+**Initial Setup (First Run):**
+
+```bash
+# Full extraction - processes all DBQL history
+python3 populate_lineage.py --dbql --full
+
+# Or use the dedicated script
+python3 extract_dbql_lineage.py --full
+```
+
+**Incremental Updates (Subsequent Runs):**
+
+```bash
+# Incremental - only processes queries since last run
+python3 populate_lineage.py --dbql
+
+# Or use the dedicated script
+python3 extract_dbql_lineage.py
+```
+
+**Additional Options:**
+
+```bash
+# Extract from a specific date (ignores watermark)
+python3 extract_dbql_lineage.py --since "2024-01-01"
+
+# Dry run (preview without changes)
+python3 extract_dbql_lineage.py --dry-run
+
+# Verbose output for debugging
+python3 extract_dbql_lineage.py -v
+
+# Skip metadata refresh (only update lineage)
+python3 populate_lineage.py --dbql --skip-metadata
+```
+
+**When to use:**
+- Production environments with DBQL enabled
+- Continuous lineage discovery
+- Scheduled/automated extraction jobs
+
+See [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction) for detailed documentation.
 
 ### Step 4: Add Edge Case Test Data (Optional)
 
@@ -1324,6 +1397,262 @@ For the ClearScape Analytics test environment:
 | Username | `demo_user` |
 | Password | `password` |
 | Database | `demo_user` |
+
+---
+
+---
+
+## DBQL-Based Lineage Extraction
+
+This section covers automated lineage extraction from Teradata's DBQL (Database Query Log) tables, which provides production-grade lineage discovery.
+
+### Overview
+
+DBQL-based extraction automatically discovers data lineage by parsing SQL statements from query history. The extraction uses SQLGlot to parse INSERT, MERGE, CREATE TABLE AS SELECT, and UPDATE statements.
+
+**Key Features:**
+- **SQL Parsing**: Extracts lineage by parsing actual SQL text from DBQL
+- **Incremental Updates**: Uses watermarks to process only new queries
+- **Duplicate Handling**: Updates `last_seen_at` for existing lineage records
+- **ClearScape Compatible**: Works even when `DBQLObjTbl.TypeOfUse` values are limited
+
+### Test vs Production Workflow
+
+| Step | Test/Demo | Production |
+|------|-----------|------------|
+| **Initial Setup** | `--manual` | `--dbql --full` |
+| **Ongoing Updates** | Re-run `--manual` | `--dbql` (incremental) |
+| **Data Source** | Hardcoded mappings | DBQL query history |
+| **Automation** | Manual | Can be scheduled |
+
+#### Test/Demo Workflow
+
+```bash
+# One-time setup with predefined lineage mappings
+cd database/
+python3 populate_lineage.py --manual
+```
+
+This creates 93 predefined lineage relationships for the test medallion architecture (SRC → STG → DIM → FACT → RPT).
+
+#### Production Workflow
+
+```bash
+cd database/
+
+# Step 1: Initial full extraction (first time only)
+python3 extract_dbql_lineage.py --full
+
+# Step 2: Schedule incremental runs (daily/hourly)
+python3 extract_dbql_lineage.py
+```
+
+### Prerequisites
+
+1. **DBQL Logging Enabled**: Your Teradata system must have DBQL logging enabled
+2. **SELECT Privileges**: Your user needs SELECT access to:
+   - `DBC.DBQLogTbl` - Query log
+   - `DBC.DBQLSQLTbl` - Query SQL text
+3. **SQLGlot Library**: Required for SQL parsing:
+   ```bash
+   pip install sqlglot>=25.0.0
+   ```
+
+### Commands Reference
+
+#### extract_dbql_lineage.py (Recommended)
+
+```bash
+# Incremental run (default) - processes queries since last watermark
+python3 extract_dbql_lineage.py
+
+# Full extraction - clears existing lineage, processes all history
+python3 extract_dbql_lineage.py --full
+
+# Extract from specific date (overrides watermark)
+python3 extract_dbql_lineage.py --since "2024-01-01"
+
+# Dry run - preview without making changes
+python3 extract_dbql_lineage.py --dry-run
+
+# Verbose output
+python3 extract_dbql_lineage.py -v
+```
+
+#### populate_lineage.py (Alternative)
+
+```bash
+# DBQL extraction with metadata refresh
+python3 populate_lineage.py --dbql
+
+# Full DBQL extraction
+python3 populate_lineage.py --dbql --full
+
+# Skip metadata refresh (only update lineage)
+python3 populate_lineage.py --dbql --skip-metadata
+
+# Dry run
+python3 populate_lineage.py --dbql --dry-run
+```
+
+### How It Works
+
+The extraction process:
+
+1. **Fetch Queries**: Retrieves INSERT/MERGE/CTAS/UPDATE statements from `DBC.DBQLSQLTbl`
+2. **Parse SQL**: Uses SQLGlot with Teradata dialect to parse each query
+3. **Extract Lineage**: Identifies source tables/columns and target tables/columns
+4. **Store Results**: Inserts into `LIN_TABLE_LINEAGE` and `LIN_COLUMN_LINEAGE`
+5. **Update Watermark**: Records the latest processed query timestamp
+
+```
+DBQL Tables                    Lineage Tables
+┌─────────────────┐           ┌─────────────────────┐
+│ DBC.DBQLogTbl   │──────────►│ LIN_TABLE_LINEAGE   │
+│ DBC.DBQLSQLTbl  │  Parse    │ LIN_COLUMN_LINEAGE  │
+└─────────────────┘  SQL      └─────────────────────┘
+                       │
+                       ▼
+                 ┌───────────┐
+                 │ SQLGlot   │
+                 │ Parser    │
+                 └───────────┘
+```
+
+### Incremental Extraction with Watermarks
+
+The system tracks extraction progress using the `LIN_WATERMARK` table:
+
+```sql
+-- Check current watermark
+SELECT source_name, last_extracted_at, row_count, status
+FROM demo_user.LIN_WATERMARK
+WHERE source_name = 'DBQL_LINEAGE_EXTRACTION';
+```
+
+**Watermark Behavior:**
+
+| Run Type | Watermark Action |
+|----------|------------------|
+| `--full` | Clears lineage, processes all history, sets new watermark |
+| Incremental (default) | Processes queries since watermark, updates watermark |
+| `--since DATE` | Processes queries since DATE, updates watermark |
+
+**Example incremental output:**
+```
+Mode: INCREMENTAL (since watermark: 2024-01-15 10:30:00)
+Fetching queries since: 2024-01-15 10:30:00
+  Found 150 queries to process
+...
+Watermark updated to: 2024-01-16 09:45:30
+```
+
+### Confidence Scores
+
+Column lineage records include confidence scores based on parsing accuracy:
+
+| Method | Confidence | Description |
+|--------|------------|-------------|
+| Direct column reference | 0.95 | `SELECT col FROM t` |
+| Column in expression | 0.85 | `SELECT col + 1 AS x` |
+| SELECT * expansion | 0.70 | Requires schema to expand |
+| Pattern-based fallback | 0.60 | Regex extraction |
+
+### Transformation Types
+
+Discovered lineage includes transformation types:
+
+| Type | Description |
+|------|-------------|
+| `DIRECT` | Direct column copy |
+| `CALCULATION` | Column used in expression |
+| `INSERT_SELECT` | INSERT...SELECT statement |
+| `MERGE` | MERGE statement |
+| `CTAS` | CREATE TABLE AS SELECT |
+| `UPDATE` | UPDATE statement |
+| `UNKNOWN` | Could not determine |
+
+### Scheduling Incremental Runs
+
+For production, schedule incremental extraction using cron or your scheduler:
+
+```bash
+# Example cron job - run every hour
+0 * * * * cd /path/to/lineage/database && python3 extract_dbql_lineage.py >> /var/log/lineage.log 2>&1
+
+# Example cron job - run daily at 2 AM
+0 2 * * * cd /path/to/lineage/database && python3 extract_dbql_lineage.py >> /var/log/lineage.log 2>&1
+```
+
+### Limitations
+
+| Limitation | Impact | Mitigation |
+|------------|--------|------------|
+| DBQL not enabled | No query history available | Use `--manual` mode |
+| SELECT * | Column mapping uncertain | Confidence score 0.70 |
+| Dynamic SQL | Actual SQL not visible | Table-level lineage only |
+| Large queries (>32KB) | SQL text truncated | First chunk parsed |
+| Complex Teradata syntax | Some may not parse | Pattern fallback |
+| TypeOfUse not logged | Can't use DBQLObjTbl directly | SQL parsing approach |
+
+### ClearScape Analytics Note
+
+ClearScape Analytics environments may have limited DBQL functionality:
+- `DBQLObjTbl.TypeOfUse` values may not include write operations (3/4)
+- The extraction script uses SQL parsing to work around this limitation
+- DBQL access is available, but some features may be restricted
+
+```bash
+# ClearScape: Use DBQL extraction (SQL parsing works)
+python3 extract_dbql_lineage.py --full
+
+# If DBQL is completely unavailable, fall back to manual
+python3 populate_lineage.py --manual
+```
+
+### Troubleshooting
+
+**No queries found:**
+```
+Fetching queries since: 2024-01-15 10:30:00
+  Found 0 queries to process
+```
+- Check if DBQL logging is enabled
+- Verify your user has SELECT on DBC.DBQLogTbl
+- Try `--full` to process all history
+
+**Low lineage counts:**
+```
+Queries processed: 5000
+Queries with lineage: 50
+```
+- Many queries may be simple INSERTs without SELECT
+- Complex SQL may not parse correctly
+- Use `-v` for verbose parsing errors
+
+**Watermark issues:**
+```bash
+# Reset watermark by using --full
+python3 extract_dbql_lineage.py --full
+
+# Or extract from specific date
+python3 extract_dbql_lineage.py --since "2024-01-01"
+```
+
+### Non-DBQL Environments
+
+For environments completely without DBQL access:
+
+```bash
+# Use manual/hardcoded mappings
+python3 populate_lineage.py --manual
+```
+
+**Future options for non-DBQL customers:**
+1. **SQL File Ingestion**: Parse ETL script files directly
+2. **DDL-Based Lineage**: Extract from view definitions
+3. **API Registration**: Applications register lineage at runtime
+4. **Metadata Import**: Import from dbt, DataHub, etc.
 
 ---
 

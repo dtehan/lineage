@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
 """
 Populate Lineage Tables
-Extracts metadata from DBC views and inserts column lineage records.
+
+Extracts metadata from DBC views and populates lineage data.
+
+Modes:
+  --manual   Use hardcoded lineage mappings (default, for testing/demo)
+  --dbql     Extract lineage from DBQL tables (requires DBQL access)
+
+Usage:
+  python populate_lineage.py              # Use manual mappings (default)
+  python populate_lineage.py --manual     # Explicitly use manual mappings
+  python populate_lineage.py --dbql       # Extract from DBQL tables
+  python populate_lineage.py --dbql --since "2024-01-01"  # DBQL since date
 """
 
+import argparse
 import teradatasql
 import sys
 import hashlib
@@ -23,7 +35,6 @@ SELECT
     TIMESTAMP '2024-01-15 10:00:00',
     'Y'
 FROM DBC.DatabasesV
-WHERE DatabaseName = 'demo_user'
 """
 
 EXTRACT_TABLES = """
@@ -40,7 +51,6 @@ SELECT
     'Y'
 FROM DBC.TablesV
 WHERE TableKind IN ('T', 'V', 'O')
-  AND DatabaseName = 'demo_user'
   AND TableName NOT LIKE 'LIN_%'
 """
 
@@ -101,8 +111,7 @@ SELECT
     TIMESTAMP '2024-01-15 10:00:00',
     'Y'
 FROM DBC.ColumnsV c
-WHERE c.DatabaseName = 'demo_user'
-  AND c.TableName NOT LIKE 'LIN_%'
+WHERE c.TableName NOT LIKE 'LIN_%'
   AND EXISTS (
       SELECT 1 FROM DBC.TablesV t
       WHERE t.DatabaseName = c.DatabaseName
@@ -235,23 +244,10 @@ TABLE_LINEAGE_MAPPINGS = [
 ]
 
 
-def main():
-    print("=" * 60)
-    print("Populate Lineage Tables")
-    print("=" * 60)
-
-    # Connect
-    print(f"\nConnecting to {CONFIG['host']}...")
-    try:
-        conn = teradatasql.connect(**CONFIG)
-        cursor = conn.cursor()
-        print("Connected successfully!")
-    except Exception as e:
-        print(f"ERROR: Failed to connect: {e}")
-        sys.exit(1)
-
-    # Clear existing lineage data
-    print("\n--- Clearing existing lineage data ---")
+def extract_metadata(cursor):
+    """Extract database, table, and column metadata from DBC views."""
+    # Clear existing metadata
+    print("\n--- Clearing existing metadata ---")
     for table in ["LIN_COLUMN_LINEAGE", "LIN_TABLE_LINEAGE", "LIN_COLUMN", "LIN_TABLE", "LIN_DATABASE"]:
         try:
             cursor.execute(f"DELETE FROM demo_user.{table}")
@@ -289,6 +285,9 @@ def main():
     except Exception as e:
         print(f"  FAILED: {e}")
 
+
+def populate_manual_lineage(cursor):
+    """Populate lineage using hardcoded manual mappings."""
     # Insert column lineage
     print("\n--- Inserting column lineage records ---")
     insert_col_lineage = """
@@ -358,7 +357,64 @@ def main():
 
     print(f"  Inserted {success_count} table lineage records")
 
-    # Verify data
+
+def populate_dbql_lineage(args):
+    """Populate lineage from DBQL tables using extract_dbql_lineage module."""
+    print("\n--- Running DBQL-based lineage extraction ---")
+
+    try:
+        from extract_dbql_lineage import DBQLLineageExtractor, parse_datetime
+    except ImportError as e:
+        print(f"  ERROR: Could not import extract_dbql_lineage: {e}")
+        return False
+
+    # Parse since datetime
+    since = None
+    if hasattr(args, 'since') and args.since:
+        try:
+            since = parse_datetime(args.since)
+        except ValueError as e:
+            print(f"  ERROR: Invalid date format: {e}")
+            return False
+
+    # Determine if full extraction
+    full = getattr(args, 'full', False)
+
+    # Create extractor
+    extractor = DBQLLineageExtractor(
+        dry_run=getattr(args, 'dry_run', False),
+        verbose=getattr(args, 'verbose', False)
+    )
+
+    # Connect
+    if not extractor.connect():
+        return False
+
+    try:
+        # Check DBQL access
+        if not extractor.check_dbql_access():
+            print("\n  DBQL is not accessible. Falling back to manual mappings.")
+            print("  To use manual mappings explicitly, run: python populate_lineage.py --manual")
+            return False
+
+        # Run extraction (uses watermark for incremental by default)
+        success = extractor.extract_lineage(since=since, full=full)
+
+        if success:
+            extractor.print_summary()
+
+        return success
+
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        return False
+
+    finally:
+        extractor.close()
+
+
+def verify_lineage(cursor):
+    """Verify lineage data after population."""
     print("\n--- Verifying lineage data ---")
     for table in ["LIN_DATABASE", "LIN_TABLE", "LIN_COLUMN", "LIN_COLUMN_LINEAGE", "LIN_TABLE_LINEAGE"]:
         try:
@@ -367,6 +423,119 @@ def main():
             print(f"  {table}: {count} rows")
         except Exception as e:
             print(f"  {table}: ERROR - {e}")
+
+
+def main():
+    # Parse arguments
+    parser = argparse.ArgumentParser(
+        description="Populate lineage tables from DBC views and DBQL",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Use manual/hardcoded mappings (default - for testing/demo)
+  python populate_lineage.py
+  python populate_lineage.py --manual
+
+  # Extract lineage from DBQL (incremental - only new queries since last run)
+  python populate_lineage.py --dbql
+
+  # DBQL full extraction (all history, clears existing lineage)
+  python populate_lineage.py --dbql --full
+
+  # DBQL extraction with specific start date
+  python populate_lineage.py --dbql --since "2024-01-01"
+
+  # Dry run (show what would be extracted)
+  python populate_lineage.py --dbql --dry-run
+
+  # Skip metadata refresh (only update lineage)
+  python populate_lineage.py --dbql --skip-metadata
+        """
+    )
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--manual", "-m",
+        action="store_true",
+        help="Use hardcoded lineage mappings (default)"
+    )
+    mode_group.add_argument(
+        "--dbql", "-d",
+        action="store_true",
+        help="Extract lineage from DBQL tables (incremental by default)"
+    )
+    parser.add_argument(
+        "--full", "-f",
+        action="store_true",
+        help="For DBQL mode: full extraction (ignore watermark, clear existing lineage)"
+    )
+    parser.add_argument(
+        "--since", "-s",
+        type=str,
+        help="For DBQL mode: extract records since this date (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="Show what would be done without making changes"
+    )
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        help="Verbose output"
+    )
+    parser.add_argument(
+        "--skip-metadata",
+        action="store_true",
+        help="Skip metadata extraction (databases, tables, columns)"
+    )
+
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("Populate Lineage Tables")
+    print("=" * 60)
+
+    # Determine mode
+    use_dbql = args.dbql
+
+    if use_dbql:
+        print("\nMode: DBQL-based extraction")
+    else:
+        print("\nMode: Manual/hardcoded mappings")
+
+    # Connect
+    print(f"\nConnecting to {CONFIG['host']}...")
+    try:
+        conn = teradatasql.connect(**CONFIG)
+        cursor = conn.cursor()
+        print("Connected successfully!")
+    except Exception as e:
+        print(f"ERROR: Failed to connect: {e}")
+        sys.exit(1)
+
+    # Extract metadata (unless skipped or dry-run)
+    if not args.skip_metadata and not args.dry_run:
+        extract_metadata(cursor)
+
+    # Populate lineage based on mode
+    if use_dbql:
+        # DBQL-based extraction
+        success = populate_dbql_lineage(args)
+        if not success:
+            print("\nDBQL extraction failed or unavailable.")
+            if not args.manual:
+                print("Tip: Use --manual flag to use hardcoded mappings instead.")
+    else:
+        # Manual mappings
+        if not args.dry_run:
+            populate_manual_lineage(cursor)
+        else:
+            print("\n[DRY RUN] Would insert {} column lineage records".format(len(COLUMN_LINEAGE_MAPPINGS)))
+            print("[DRY RUN] Would insert {} table lineage records".format(len(TABLE_LINEAGE_MAPPINGS)))
+
+    # Verify data
+    if not args.dry_run:
+        verify_lineage(cursor)
 
     cursor.close()
     conn.close()

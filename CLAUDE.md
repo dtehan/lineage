@@ -36,21 +36,25 @@ This is a column-level data lineage application for Teradata databases. The appl
 ## Quick Start
 
 ```bash
-# 1. Setup Python environment
+# 1. Setup Python environment (from project root)
 python3 -m venv .venv && source .venv/bin/activate
-pip install teradatasql flask flask-cors requests python-dotenv
+pip install -r requirements.txt  # requirements.txt is at project root
 
 # 2. Configure database connection (copy and edit .env.example)
 cp .env.example .env
 # Edit .env with your Teradata credentials
 
 # 3. Setup database
-cd database && python setup_lineage_schema.py && python setup_test_data.py && python populate_lineage.py
+cd database && python setup_lineage_schema.py && python setup_test_data.py
 
-# 4. Start backend (Python Flask - recommended for testing)
+# 4. Populate lineage (choose one):
+python populate_lineage.py              # Manual mappings (demo/testing)
+python populate_lineage.py --dbql       # DBQL extraction (production)
+
+# 5. Start backend (Python Flask - recommended for testing)
 cd lineage-api && python python_server.py  # Runs on :8080
 
-# 5. Start frontend
+# 6. Start frontend
 cd lineage-ui && npm install && npm run dev  # Runs on :3000
 ```
 
@@ -73,6 +77,9 @@ npx playwright test              # Run E2E tests
 # Database
 cd database
 python run_tests.py              # Run 73 database tests
+python populate_lineage.py       # Manual lineage mappings (default)
+python populate_lineage.py --dbql  # DBQL-based extraction
+python extract_dbql_lineage.py   # Direct DBQL extraction
 ```
 
 ## Architecture
@@ -136,7 +143,9 @@ database/
 ├── db_config.py              # Connection config (uses TD_HOST, TD_USER, TD_PASSWORD env vars)
 ├── setup_lineage_schema.py   # Creates LIN_* tables and indexes
 ├── setup_test_data.py        # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
-├── populate_lineage.py       # Extracts metadata and creates 93 lineage relationships
+├── populate_lineage.py       # Extracts metadata and populates lineage (manual or DBQL mode)
+├── extract_dbql_lineage.py   # DBQL-based automated lineage extraction
+├── sql_parser.py             # SQLGlot-based SQL parser for column lineage
 ├── insert_cte_test_data.py   # Edge cases: cycles, diamonds, fan-out
 └── run_tests.py              # 73 database tests
 ```
@@ -200,12 +209,10 @@ cp .env.example .env
 | `TERADATA_USER` | Go/Python server | Teradata username |
 | `TERADATA_PASSWORD` | Go/Python server | Teradata password |
 | `TERADATA_DATABASE` | Go/Python server | Default database |
+| `TERADATA_PORT` | Go/Python server | Teradata port (default: 1025) |
 | `REDIS_ADDR` | Go server | Redis address (default: localhost:6379) |
+| `REDIS_PASSWORD` | Go server | Redis password (optional) |
+| `REDIS_DB` | Go server | Redis database number (default: 0) |
 | `PORT` | Go server | HTTP port (default: 8080) |
-
-**Optional dependency for .env support in Python:**
-```bash
-pip install python-dotenv
-```
 
 The frontend proxies `/api/*` requests to `http://localhost:8080` via Vite config.

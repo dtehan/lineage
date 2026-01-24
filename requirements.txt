@@ -1,0 +1,20 @@
+# Data Lineage Application - Python Dependencies
+#
+# Install with: pip install -r requirements.txt
+
+# Teradata database driver
+teradatasql>=17.20.0
+
+# Web framework (Flask backend)
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# HTTP client (for testing)
+requests>=2.31.0
+
+# Environment variable support
+python-dotenv>=1.0.0
+
+# SQL parsing for column-level lineage extraction
+# Required for DBQL-based lineage extraction (Phase 3)
+sqlglot>=25.0.0
