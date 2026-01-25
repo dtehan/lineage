@@ -167,7 +167,7 @@ describe('LineageGraph Component', () => {
       });
     });
 
-    it('renders Background, Controls, and MiniMap components', async () => {
+    it('renders Background, Controls components (MiniMap hidden by default)', async () => {
       vi.mocked(useLineageModule.useLineage).mockReturnValue({
         data: mockLineageData,
         isLoading: false,
@@ -181,7 +181,8 @@ describe('LineageGraph Component', () => {
       await waitFor(() => {
         expect(screen.getByTestId('react-flow-background')).toBeInTheDocument();
         expect(screen.getByTestId('react-flow-controls')).toBeInTheDocument();
-        expect(screen.getByTestId('react-flow-minimap')).toBeInTheDocument();
+        // MiniMap is hidden by default (showMinimap = false)
+        // It can be toggled via the "Toggle minimap" button
       });
     });
   });
@@ -383,7 +384,7 @@ describe('LineageGraph Component', () => {
 
   // TC-GRAPH-012: MiniMap Node Colors
   describe('TC-GRAPH-012: MiniMap Node Colors', () => {
-    it('renders MiniMap component', async () => {
+    it('MiniMap toggle button exists and can be clicked', async () => {
       vi.mocked(useLineageModule.useLineage).mockReturnValue({
         data: mockLineageData,
         isLoading: false,
@@ -394,12 +395,17 @@ describe('LineageGraph Component', () => {
 
       render(<LineageGraph assetId="col-3" />);
 
+      // Wait for the graph to render
       await waitFor(() => {
-        expect(screen.getByTestId('react-flow-minimap')).toBeInTheDocument();
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
       });
+
+      // The MiniMap toggle button should be present
+      const minimapToggle = screen.getByLabelText(/toggle minimap/i);
+      expect(minimapToggle).toBeInTheDocument();
     });
 
-    it('configures MiniMap with maskColor', async () => {
+    it('MiniMap toggle button shows/hides minimap', async () => {
       vi.mocked(useLineageModule.useLineage).mockReturnValue({
         data: mockLineageData,
         isLoading: false,
@@ -410,11 +416,17 @@ describe('LineageGraph Component', () => {
 
       render(<LineageGraph assetId="col-3" />);
 
+      // Wait for the graph to render
       await waitFor(() => {
-        expect(screen.getByTestId('react-flow-minimap')).toBeInTheDocument();
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
       });
 
-      // MiniMap is configured with maskColor="rgba(0, 0, 0, 0.1)"
+      // MiniMap should be hidden initially
+      expect(screen.queryByTestId('react-flow-minimap')).not.toBeInTheDocument();
+
+      // The MiniMap toggle button should be present and has aria-expanded=false
+      const minimapToggle = screen.getByLabelText(/toggle minimap/i);
+      expect(minimapToggle).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('renders Background component with correct color and gap', async () => {

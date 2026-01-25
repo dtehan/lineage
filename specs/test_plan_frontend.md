@@ -324,6 +324,34 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Test Steps** | 1. Click fullscreen button<br>2. Verify graph enters fullscreen<br>3. Press Escape or click button again<br>4. Verify exits fullscreen |
 | **Expected Results** | - Button toggles fullscreen<br>- Escape exits fullscreen<br>- Graph re-fits view on mode change |
 
+#### TC-COMP-019a: Asset Type Filter Dropdown
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-019a |
+| **Description** | Verify asset type filter dropdown renders and functions |
+| **Preconditions** | Toolbar component rendered with onAssetTypeFilterChange prop |
+| **Test Steps** | 1. Verify filter button is visible<br>2. Click filter button<br>3. Verify dropdown shows checkboxes for Tables, Views, Materialized Views<br>4. Verify all are checked by default (All Types)<br>5. Uncheck Tables<br>6. Verify label changes to show filtered types |
+| **Expected Results** | - Filter button with label "All Types" initially<br>- Dropdown contains 3 checkbox options<br>- Unchecking items updates filter label<br>- At least one type must remain selected |
+| **Edge Cases** | - Attempting to uncheck all types (should prevent last uncheck)<br>- Click outside dropdown closes it |
+
+#### TC-COMP-019b: Asset Type Filter Updates Graph
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-019b |
+| **Description** | Verify asset type filter updates displayed nodes |
+| **Preconditions** | Graph rendered with mix of tables and views |
+| **Test Steps** | 1. Verify all tables and views are displayed<br>2. Open filter dropdown<br>3. Uncheck "Tables" checkbox<br>4. Verify only view nodes remain visible<br>5. Check "Tables" checkbox<br>6. Uncheck "Views" checkbox<br>7. Verify only table nodes remain visible |
+| **Expected Results** | - Graph dynamically filters nodes based on selected types<br>- Edges to filtered nodes are also hidden<br>- Filter state persists in store |
+
+#### TC-COMP-019c: Asset Type Filter Label Display
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-019c |
+| **Description** | Verify filter label shows correct text based on selection |
+| **Preconditions** | Toolbar with asset type filter |
+| **Test Steps** | 1. Verify "All Types" when all selected<br>2. Select only Tables<br>3. Verify "Tables Only" label<br>4. Select only Views<br>5. Verify "Views Only" label<br>6. Select Tables and Views (not Materialized Views)<br>7. Verify "2 Types" label |
+| **Expected Results** | - Label accurately reflects current filter state<br>- Single type shows "[Type] Only"<br>- Multiple (not all) shows "[count] Types" |
+
 ### 2.5 Graph Search Component
 
 #### TC-COMP-020: Search Autocomplete Behavior
@@ -451,6 +479,24 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Test Steps** | 1. Click on a column item<br>2. Verify setSelectedAssetId is called with correct column id |
 | **Expected Results** | - setSelectedAssetId is called once<br>- Called with the correct column.id value |
 
+#### TC-COMP-032a: AssetBrowser View Visual Distinction
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-032a |
+| **Description** | Verify views are visually distinct from tables in the AssetBrowser |
+| **Preconditions** | AssetBrowser rendered with database containing both tables and views |
+| **Test Steps** | 1. Expand a database containing tables and views<br>2. Verify tables have green Table icon<br>3. Verify views have blue Eye icon<br>4. Verify materialized views have purple Layers icon<br>5. Hover over items and verify tooltips indicate type |
+| **Expected Results** | - Tables display with green TableIcon<br>- Views display with blue EyeIcon<br>- Materialized views display with purple LayersIcon<br>- Tooltips show correct type labels ("View lineage for table...", "View lineage for view...") |
+
+#### TC-COMP-032b: AssetBrowser tableKind Mapping
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-032b |
+| **Description** | Verify tableKind values map correctly to asset types |
+| **Preconditions** | Mock useTables returning tables with different tableKind values |
+| **Test Steps** | 1. Return table with tableKind='T'<br>2. Verify Table icon displayed<br>3. Return table with tableKind='V'<br>4. Verify View icon displayed<br>5. Return table with tableKind='M'<br>6. Verify Materialized View icon displayed |
+| **Expected Results** | - 'T' maps to table icon<br>- 'V' maps to view icon (Eye)<br>- 'M' maps to materialized view icon (Layers) |
+
 ### 2.9 Layout Components
 
 #### TC-COMP-033: AppShell Sidebar Toggle
@@ -479,6 +525,154 @@ This test plan covers the React frontend application for the Data Lineage visual
 | **Preconditions** | Render Sidebar within BrowserRouter |
 | **Test Steps** | 1. Render Sidebar at "/" route<br>2. Verify Explore link is active<br>3. Navigate to "/search"<br>4. Verify Search link is active |
 | **Expected Results** | - Active link has bg-slate-700 and text-white<br>- Inactive links have text-slate-400 |
+
+### 2.10 Database-Level Lineage Components
+
+#### TC-COMP-036: DatabaseLineageGraph Loading State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-036 |
+| **Description** | Verify DatabaseLineageGraph displays loading spinner while fetching data |
+| **Preconditions** | Mock useDatabaseLineage hook returning loading state |
+| **Test Steps** | 1. Render DatabaseLineageGraph with databaseName prop<br>2. Verify loading spinner is displayed<br>3. Verify ReactFlow is not rendered |
+| **Expected Results** | - LoadingSpinner with role="status" is visible<br>- react-flow element not in document |
+
+#### TC-COMP-037: DatabaseLineageGraph Error State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-037 |
+| **Description** | Verify DatabaseLineageGraph displays error message on API failure |
+| **Preconditions** | Mock useDatabaseLineage hook returning error state |
+| **Test Steps** | 1. Render with error response<br>2. Verify alert role element is present<br>3. Verify error message is displayed |
+| **Expected Results** | - Element with role="alert" is present<br>- Error message "Failed to load lineage" is visible |
+
+#### TC-COMP-038: DatabaseLineageGraph Successful Render
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-038 |
+| **Description** | Verify DatabaseLineageGraph renders ReactFlow and header when data loads |
+| **Preconditions** | Mock useDatabaseLineage hook returning paginated lineage data |
+| **Test Steps** | 1. Render with successful data response<br>2. Verify ReactFlow component is rendered<br>3. Verify database name appears in header |
+| **Expected Results** | - ReactFlow element is in document<br>- Header shows "Database: [databaseName]" |
+
+#### TC-COMP-039: DatabaseLineageGraph Pagination
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-039 |
+| **Description** | Verify pagination controls appear based on hasNextPage |
+| **Preconditions** | Mock useDatabaseLineage with hasNextPage true/false |
+| **Test Steps** | 1. Render with hasNextPage=true<br>2. Verify "Load More Tables" button appears<br>3. Render with hasNextPage=false<br>4. Verify button does not appear |
+| **Expected Results** | - Load more button visible when hasNextPage is true<br>- Button hidden when all pages loaded |
+
+#### TC-COMP-039a: DatabaseLineageGraph Load More Count Selector
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-039a |
+| **Description** | Verify load more count selector allows users to choose 10, 20, or 50 tables |
+| **Preconditions** | Mock useDatabaseLineage with hasNextPage=true |
+| **Test Steps** | 1. Render with hasNextPage=true<br>2. Verify dropdown shows options 10, 20, 50<br>3. Select 20 from dropdown<br>4. Verify setLoadMoreCount called with 20<br>5. Verify API called with pageSize=20 |
+| **Expected Results** | - Dropdown with data-testid="load-more-count-select" visible<br>- Options 10, 20, 50 available<br>- Selecting option updates store and API call |
+
+#### TC-COMP-039b: Load More Count Persists Across Views
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-039b |
+| **Description** | Verify load more count selection persists in store |
+| **Preconditions** | useLineageStore with loadMoreCount state |
+| **Test Steps** | 1. Set loadMoreCount to 50 in store<br>2. Navigate to database lineage page<br>3. Verify dropdown shows 50 selected<br>4. Navigate to all-databases page<br>5. Verify dropdown still shows 50 |
+| **Expected Results** | - loadMoreCount persists across page navigation<br>- Default value is 10<br>- Selection reflected in both views |
+
+#### TC-COMP-040: DatabaseLineageGraph Empty State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-040 |
+| **Description** | Verify empty state message when no lineage data |
+| **Preconditions** | Mock useDatabaseLineage returning empty graph |
+| **Test Steps** | 1. Render with empty nodes and edges arrays<br>2. Verify empty state message is displayed |
+| **Expected Results** | - "No Lineage Data Available" message is visible<br>- Helpful context message about missing lineage |
+
+#### TC-COMP-041: DatabaseLineageGraph API Parameters
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-041 |
+| **Description** | Verify correct API parameters are passed from store |
+| **Preconditions** | Mock useLineageStore with custom direction and maxDepth |
+| **Test Steps** | 1. Configure store with direction="upstream", maxDepth=5<br>2. Render DatabaseLineageGraph<br>3. Verify useDatabaseLineage called with correct parameters |
+| **Expected Results** | - Hook called with { direction: 'upstream', maxDepth: 5, pageSize: 50 } |
+
+### 2.11 All-Databases Lineage Components
+
+#### TC-COMP-042: AllDatabasesLineageGraph Loading State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-042 |
+| **Description** | Verify AllDatabasesLineageGraph displays loading spinner while fetching |
+| **Preconditions** | Mock useAllDatabasesLineage hook returning loading state |
+| **Test Steps** | 1. Render AllDatabasesLineageGraph<br>2. Verify loading spinner is displayed<br>3. Verify ReactFlow is not rendered |
+| **Expected Results** | - LoadingSpinner with role="status" is visible<br>- react-flow element not in document |
+
+#### TC-COMP-043: AllDatabasesLineageGraph Error State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-043 |
+| **Description** | Verify AllDatabasesLineageGraph displays error message on API failure |
+| **Preconditions** | Mock useAllDatabasesLineage hook returning error state |
+| **Test Steps** | 1. Render with error response<br>2. Verify alert role element is present |
+| **Expected Results** | - Element with role="alert" is present<br>- Error message visible to user |
+
+#### TC-COMP-044: AllDatabasesLineageGraph Successful Render
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-044 |
+| **Description** | Verify AllDatabasesLineageGraph renders correctly with data |
+| **Preconditions** | Mock useAllDatabasesLineage hook returning lineage data |
+| **Test Steps** | 1. Render with successful data response<br>2. Verify ReactFlow component is rendered<br>3. Verify "All Databases Lineage" header appears |
+| **Expected Results** | - ReactFlow element is in document<br>- Header shows "All Databases Lineage" |
+
+#### TC-COMP-045: AllDatabasesLineageGraph Filter Button
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-045 |
+| **Description** | Verify filter databases button is displayed |
+| **Preconditions** | AllDatabasesLineageGraph rendered with data |
+| **Test Steps** | 1. Render component<br>2. Verify filter button with data-testid="filter-databases-btn" exists |
+| **Expected Results** | - Filter button is visible and accessible |
+
+#### TC-COMP-046: AllDatabasesLineageGraph Pagination
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-046 |
+| **Description** | Verify pagination controls for all-databases view |
+| **Preconditions** | Mock useAllDatabasesLineage with hasNextPage true/false |
+| **Test Steps** | 1. Render with hasNextPage=true<br>2. Verify load more button appears<br>3. Render with hasNextPage=false<br>4. Verify button does not appear |
+| **Expected Results** | - Load more button visible when more pages available<br>- Button hidden when all pages loaded |
+
+#### TC-COMP-047: AllDatabasesLineageGraph Empty State
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-047 |
+| **Description** | Verify empty state when no lineage data across databases |
+| **Preconditions** | Mock useAllDatabasesLineage returning empty graph |
+| **Test Steps** | 1. Render with empty nodes and edges<br>2. Verify empty state message appears |
+| **Expected Results** | - "No Lineage Data Available" message is visible |
+
+#### TC-COMP-048: AllDatabasesLineageGraph API Parameters
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-048 |
+| **Description** | Verify correct API parameters including database filter |
+| **Preconditions** | Mock useLineageStore with databaseFilter and custom settings |
+| **Test Steps** | 1. Configure store with databaseFilter=['demo_user'], direction='downstream', maxDepth=4<br>2. Render AllDatabasesLineageGraph<br>3. Verify useAllDatabasesLineage called with correct parameters |
+| **Expected Results** | - Hook called with { direction: 'downstream', maxDepth: 4, pageSize: 20, databases: ['demo_user'] } |
+
+#### TC-COMP-049: AllDatabasesLineageGraph Filter Badge
+| Field | Description |
+|-------|-------------|
+| **Test Case ID** | TC-COMP-049 |
+| **Description** | Verify filter count badge when databases are filtered |
+| **Preconditions** | Mock useLineageStore with multiple databases in databaseFilter |
+| **Test Steps** | 1. Set databaseFilter to ['demo_user', 'sales_db']<br>2. Render AllDatabasesLineageGraph<br>3. Verify filter button shows count badge "2" |
+| **Expected Results** | - Filter button displays badge with count of filtered databases |
 
 ---
 

@@ -66,8 +66,11 @@ describe('Accessibility Tests', () => {
       const user = userEvent.setup();
       render(<AssetBrowser />);
 
-      // Find the first database button
-      const databaseButton = screen.getByRole('button', { name: /database1/i });
+      // Find the first database expand/collapse button (contains database name text)
+      const databaseButtons = screen.getAllByRole('button').filter(
+        (btn) => btn.textContent?.includes('database1') && !btn.textContent?.includes('View')
+      );
+      const databaseButton = databaseButtons[0];
 
       // Focus should be achievable by tabbing
       await user.tab();
@@ -81,8 +84,11 @@ describe('Accessibility Tests', () => {
       const user = userEvent.setup();
       render(<AssetBrowser />);
 
-      // Get the database button
-      const databaseButton = screen.getByRole('button', { name: /database1/i });
+      // Get the database expand/collapse button (contains database name text)
+      const databaseButtons = screen.getAllByRole('button').filter(
+        (btn) => btn.textContent?.includes('database1') && !btn.textContent?.includes('View')
+      );
+      const databaseButton = databaseButtons[0];
 
       // Focus and press Enter
       databaseButton.focus();

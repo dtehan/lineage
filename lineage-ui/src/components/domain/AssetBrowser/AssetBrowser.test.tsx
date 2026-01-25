@@ -19,6 +19,12 @@ const mockTables = [
   { id: 'tbl-2', databaseName: 'sales_db', tableName: 'customers', tableKind: 'T' },
 ];
 
+const mockTablesWithViews = [
+  { id: 'tbl-1', databaseName: 'sales_db', tableName: 'orders', tableKind: 'T' },
+  { id: 'view-1', databaseName: 'sales_db', tableName: 'customer_view', tableKind: 'V' },
+  { id: 'mat-view-1', databaseName: 'sales_db', tableName: 'sales_summary', tableKind: 'M' },
+];
+
 const mockColumns = [
   { id: 'col-1', databaseName: 'sales_db', tableName: 'orders', columnName: 'order_id', columnType: 'INTEGER', nullable: false, columnPosition: 1 },
   { id: 'col-2', databaseName: 'sales_db', tableName: 'orders', columnName: 'customer_id', columnType: 'INTEGER', nullable: false, columnPosition: 2 },
@@ -276,6 +282,161 @@ describe('AssetBrowser Component', () => {
 
       expect(mockSetSelectedAssetId).toHaveBeenCalledTimes(1);
       expect(mockSetSelectedAssetId).toHaveBeenCalledWith('col-1');
+    });
+  });
+
+  // TC-COMP-032a: AssetBrowser View Visual Distinction
+  describe('TC-COMP-032a: View Visual Distinction', () => {
+    it('displays different icons for tables and views', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: mockDatabases,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: mockTablesWithViews,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      vi.mocked(useAssetsModule.useColumns).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useColumns>);
+
+      render(<AssetBrowser />);
+
+      // Expand database
+      await user.click(screen.getByText('sales_db'));
+
+      await waitFor(() => {
+        expect(screen.getByText('orders')).toBeInTheDocument();
+        expect(screen.getByText('customer_view')).toBeInTheDocument();
+        expect(screen.getByText('sales_summary')).toBeInTheDocument();
+      });
+
+      // Verify different icons are displayed
+      expect(screen.getByTestId('table-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('view-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('materialized-view-icon')).toBeInTheDocument();
+    });
+
+    it('displays table icon for tableKind T', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: mockDatabases,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: [{ id: 'tbl-1', databaseName: 'sales_db', tableName: 'orders', tableKind: 'T' }],
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      vi.mocked(useAssetsModule.useColumns).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useColumns>);
+
+      render(<AssetBrowser />);
+
+      await user.click(screen.getByText('sales_db'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('table-icon')).toBeInTheDocument();
+      });
+    });
+
+    it('displays view icon for tableKind V', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: mockDatabases,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: [{ id: 'view-1', databaseName: 'sales_db', tableName: 'my_view', tableKind: 'V' }],
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      vi.mocked(useAssetsModule.useColumns).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useColumns>);
+
+      render(<AssetBrowser />);
+
+      await user.click(screen.getByText('sales_db'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('view-icon')).toBeInTheDocument();
+      });
+    });
+
+    it('displays materialized view icon for tableKind M', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: mockDatabases,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: [{ id: 'mat-1', databaseName: 'sales_db', tableName: 'my_mat_view', tableKind: 'M' }],
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      vi.mocked(useAssetsModule.useColumns).mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useColumns>);
+
+      render(<AssetBrowser />);
+
+      await user.click(screen.getByText('sales_db'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('materialized-view-icon')).toBeInTheDocument();
+      });
     });
   });
 });

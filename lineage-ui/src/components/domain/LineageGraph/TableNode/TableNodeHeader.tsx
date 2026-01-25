@@ -15,12 +15,40 @@ export interface TableNodeHeaderProps {
 const AssetIcon = ({ type }: { type: AssetType }) => {
   switch (type) {
     case 'view':
-      return <Eye className="w-3.5 h-3.5 text-blue-500" />;
+      return <Eye className="w-3.5 h-3.5 text-orange-600" />;
     case 'materialized_view':
-      return <Layers className="w-3.5 h-3.5 text-purple-500" />;
+      return <Layers className="w-3.5 h-3.5 text-violet-600" />;
     default:
-      return <Table className="w-3.5 h-3.5 text-slate-500" />;
+      return <Table className="w-3.5 h-3.5 text-emerald-600" />;
   }
+};
+
+// Get header background class based on asset type
+const getHeaderBgClass = (type: AssetType): string => {
+  switch (type) {
+    case 'view':
+      return 'bg-orange-50 border-b border-orange-200 hover:bg-orange-100';
+    case 'materialized_view':
+      return 'bg-violet-50 border-b border-violet-200 hover:bg-violet-100';
+    default:
+      return 'bg-slate-50 border-b border-slate-200 hover:bg-slate-100';
+  }
+};
+
+// Get asset type badge
+const AssetTypeBadge = ({ type }: { type: AssetType }) => {
+  if (type === 'table') return null;
+
+  const badgeClass = type === 'view'
+    ? 'bg-orange-100 text-orange-700 border-orange-200'
+    : 'bg-violet-100 text-violet-700 border-violet-200';
+  const label = type === 'view' ? 'VIEW' : 'MVIEW';
+
+  return (
+    <span className={`ml-1.5 px-1.5 py-0.5 text-[9px] font-bold rounded border ${badgeClass}`}>
+      {label}
+    </span>
+  );
 };
 
 export const TableNodeHeader = memo(function TableNodeHeader({
@@ -31,9 +59,11 @@ export const TableNodeHeader = memo(function TableNodeHeader({
   columnCount,
   onToggleExpand,
 }: TableNodeHeaderProps) {
+  const headerBgClass = getHeaderBgClass(assetType);
+
   return (
     <div
-      className="flex items-center justify-between h-10 px-3 bg-slate-50 border-b border-slate-200 rounded-t-lg cursor-pointer hover:bg-slate-100 transition-colors"
+      className={`flex items-center justify-between h-10 px-3 rounded-t-lg cursor-pointer transition-colors ${headerBgClass}`}
       onClick={(e) => {
         e.stopPropagation();
         onToggleExpand();
@@ -46,9 +76,12 @@ export const TableNodeHeader = memo(function TableNodeHeader({
           <span className="text-xs text-slate-500 truncate" title={databaseName}>
             {databaseName}
           </span>
-          <span className="text-sm font-semibold text-slate-800 truncate" title={tableName}>
-            {tableName}
-          </span>
+          <div className="flex items-center">
+            <span className="text-sm font-semibold text-slate-800 truncate" title={tableName}>
+              {tableName}
+            </span>
+            <AssetTypeBadge type={assetType} />
+          </div>
         </div>
       </div>
 

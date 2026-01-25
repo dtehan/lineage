@@ -81,3 +81,24 @@ export interface SearchResult {
   matchedOn: string;
   score: number;
 }
+
+export interface PaginationInfo {
+  page: number;
+  pageSize: number;
+  totalTables: number;
+  totalPages: number;
+}
+
+export interface DatabaseLineageResponse {
+  databaseName: string;
+  graph: LineageGraph;
+  pagination: PaginationInfo;
+}
+
+export interface AllDatabasesLineageResponse {
+  graph: LineageGraph;
+  pagination: PaginationInfo;
+  appliedFilters: {
+    databases: string[] | 'all';
+  };
+}

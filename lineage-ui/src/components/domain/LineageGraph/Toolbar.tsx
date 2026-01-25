@@ -1,9 +1,10 @@
 import React from 'react';
-import { Search, Maximize2, Download, ChevronDown, Focus } from 'lucide-react';
+import { Search, Maximize2, Download, ChevronDown, Focus, Filter } from 'lucide-react';
 import { Tooltip } from '../../common/Tooltip';
 
 export type ViewMode = 'graph' | 'table';
 export type Direction = 'upstream' | 'downstream' | 'both';
+export type AssetTypeFilter = 'table' | 'view' | 'materialized_view';
 
 export interface ToolbarProps {
   viewMode: ViewMode;
@@ -20,6 +21,8 @@ export interface ToolbarProps {
   onExport?: () => void;
   onFullscreen?: () => void;
   isLoading?: boolean;
+  assetTypeFilter?: AssetTypeFilter[];
+  onAssetTypeFilterChange?: (types: AssetTypeFilter[]) => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -37,7 +40,48 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onExport,
   onFullscreen,
   isLoading = false,
+  assetTypeFilter = ['table', 'view', 'materialized_view'],
+  onAssetTypeFilterChange,
 }) => {
+  const [showAssetTypeDropdown, setShowAssetTypeDropdown] = React.useState(false);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowAssetTypeDropdown(false);
+      }
+    };
+
+    if (showAssetTypeDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showAssetTypeDropdown]);
+
+  const handleAssetTypeToggle = (type: AssetTypeFilter) => {
+    if (!onAssetTypeFilterChange) return;
+
+    const newFilter = assetTypeFilter.includes(type)
+      ? assetTypeFilter.filter(t => t !== type)
+      : [...assetTypeFilter, type];
+
+    // Ensure at least one type is always selected
+    if (newFilter.length > 0) {
+      onAssetTypeFilterChange(newFilter);
+    }
+  };
+
+  const getAssetTypeLabel = () => {
+    if (assetTypeFilter.length === 3) return 'All Types';
+    if (assetTypeFilter.length === 1) {
+      if (assetTypeFilter[0] === 'table') return 'Tables Only';
+      if (assetTypeFilter[0] === 'view') return 'Views Only';
+      return 'Materialized Views';
+    }
+    return `${assetTypeFilter.length} Types`;
+  };
   const graphButtonClass = viewMode === 'graph'
     ? 'bg-blue-500 text-white'
     : 'bg-white text-slate-600 hover:bg-slate-50';
@@ -108,6 +152,67 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         </div>
       </Tooltip>
+
+      {/* Asset Type Filter */}
+      {onAssetTypeFilterChange && (
+        <Tooltip
+          content="Filter by asset type: tables, views, or materialized views"
+          position="bottom"
+        >
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setShowAssetTypeDropdown(!showAssetTypeDropdown)}
+              className="flex items-center gap-2 pl-3 pr-8 py-1.5 text-sm border border-slate-200 rounded-lg bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-haspopup="listbox"
+              aria-expanded={showAssetTypeDropdown}
+              data-testid="asset-type-filter-btn"
+            >
+              <Filter className="w-4 h-4 text-slate-400" />
+              {getAssetTypeLabel()}
+            </button>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+
+            {showAssetTypeDropdown && (
+              <div
+                className="absolute top-full left-0 mt-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-50"
+                role="listbox"
+                aria-label="Asset type filter options"
+              >
+                <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assetTypeFilter.includes('table')}
+                    onChange={() => handleAssetTypeToggle('table')}
+                    className="w-4 h-4 text-blue-500 rounded border-slate-300 focus:ring-blue-500"
+                    data-testid="filter-tables-checkbox"
+                  />
+                  <span className="text-sm text-slate-700">Tables</span>
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assetTypeFilter.includes('view')}
+                    onChange={() => handleAssetTypeToggle('view')}
+                    className="w-4 h-4 text-blue-500 rounded border-slate-300 focus:ring-blue-500"
+                    data-testid="filter-views-checkbox"
+                  />
+                  <span className="text-sm text-slate-700">Views</span>
+                </label>
+                <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={assetTypeFilter.includes('materialized_view')}
+                    onChange={() => handleAssetTypeToggle('materialized_view')}
+                    className="w-4 h-4 text-blue-500 rounded border-slate-300 focus:ring-blue-500"
+                    data-testid="filter-materialized-views-checkbox"
+                  />
+                  <span className="text-sm text-slate-700">Materialized Views</span>
+                </label>
+              </div>
+            )}
+          </div>
+        </Tooltip>
+      )}
 
       {/* Depth Slider */}
       <Tooltip

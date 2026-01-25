@@ -28,7 +28,7 @@ except ImportError:
     pass  # python-dotenv not installed, rely on environment variables
 
 app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000", "http://localhost:3004", "http://localhost:5173"])
+CORS(app, origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3004", "http://localhost:5173"])
 
 # Database configuration - supports both TD_* (database scripts) and TERADATA_* (Go server) prefixes
 DB_CONFIG = {
@@ -98,12 +98,13 @@ def list_tables(database):
                         t.table_name,
                         t.database_name,
                         COUNT(DISTINCT c.column_id) as column_count,
-                        t.row_count
+                        t.row_count,
+                        t.table_kind
                     FROM LIN_TABLE t
                     LEFT JOIN LIN_COLUMN c ON t.database_name = c.database_name AND t.table_name = c.table_name AND c.is_active = 'Y'
                     WHERE UPPER(t.database_name) = UPPER(?)
                       AND t.is_active = 'Y'
-                    GROUP BY t.table_id, t.table_name, t.database_name, t.row_count
+                    GROUP BY t.table_id, t.table_name, t.database_name, t.row_count, t.table_kind
                     ORDER BY t.table_name
                 """, [database])
                 rows = cur.fetchall()
@@ -112,7 +113,7 @@ def list_tables(database):
                         "id": row[0].strip() if row[0] else "",
                         "tableName": row[1].strip() if row[1] else "",
                         "databaseName": row[2].strip() if row[2] else "",
-                        "tableKind": "T",
+                        "tableKind": (row[5].strip() if row[5] else "T"),
                         "columnCount": row[3] or 0,
                         "rowCount": row[4] or 0
                     }
@@ -162,19 +163,20 @@ def list_columns(database, table):
 
 
 def get_column_metadata(cur, column_id):
-    """Get metadata for a column from LIN_COLUMN table."""
+    """Get metadata for a column from LIN_COLUMN and LIN_TABLE tables."""
     parts = column_id.split(".")
     if len(parts) != 3:
         return None
 
     database, table, column = parts[0], parts[1], parts[2]
     cur.execute("""
-        SELECT column_type, nullable, column_position
-        FROM LIN_COLUMN
-        WHERE UPPER(database_name) = UPPER(?)
-          AND UPPER(table_name) = UPPER(?)
-          AND UPPER(column_name) = UPPER(?)
-          AND is_active = 'Y'
+        SELECT c.column_type, c.nullable, c.column_position, t.table_kind
+        FROM LIN_COLUMN c
+        LEFT JOIN LIN_TABLE t ON c.database_name = t.database_name AND c.table_name = t.table_name AND t.is_active = 'Y'
+        WHERE UPPER(c.database_name) = UPPER(?)
+          AND UPPER(c.table_name) = UPPER(?)
+          AND UPPER(c.column_name) = UPPER(?)
+          AND c.is_active = 'Y'
     """, [database, table, column])
 
     row = cur.fetchone()
@@ -182,7 +184,8 @@ def get_column_metadata(cur, column_id):
         return {
             "columnType": row[0].strip() if row[0] else "unknown",
             "nullable": row[1] == "Y" if row[1] else True,
-            "columnPosition": row[2] if row[2] else 0
+            "columnPosition": row[2] if row[2] else 0,
+            "tableKind": row[3].strip() if row[3] else "T"
         }
     return None
 
@@ -709,6 +712,358 @@ def get_impact_analysis(asset_id):
                 "byDatabase": by_database,
                 "byDepth": by_depth,
                 "criticalCount": critical_count
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v1/lineage/database/<database>", methods=["GET"])
+def get_database_lineage(database):
+    """Get lineage graph for all tables in a database."""
+    direction = request.args.get("direction", "both")
+    max_depth = int(request.args.get("maxDepth", "3"))
+    page = int(request.args.get("page", "1"))
+    page_size = int(request.args.get("pageSize", "50"))
+
+    try:
+        nodes = {}
+        edges = []
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get total count of tables in the database
+                cur.execute("""
+                    SELECT COUNT(DISTINCT table_name)
+                    FROM LIN_TABLE
+                    WHERE UPPER(database_name) = UPPER(?)
+                      AND is_active = 'Y'
+                """, [database])
+                total_tables = cur.fetchone()[0] or 0
+
+                # Get tables with pagination
+                offset = (page - 1) * page_size
+                cur.execute(f"""
+                    SELECT table_id, table_name
+                    FROM (
+                        SELECT table_id, table_name,
+                               ROW_NUMBER() OVER (ORDER BY table_name) as rn
+                        FROM LIN_TABLE
+                        WHERE UPPER(database_name) = UPPER(?)
+                          AND is_active = 'Y'
+                    ) t
+                    WHERE rn > ? AND rn <= ?
+                """, [database, offset, offset + page_size])
+
+                tables = [(row[0].strip(), row[1].strip()) for row in cur.fetchall()]
+                table_names = [t[1] for t in tables]
+
+                if not table_names:
+                    return jsonify({
+                        "databaseName": database,
+                        "graph": {"nodes": [], "edges": []},
+                        "pagination": {
+                            "page": page,
+                            "pageSize": page_size,
+                            "totalTables": total_tables,
+                            "totalPages": (total_tables + page_size - 1) // page_size
+                        }
+                    })
+
+                # First, add ALL columns from all tables in this page as nodes
+                # This ensures all tables are shown even without lineage
+                table_placeholders = ",".join(["?" for _ in table_names])
+                table_params = [t.upper() for t in table_names]
+
+                cur.execute(f"""
+                    SELECT
+                        c.column_id,
+                        c.database_name,
+                        c.table_name,
+                        c.column_name,
+                        c.column_type,
+                        t.table_kind
+                    FROM LIN_COLUMN c
+                    LEFT JOIN LIN_TABLE t ON c.database_name = t.database_name AND c.table_name = t.table_name AND t.is_active = 'Y'
+                    WHERE UPPER(c.database_name) = UPPER(?)
+                      AND UPPER(c.table_name) IN ({table_placeholders})
+                      AND c.is_active = 'Y'
+                    ORDER BY c.table_name, c.column_position
+                """, [database] + table_params)
+
+                for row in cur.fetchall():
+                    col_id = row[0].strip() if row[0] else ""
+                    if col_id and col_id not in nodes:
+                        nodes[col_id] = {
+                            "id": col_id,
+                            "type": "column",
+                            "databaseName": row[1].strip() if row[1] else "",
+                            "tableName": row[2].strip() if row[2] else "",
+                            "columnName": row[3].strip() if row[3] else "",
+                            "metadata": {
+                                "columnType": row[4].strip() if row[4] else "unknown",
+                                "tableKind": row[5].strip() if row[5] else "T"
+                            }
+                        }
+
+                # Now get lineage edges where source or target is in this database's tables
+                cur.execute(f"""
+                    SELECT DISTINCT
+                        l.source_column_id,
+                        l.source_database,
+                        l.source_table,
+                        l.source_column,
+                        l.target_column_id,
+                        l.target_database,
+                        l.target_table,
+                        l.target_column,
+                        l.transformation_type,
+                        l.confidence_score
+                    FROM LIN_COLUMN_LINEAGE l
+                    WHERE l.is_active = 'Y'
+                      AND (
+                        (UPPER(l.target_database) = UPPER(?) AND UPPER(l.target_table) IN ({table_placeholders}))
+                        OR (UPPER(l.source_database) = UPPER(?) AND UPPER(l.source_table) IN ({table_placeholders}))
+                      )
+                """, [database] + table_params + [database] + table_params)
+
+                for row in cur.fetchall():
+                    source_id = row[0].strip() if row[0] else ""
+                    target_id = row[4].strip() if row[4] else ""
+
+                    # Add source node if not already present (could be from another database)
+                    if source_id and source_id not in nodes:
+                        nodes[source_id] = {
+                            "id": source_id,
+                            "type": "column",
+                            "databaseName": row[1].strip() if row[1] else "",
+                            "tableName": row[2].strip() if row[2] else "",
+                            "columnName": row[3].strip() if row[3] else ""
+                        }
+
+                    # Add target node if not already present (could be from another database)
+                    if target_id and target_id not in nodes:
+                        nodes[target_id] = {
+                            "id": target_id,
+                            "type": "column",
+                            "databaseName": row[5].strip() if row[5] else "",
+                            "tableName": row[6].strip() if row[6] else "",
+                            "columnName": row[7].strip() if row[7] else ""
+                        }
+
+                    if source_id and target_id:
+                        edge_key = f"{source_id}->{target_id}"
+                        if not any(e["id"] == edge_key for e in edges):
+                            edges.append({
+                                "id": edge_key,
+                                "source": source_id,
+                                "target": target_id,
+                                "transformationType": row[8].strip() if row[8] else "DIRECT",
+                                "confidenceScore": float(row[9]) if row[9] else 1.0
+                            })
+
+        return jsonify({
+            "databaseName": database,
+            "graph": {
+                "nodes": list(nodes.values()),
+                "edges": edges
+            },
+            "pagination": {
+                "page": page,
+                "pageSize": page_size,
+                "totalTables": total_tables,
+                "totalPages": (total_tables + page_size - 1) // page_size
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v1/lineage/all-databases", methods=["GET"])
+def get_all_databases_lineage():
+    """Get lineage graph for all tables across all databases."""
+    direction = request.args.get("direction", "both")
+    max_depth = int(request.args.get("maxDepth", "2"))
+    page = int(request.args.get("page", "1"))
+    page_size = int(request.args.get("pageSize", "20"))
+    database_filter = request.args.getlist("database")
+
+    try:
+        nodes = {}
+        edges = []
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Build database filter clause for LIN_TABLE
+                db_filter_clause = ""
+                db_params = []
+                if database_filter:
+                    placeholders = ",".join(["?" for _ in database_filter])
+                    db_filter_clause = f"AND UPPER(database_name) IN ({placeholders})"
+                    db_params = [db.upper() for db in database_filter]
+
+                # Get total count of tables
+                cur.execute(f"""
+                    SELECT COUNT(DISTINCT table_id)
+                    FROM LIN_TABLE
+                    WHERE is_active = 'Y'
+                    {db_filter_clause}
+                """, db_params)
+                total_tables = cur.fetchone()[0] or 0
+
+                # Get tables with pagination
+                offset = (page - 1) * page_size
+                cur.execute(f"""
+                    SELECT table_id, database_name, table_name
+                    FROM (
+                        SELECT table_id, database_name, table_name,
+                               ROW_NUMBER() OVER (ORDER BY database_name, table_name) as rn
+                        FROM LIN_TABLE
+                        WHERE is_active = 'Y'
+                        {db_filter_clause}
+                    ) t
+                    WHERE rn > ? AND rn <= ?
+                """, db_params + [offset, offset + page_size])
+
+                tables = [(row[0].strip(), row[1].strip(), row[2].strip()) for row in cur.fetchall()]
+
+                if not tables:
+                    return jsonify({
+                        "graph": {"nodes": [], "edges": []},
+                        "pagination": {
+                            "page": page,
+                            "pageSize": page_size,
+                            "totalTables": total_tables,
+                            "totalPages": (total_tables + page_size - 1) // page_size
+                        },
+                        "appliedFilters": {
+                            "databases": database_filter if database_filter else "all"
+                        }
+                    })
+
+                # Build efficient single query to get all lineage for these tables
+                # Group tables by database for the query
+                db_table_pairs = [(t[1].upper(), t[2].upper()) for t in tables]
+
+                # First, add all columns from selected tables as nodes with tableKind
+                col_conditions = []
+                col_params = []
+                for db, tbl in db_table_pairs:
+                    col_conditions.append("(UPPER(c.database_name) = ? AND UPPER(c.table_name) = ?)")
+                    col_params.extend([db, tbl])
+
+                col_where = " OR ".join(col_conditions)
+
+                cur.execute(f"""
+                    SELECT
+                        c.column_id,
+                        c.database_name,
+                        c.table_name,
+                        c.column_name,
+                        c.column_type,
+                        t.table_kind
+                    FROM LIN_COLUMN c
+                    LEFT JOIN LIN_TABLE t ON c.database_name = t.database_name AND c.table_name = t.table_name AND t.is_active = 'Y'
+                    WHERE c.is_active = 'Y'
+                      AND ({col_where})
+                    ORDER BY c.database_name, c.table_name, c.column_position
+                """, col_params)
+
+                for row in cur.fetchall():
+                    col_id = row[0].strip() if row[0] else ""
+                    if col_id and col_id not in nodes:
+                        nodes[col_id] = {
+                            "id": col_id,
+                            "type": "column",
+                            "databaseName": row[1].strip() if row[1] else "",
+                            "tableName": row[2].strip() if row[2] else "",
+                            "columnName": row[3].strip() if row[3] else "",
+                            "metadata": {
+                                "columnType": row[4].strip() if row[4] else "unknown",
+                                "tableKind": row[5].strip() if row[5] else "T"
+                            }
+                        }
+
+                # Build OR conditions for each db.table pair
+                conditions = []
+                params = []
+                for db, tbl in db_table_pairs:
+                    conditions.append("(UPPER(l.target_database) = ? AND UPPER(l.target_table) = ?)")
+                    conditions.append("(UPPER(l.source_database) = ? AND UPPER(l.source_table) = ?)")
+                    params.extend([db, tbl, db, tbl])
+
+                where_clause = " OR ".join(conditions)
+
+                # Get all lineage edges in a single query
+                cur.execute(f"""
+                    SELECT DISTINCT
+                        l.source_column_id,
+                        l.source_database,
+                        l.source_table,
+                        l.source_column,
+                        l.target_column_id,
+                        l.target_database,
+                        l.target_table,
+                        l.target_column,
+                        l.transformation_type,
+                        l.confidence_score
+                    FROM LIN_COLUMN_LINEAGE l
+                    WHERE l.is_active = 'Y'
+                      AND ({where_clause})
+                """, params)
+
+                for row in cur.fetchall():
+                    source_id = row[0].strip() if row[0] else ""
+                    target_id = row[4].strip() if row[4] else ""
+
+                    # Add source node if not already present (could be from another database)
+                    if source_id and source_id not in nodes:
+                        nodes[source_id] = {
+                            "id": source_id,
+                            "type": "column",
+                            "databaseName": row[1].strip() if row[1] else "",
+                            "tableName": row[2].strip() if row[2] else "",
+                            "columnName": row[3].strip() if row[3] else ""
+                        }
+
+                    # Add target node if not already present (could be from another database)
+                    if target_id and target_id not in nodes:
+                        nodes[target_id] = {
+                            "id": target_id,
+                            "type": "column",
+                            "databaseName": row[5].strip() if row[5] else "",
+                            "tableName": row[6].strip() if row[6] else "",
+                            "columnName": row[7].strip() if row[7] else ""
+                        }
+
+                    if source_id and target_id:
+                        edge_key = f"{source_id}->{target_id}"
+                        if not any(e["id"] == edge_key for e in edges):
+                            edges.append({
+                                "id": edge_key,
+                                "source": source_id,
+                                "target": target_id,
+                                "transformationType": row[8].strip() if row[8] else "DIRECT",
+                                "confidenceScore": float(row[9]) if row[9] else 1.0
+                            })
+
+        return jsonify({
+            "graph": {
+                "nodes": list(nodes.values()),
+                "edges": edges
+            },
+            "pagination": {
+                "page": page,
+                "pageSize": page_size,
+                "totalTables": total_tables,
+                "totalPages": (total_tables + page_size - 1) // page_size
+            },
+            "appliedFilters": {
+                "databases": database_filter if database_filter else "all"
             }
         })
     except Exception as e:

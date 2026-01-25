@@ -31,6 +31,21 @@ const MIN_NODE_WIDTH = 280;
 const MAX_NODE_WIDTH = 400;
 
 /**
+ * Maps tableKind values from Teradata to AssetType
+ * T = Table, V = View, M = Materialized View
+ */
+function mapTableKindToAssetType(tableKind: string | undefined): AssetType {
+  switch (tableKind) {
+    case 'V':
+      return 'view';
+    case 'M':
+      return 'materialized_view';
+    default:
+      return 'table';
+  }
+}
+
+/**
  * Groups column nodes by their parent table
  */
 export function groupColumnsByTable(nodes: LineageNode[]): Map<string, LineageNode[]> {
@@ -153,7 +168,7 @@ function transformToTableNodes(
       tableName: firstColumn.tableName || 'unknown',
       columns,
       isExpanded: true,
-      assetType: (firstColumn.metadata?.tableKind as 'table' | 'view' | 'materialized_view') || 'table',
+      assetType: mapTableKindToAssetType(firstColumn.metadata?.tableKind as string | undefined),
     });
   });
 

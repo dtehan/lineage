@@ -23,7 +23,13 @@ export function SearchResults({ results, total }: SearchResultsProps) {
   const navigate = useNavigate();
 
   const handleResultClick = (result: SearchResult) => {
-    navigate(`/lineage/${encodeURIComponent(result.id)}`);
+    if (result.type === 'database') {
+      // Navigate to database lineage view
+      navigate(`/lineage/database/${encodeURIComponent(result.databaseName)}`);
+    } else {
+      // Navigate to table or column lineage view
+      navigate(`/lineage/${encodeURIComponent(result.id)}`);
+    }
   };
 
   if (results.length === 0) {

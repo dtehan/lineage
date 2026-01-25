@@ -15,16 +15,17 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useLineage } from '../../../api/hooks/useLineage';
+import { useDatabases } from '../../../api/hooks/useAssets';
+import { useAllDatabasesLineage } from '../../../api/hooks/useLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
-import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
+import { layoutGraph } from '../../../utils/graph/layoutEngine';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
 import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
-import { Map, ChevronUp, ChevronDown } from 'lucide-react';
+import { Map, ChevronUp, ChevronDown, Network, Loader2, Filter, X } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
 import {
@@ -32,6 +33,7 @@ import {
   useKeyboardShortcuts,
   useLineageExport,
 } from './hooks';
+import type { LineageNode, LineageEdge as LineageEdgeType } from '../../../types';
 
 const nodeTypes = {
   tableNode: TableNode,
@@ -41,15 +43,12 @@ const edgeTypes = {
   lineageEdge: LineageEdge,
 };
 
-interface LineageGraphInnerProps {
-  assetId: string;
-}
-
-function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
+function AllDatabasesLineageGraphInner() {
   const reactFlowInstance = useReactFlow();
   const navigate = useNavigate();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
 
   const {
     direction,
@@ -76,14 +75,56 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     showDatabaseClusters,
     nodes: storeNodes,
     edges: storeEdges,
-    assetTypeFilter,
-    setAssetTypeFilter,
+    setPagination,
+    setIsLoadingMore,
+    databaseFilter,
+    setDatabaseFilter,
+    loadMoreCount,
+    setLoadMoreCount,
   } = useLineageStore();
 
-  const { data, isLoading, error } = useLineage(assetId, { direction, maxDepth });
+  // Get list of available databases for filtering
+  const { data: availableDatabases } = useDatabases();
+
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useAllDatabasesLineage({ direction, maxDepth: maxDepth || 1, pageSize: loadMoreCount, databases: databaseFilter });
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+  // Merge all pages of data
+  const mergedData = useMemo(() => {
+    if (!data?.pages) return { nodes: [], edges: [] };
+
+    const allNodes: LineageNode[] = [];
+    const allEdges: LineageEdgeType[] = [];
+    const seenNodeIds = new Set<string>();
+    const seenEdgeIds = new Set<string>();
+
+    for (const page of data.pages) {
+      for (const node of page.graph.nodes) {
+        if (!seenNodeIds.has(node.id)) {
+          seenNodeIds.add(node.id);
+          allNodes.push(node);
+        }
+      }
+      for (const edge of page.graph.edges) {
+        const edgeKey = `${edge.source}->${edge.target}`;
+        if (!seenEdgeIds.has(edgeKey)) {
+          seenEdgeIds.add(edgeKey);
+          allEdges.push(edge);
+        }
+      }
+    }
+
+    return { nodes: allNodes, edges: allEdges };
+  }, [data?.pages]);
 
   // Use the lineage highlight hook
   const { highlightPath } = useLineageHighlight({ nodes, edges });
@@ -99,48 +140,36 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     wrapperRef,
   });
 
-  // Filter nodes and edges based on asset type filter
-  const filteredNodesAndEdges = useMemo(() => {
-    // Get the set of node IDs that match the asset type filter
-    const filteredNodeIds = new Set(
-      nodes
-        .filter((node) => {
-          if (node.type !== 'tableNode') return true; // Keep non-table nodes
-          const nodeData = node.data as TableNodeData;
-          return assetTypeFilter.includes(nodeData.assetType);
-        })
-        .map((node) => node.id)
-    );
+  // Create database clusters from nodes
+  const clusters = useDatabaseClustersFromNodes(nodes);
 
-    // Filter nodes
-    const filteredNodes = nodes.filter((node) => filteredNodeIds.has(node.id));
-
-    // Filter edges - only keep edges where both source and target are in filtered nodes
-    const filteredEdges = edges.filter(
-      (edge) => filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
-    );
-
-    return { filteredNodes, filteredEdges };
-  }, [nodes, edges, assetTypeFilter]);
-
-  // Create database clusters from filtered nodes
-  const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
-
-  // Update nodes/edges when data changes
+  // Update pagination info in store
   useEffect(() => {
-    if (data?.graph) {
-      layoutGraph(data.graph.nodes, data.graph.edges).then(
+    if (data?.pages && data.pages.length > 0) {
+      const lastPage = data.pages[data.pages.length - 1];
+      setPagination(lastPage.pagination);
+    }
+  }, [data?.pages, setPagination]);
+
+  // Update loading more state
+  useEffect(() => {
+    setIsLoadingMore(isFetchingNextPage);
+  }, [isFetchingNextPage, setIsLoadingMore]);
+
+  // Update nodes/edges when merged data changes
+  useEffect(() => {
+    if (mergedData.nodes.length > 0) {
+      layoutGraph(mergedData.nodes, mergedData.edges).then(
         ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
-          setGraph(data.graph.nodes, data.graph.edges);
+          setGraph(mergedData.nodes, mergedData.edges);
         }
       );
     }
-  }, [data, setNodes, setEdges, setGraph]);
+  }, [mergedData, setNodes, setEdges, setGraph]);
 
   // Handle column selection from TableNode/ColumnRow
-  // This is called when a column row is clicked inside a table node
   useEffect(() => {
     if (selectedAssetId) {
       const { highlightedNodes, highlightedEdges } = highlightPath(selectedAssetId);
@@ -149,11 +178,9 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     }
   }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
 
-  // Handle node click for selection and path highlighting
+  // Handle node click
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      // For table nodes, column selection is handled by ColumnRow
-      // This handler is for non-table nodes (fallback)
       if (node.type !== 'tableNode') {
         setSelectedAssetId(node.id);
       }
@@ -181,12 +208,31 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     reactFlowInstance.fitView({ padding: 0.2 });
   }, [reactFlowInstance]);
 
-  // Handle export menu selection
+  // Handle export
   const handleExport = useCallback(() => {
-    // For now, export as JSON by default
-    // Could show a dropdown menu for format selection
     exportJson();
   }, [exportJson]);
+
+  // Handle load more
+  const handleLoadMore = useCallback(() => {
+    if (hasNextPage && !isFetchingNextPage) {
+      fetchNextPage();
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  // Handle database filter toggle
+  const handleToggleDatabase = useCallback((dbName: string) => {
+    setDatabaseFilter(
+      databaseFilter.includes(dbName)
+        ? databaseFilter.filter(db => db !== dbName)
+        : [...databaseFilter, dbName]
+    );
+  }, [databaseFilter, setDatabaseFilter]);
+
+  // Clear all filters
+  const handleClearFilters = useCallback(() => {
+    setDatabaseFilter([]);
+  }, [setDatabaseFilter]);
 
   // Get column detail for panel
   const getColumnDetail = useCallback(
@@ -194,7 +240,6 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
       const node = storeNodes.find((n) => n.id === columnId);
       if (!node || node.type !== 'column') return null;
 
-      // Count upstream and downstream
       const upstreamCount = storeEdges.filter((e) => e.target === columnId).length;
       const downstreamCount = storeEdges.filter((e) => e.source === columnId).length;
 
@@ -247,7 +292,7 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     [highlightPath, setHighlightedPath]
   );
 
-  // Handle impact analysis from panel - navigate to Impact Analysis page
+  // Handle impact analysis from panel
   const handleViewImpactAnalysis = useCallback((columnId: string) => {
     navigate(`/impact/${encodeURIComponent(columnId)}`);
   }, [navigate]);
@@ -257,7 +302,6 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     (edgeId: string) => {
       setSelectedEdge(edgeId);
       openPanel('edge');
-      // Optionally switch to graph view
       setViewMode('graph');
     },
     [setSelectedEdge, openPanel, setViewMode]
@@ -279,41 +323,26 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     );
   }
 
-  // Handle empty lineage data - check edges since root node is always included
-  const hasNoLineageData = data && data.graph && data.graph.edges?.length === 0;
-  if (hasNoLineageData) {
-    // Parse the assetId to show a friendly name (format: database.table.column or database.table)
-    const assetParts = assetId.split('.');
-    const assetName = assetParts.length >= 2
-      ? `${assetParts[0]}.${assetParts[1]}${assetParts[2] ? '.' + assetParts[2] : ''}`
-      : assetId;
-
+  // Handle empty lineage data
+  if (mergedData.edges.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500">
-        <svg
-          className="w-16 h-16 mb-4 text-slate-300"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-          />
-        </svg>
+        <Network className="w-16 h-16 mb-4 text-slate-300" />
         <h3 className="text-lg font-medium text-slate-700 mb-2">No Lineage Data Available</h3>
         <p className="text-sm text-slate-500 text-center max-w-md">
-          No lineage relationships have been discovered for <span className="font-mono text-slate-600">{assetName}</span>.
+          No lineage relationships have been discovered across the databases.
         </p>
         <p className="text-sm text-slate-400 mt-2 text-center max-w-md">
-          This column may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet.
+          Lineage data may not have been extracted yet, or the selected databases have no relationships.
         </p>
       </div>
     );
   }
+
+  // Get pagination info
+  const paginationInfo = data?.pages && data.pages.length > 0
+    ? data.pages[data.pages.length - 1].pagination
+    : null;
 
   // Get selected details for panel
   const selectedColumn = selectedAssetId ? getColumnDetail(selectedAssetId) : null;
@@ -324,6 +353,107 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
       ref={wrapperRef}
       className={`flex flex-col h-full ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
     >
+      {/* Header with all databases info */}
+      <div className="flex items-center justify-between px-4 py-2 bg-indigo-50 border-b border-indigo-200">
+        <div className="flex items-center gap-2">
+          <Network className="w-5 h-5 text-indigo-600" />
+          <span className="font-medium text-indigo-800">All Databases Lineage</span>
+          {paginationInfo && (
+            <span className="text-sm text-indigo-600">
+              ({paginationInfo.page * paginationInfo.pageSize} of {paginationInfo.totalTables} tables loaded)
+            </span>
+          )}
+          {databaseFilter.length > 0 && (
+            <span className="text-sm text-indigo-600 ml-2">
+              | Filtered: {databaseFilter.join(', ')}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowFilterPanel(!showFilterPanel)}
+            className={`flex items-center gap-2 px-3 py-1 text-sm font-medium border rounded-md transition-colors ${
+              showFilterPanel || databaseFilter.length > 0
+                ? 'text-indigo-700 bg-indigo-100 border-indigo-300'
+                : 'text-indigo-700 bg-white border-indigo-300 hover:bg-indigo-50'
+            }`}
+            data-testid="filter-databases-btn"
+          >
+            <Filter className="w-4 h-4" />
+            Filter Databases
+            {databaseFilter.length > 0 && (
+              <span className="bg-indigo-600 text-white text-xs rounded-full px-1.5 py-0.5">
+                {databaseFilter.length}
+              </span>
+            )}
+          </button>
+          {hasNextPage && (
+            <div className="flex items-center gap-2">
+              <select
+                value={loadMoreCount}
+                onChange={(e) => setLoadMoreCount(Number(e.target.value) as 10 | 20 | 50)}
+                className="px-2 py-1 text-sm border border-indigo-300 rounded-md bg-white text-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                aria-label="Number of tables to load"
+                data-testid="load-more-count-select"
+              >
+                <option value={10}>10</option>
+                <option value={20}>20</option>
+                <option value={50}>50</option>
+              </select>
+              <button
+                onClick={handleLoadMore}
+                disabled={isFetchingNextPage}
+                className="flex items-center gap-2 px-3 py-1 text-sm font-medium text-indigo-700 bg-white border border-indigo-300 rounded-md hover:bg-indigo-50 disabled:opacity-50"
+                data-testid="load-more-btn"
+              >
+                {isFetchingNextPage ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'Load More Tables'
+                )}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Database Filter Panel */}
+      {showFilterPanel && (
+        <div className="px-4 py-3 bg-white border-b border-slate-200">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium text-slate-700">Select databases to include:</span>
+            {databaseFilter.length > 0 && (
+              <button
+                onClick={handleClearFilters}
+                className="text-xs text-indigo-600 hover:text-indigo-800"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {availableDatabases?.map((db) => (
+              <button
+                key={db.id}
+                onClick={() => handleToggleDatabase(db.name)}
+                className={`flex items-center gap-1 px-2 py-1 text-sm rounded-md transition-colors ${
+                  databaseFilter.includes(db.name)
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+                data-testid={`filter-db-${db.name}`}
+              >
+                {db.name}
+                {databaseFilter.includes(db.name) && <X className="w-3 h-3" />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Toolbar */}
       <Toolbar
         viewMode={viewMode}
@@ -337,17 +467,15 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
         onFitView={handleFitView}
         onExport={handleExport}
         onFullscreen={toggleFullscreen}
-        isLoading={isLoading}
-        assetTypeFilter={assetTypeFilter}
-        onAssetTypeFilterChange={setAssetTypeFilter}
+        isLoading={isLoading || isFetchingNextPage}
       />
 
       {/* Graph View */}
       {viewMode === 'graph' && (
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={filteredNodesAndEdges.filteredNodes}
-            edges={filteredNodesAndEdges.filteredEdges}
+            nodes={nodes}
+            edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
@@ -358,12 +486,11 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
             connectionMode={ConnectionMode.Loose}
             fitView
             fitViewOptions={{ padding: 0.2 }}
-            minZoom={0.1}
+            minZoom={0.05}
             maxZoom={2}
-            onlyRenderVisibleElements={filteredNodesAndEdges.filteredNodes.length > 50}
+            onlyRenderVisibleElements={nodes.length > 30}
             proOptions={{ hideAttribution: true }}
           >
-            {/* Database cluster backgrounds - rendered with viewport transform */}
             {showDatabaseClusters && (
               <div className="absolute inset-0 pointer-events-none overflow-hidden">
                 <ClusterBackground clusters={clusters} visible={showDatabaseClusters} />
@@ -374,16 +501,7 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
             <Controls />
             {showMinimap && (
               <MiniMap
-                nodeColor={(node) => {
-                  // Highlight the focused asset
-                  if (filteredNodesAndEdges.filteredNodes.some((n) => n.type === 'tableNode' && n.data)) {
-                    const tableData = node.data as { columns?: Array<{ id: string }> } | undefined;
-                    if (tableData?.columns?.some((col) => col.id === assetId)) {
-                      return '#3b82f6';
-                    }
-                  }
-                  return '#94a3b8';
-                }}
+                nodeColor={() => '#94a3b8'}
                 maskColor="rgba(0, 0, 0, 0.1)"
                 style={{ bottom: 56 }}
               />
@@ -438,14 +556,10 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
   );
 }
 
-export interface LineageGraphProps {
-  assetId: string;
-}
-
-export function LineageGraph({ assetId }: LineageGraphProps) {
+export function AllDatabasesLineageGraph() {
   return (
     <ReactFlowProvider>
-      <LineageGraphInner assetId={assetId} />
+      <AllDatabasesLineageGraphInner />
     </ReactFlowProvider>
   );
 }

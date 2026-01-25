@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
-import { Toolbar, ViewMode, Direction } from './Toolbar';
+import { Toolbar, ViewMode, Direction, AssetTypeFilter } from './Toolbar';
 
 describe('Toolbar', () => {
   const defaultProps = {
@@ -217,6 +217,132 @@ describe('Toolbar', () => {
       render(<Toolbar {...defaultProps} isLoading={true} onExport={vi.fn()} />);
       expect(screen.getByLabelText('Fit to view')).toBeDisabled();
       expect(screen.getByLabelText('Export graph')).toBeDisabled();
+    });
+  });
+
+  describe('TC-COMP-019a: Asset Type Filter Dropdown', () => {
+    const filterProps = {
+      ...defaultProps,
+      assetTypeFilter: ['table', 'view', 'materialized_view'] as AssetTypeFilter[],
+      onAssetTypeFilterChange: vi.fn(),
+    };
+
+    it('renders asset type filter button when onAssetTypeFilterChange is provided', () => {
+      render(<Toolbar {...filterProps} />);
+      expect(screen.getByTestId('asset-type-filter-btn')).toBeInTheDocument();
+    });
+
+    it('does not render asset type filter when onAssetTypeFilterChange is not provided', () => {
+      render(<Toolbar {...defaultProps} />);
+      expect(screen.queryByTestId('asset-type-filter-btn')).not.toBeInTheDocument();
+    });
+
+    it('shows "All Types" label when all types are selected', () => {
+      render(<Toolbar {...filterProps} />);
+      expect(screen.getByText('All Types')).toBeInTheDocument();
+    });
+
+    it('shows "Tables Only" label when only tables are selected', () => {
+      render(
+        <Toolbar
+          {...filterProps}
+          assetTypeFilter={['table']}
+        />
+      );
+      expect(screen.getByText('Tables Only')).toBeInTheDocument();
+    });
+
+    it('shows "Views Only" label when only views are selected', () => {
+      render(
+        <Toolbar
+          {...filterProps}
+          assetTypeFilter={['view']}
+        />
+      );
+      expect(screen.getByText('Views Only')).toBeInTheDocument();
+    });
+
+    it('shows count label when multiple but not all types are selected', () => {
+      render(
+        <Toolbar
+          {...filterProps}
+          assetTypeFilter={['table', 'view']}
+        />
+      );
+      expect(screen.getByText('2 Types')).toBeInTheDocument();
+    });
+
+    it('opens dropdown when filter button is clicked', () => {
+      render(<Toolbar {...filterProps} />);
+
+      fireEvent.click(screen.getByTestId('asset-type-filter-btn'));
+
+      expect(screen.getByTestId('filter-tables-checkbox')).toBeInTheDocument();
+      expect(screen.getByTestId('filter-views-checkbox')).toBeInTheDocument();
+      expect(screen.getByTestId('filter-materialized-views-checkbox')).toBeInTheDocument();
+    });
+
+    it('checkboxes reflect current filter state', () => {
+      render(
+        <Toolbar
+          {...filterProps}
+          assetTypeFilter={['table', 'view']}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('asset-type-filter-btn'));
+
+      expect(screen.getByTestId('filter-tables-checkbox')).toBeChecked();
+      expect(screen.getByTestId('filter-views-checkbox')).toBeChecked();
+      expect(screen.getByTestId('filter-materialized-views-checkbox')).not.toBeChecked();
+    });
+
+    it('calls onAssetTypeFilterChange when checkbox is toggled', () => {
+      const onAssetTypeFilterChange = vi.fn();
+      render(
+        <Toolbar
+          {...filterProps}
+          onAssetTypeFilterChange={onAssetTypeFilterChange}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('asset-type-filter-btn'));
+      fireEvent.click(screen.getByTestId('filter-tables-checkbox'));
+
+      expect(onAssetTypeFilterChange).toHaveBeenCalledWith(['view', 'materialized_view']);
+    });
+
+    it('adds type when unchecked checkbox is clicked', () => {
+      const onAssetTypeFilterChange = vi.fn();
+      render(
+        <Toolbar
+          {...filterProps}
+          assetTypeFilter={['table', 'view']}
+          onAssetTypeFilterChange={onAssetTypeFilterChange}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('asset-type-filter-btn'));
+      fireEvent.click(screen.getByTestId('filter-materialized-views-checkbox'));
+
+      expect(onAssetTypeFilterChange).toHaveBeenCalledWith(['table', 'view', 'materialized_view']);
+    });
+
+    it('does not allow unchecking the last selected type', () => {
+      const onAssetTypeFilterChange = vi.fn();
+      render(
+        <Toolbar
+          {...filterProps}
+          assetTypeFilter={['table']}
+          onAssetTypeFilterChange={onAssetTypeFilterChange}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('asset-type-filter-btn'));
+      fireEvent.click(screen.getByTestId('filter-tables-checkbox'));
+
+      // Should not call onAssetTypeFilterChange since it would result in empty array
+      expect(onAssetTypeFilterChange).not.toHaveBeenCalled();
     });
   });
 });

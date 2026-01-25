@@ -39,6 +39,18 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
   const hasSelection = highlightedNodeIds.size > 0;
   const isTableDimmed = hasSelection && !hasHighlightedColumn && selectedAssetId !== null;
 
+  // Get default border color based on asset type
+  const getDefaultBorderColor = () => {
+    switch (data.assetType) {
+      case 'view':
+        return 'border-orange-300';
+      case 'materialized_view':
+        return 'border-violet-300';
+      default:
+        return 'border-slate-200';
+    }
+  };
+
   // Get border color based on state
   const getBorderColor = () => {
     if (data.columns.some((col) => col.id === selectedAssetId)) {
@@ -47,7 +59,7 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
     if (hasHighlightedColumn) {
       return 'border-green-500';
     }
-    return 'border-slate-200';
+    return getDefaultBorderColor();
   };
 
   const handleToggleExpand = useCallback(() => {

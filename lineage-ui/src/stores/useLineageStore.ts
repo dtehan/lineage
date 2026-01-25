@@ -1,7 +1,34 @@
 import { create } from 'zustand';
-import type { LineageNode, LineageEdge, SearchResult } from '../types';
+import type { LineageNode, LineageEdge, SearchResult, PaginationInfo } from '../types';
+
+export type LineageScope = 'column' | 'table' | 'database' | 'all-databases';
+export type AssetTypeFilter = 'table' | 'view' | 'materialized_view';
 
 interface LineageState {
+  // View scope - determines what level of lineage to show
+  scope: LineageScope;
+  setScope: (scope: LineageScope) => void;
+
+  // Selected database for database-level view
+  selectedDatabase: string | null;
+  setSelectedDatabase: (database: string | null) => void;
+
+  // Database filter for all-databases view
+  databaseFilter: string[];
+  setDatabaseFilter: (databases: string[]) => void;
+
+  // Asset type filter (tables, views, or both)
+  assetTypeFilter: AssetTypeFilter[];
+  setAssetTypeFilter: (types: AssetTypeFilter[]) => void;
+
+  // Pagination state for database/all-databases views
+  pagination: PaginationInfo | null;
+  setPagination: (pagination: PaginationInfo | null) => void;
+  isLoadingMore: boolean;
+  setIsLoadingMore: (loading: boolean) => void;
+  loadMoreCount: 10 | 20 | 50;
+  setLoadMoreCount: (count: 10 | 20 | 50) => void;
+
   // Selected asset
   selectedAssetId: string | null;
   setSelectedAssetId: (id: string | null) => void;
@@ -60,6 +87,30 @@ interface LineageState {
 }
 
 export const useLineageStore = create<LineageState>((set) => ({
+  // View scope
+  scope: 'column' as LineageScope,
+  setScope: (scope) => set({ scope }),
+
+  // Selected database for database-level view
+  selectedDatabase: null,
+  setSelectedDatabase: (database) => set({ selectedDatabase: database }),
+
+  // Database filter for all-databases view
+  databaseFilter: [],
+  setDatabaseFilter: (databases) => set({ databaseFilter: databases }),
+
+  // Asset type filter - default to showing all types
+  assetTypeFilter: ['table', 'view', 'materialized_view'] as AssetTypeFilter[],
+  setAssetTypeFilter: (types) => set({ assetTypeFilter: types }),
+
+  // Pagination state
+  pagination: null,
+  setPagination: (pagination) => set({ pagination }),
+  isLoadingMore: false,
+  setIsLoadingMore: (loading) => set({ isLoadingMore: loading }),
+  loadMoreCount: 10,
+  setLoadMoreCount: (count) => set({ loadMoreCount: count }),
+
   // Selected asset
   selectedAssetId: null,
   setSelectedAssetId: (id) => set({ selectedAssetId: id }),
