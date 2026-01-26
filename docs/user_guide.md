@@ -345,7 +345,8 @@ The application has a consistent layout across all pages:
 | Route | Page | Description |
 |-------|------|-------------|
 | `/` | Explore | Main exploration interface with asset browser and lineage graph |
-| `/lineage/:assetId` | Lineage | Dedicated full-screen lineage view with advanced controls |
+| `/lineage/:assetId` | Lineage | Column or table lineage view (e.g., `/lineage/db.table.column`) |
+| `/lineage/database/:dbName` | Database Lineage | All table relationships in a database with pagination |
 | `/impact/:assetId` | Impact | Impact analysis view for a specific asset |
 | `/search` | Search | Global search with results list |
 
@@ -356,14 +357,31 @@ The Asset Browser provides hierarchical navigation through your data assets in t
 **Navigation Structure:**
 ```
 Databases (blue icon)
-  └── Tables (green icon)
+  └── Tables/Views (green/orange/violet icons)
        └── Columns (purple icon)
 ```
 
+**Tables vs Views vs Materialized Views:**
+
+The Asset Browser visually distinguishes between different object types:
+
+| Object Type | Icon | Badge | Color | tableKind |
+|-------------|------|-------|-------|-----------|
+| **Table** | Table icon | (none) | Emerald green | `T` |
+| **View** | Eye icon | "VIEW" | Orange | `V` |
+| **Materialized View** | Layers icon | "MVIEW" | Violet | `M` |
+
+Views and materialized views display a colored badge next to their name for quick identification. This distinction carries through to the lineage graph, where:
+- **Tables** have a gray (slate-200) border
+- **Views** have an orange border
+- **Materialized Views** have a violet border
+
 **Interactions:**
-- Click the expand arrow on a database to see its tables
-- Click the expand arrow on a table to see its columns
+- Click the expand arrow on a database to see its tables and views
+- Click the expand arrow on a table/view to see its columns
 - Click a column name to select it and view its lineage in the right panel
+- Click a table/view name (not the expand arrow) to view lineage for the entire table
+- Click a database name to view database-level lineage showing all table relationships
 - Data is lazy-loaded: tables load when database is expanded, columns load when table is expanded
 
 ### Lineage Graph
@@ -567,24 +585,136 @@ Toggle fullscreen mode for detailed analysis of complex lineages. The graph expa
 
 Access the Search page via the header search form or sidebar icon.
 
+**What You Can Search:**
+
+| Asset Type | Example Search | Result Navigation |
+|------------|----------------|-------------------|
+| **Database** | `SALES_DW` | `/lineage/database/SALES_DW` (database-level lineage) |
+| **Table** | `DIM_CUSTOMER` | `/lineage/SALES_DW.DIM_CUSTOMER` (table-level lineage) |
+| **Column** | `customer_id` | `/lineage/SALES_DW.DIM_CUSTOMER.customer_id` (column-level lineage) |
+
 **Search Features:**
 - Minimum 2 characters to trigger search
-- Real-time results as you type
+- Real-time results as you type (with debouncing)
 - URL persists search query (`/search?q=your-query`)
 - Results limited to 50 by default
+- Results ranked by relevance score
 
 **Search Parameters:**
-- `q` - Search query text
-- `type` - Filter by asset type (database, table, column)
-- `limit` - Maximum results
+- `q` - Search query text (required, minimum 2 characters)
+- `type` - Filter by asset type: `database`, `table`, or `column` (can specify multiple)
+- `limit` - Maximum results (default: 50)
+
+Example URL with filters: `/search?q=customer&type=table&type=column&limit=20`
 
 **Result Cards:**
 
 Each result shows:
-- Asset type icon (database/table/column)
-- Asset name with full path breadcrumb
-- Color-coded type badge
-- Click to navigate to `/lineage/{assetId}`
+```
+┌─────────────────────────────────────────┐
+│ [Icon] asset_name            [Type Badge]│
+│        database.table.column             │
+└─────────────────────────────────────────┘
+```
+
+| Asset Type | Icon Color | Badge |
+|------------|------------|-------|
+| Database | Blue (#3b82f6) | "DATABASE" |
+| Table | Green (#22c55e) | "TABLE" |
+| Column | Purple (#a855f7) | "COLUMN" |
+
+**Search Result Actions:**
+- Click a **database** result to view all table-to-table relationships in that database
+- Click a **table** result to view lineage for all columns in that table
+- Click a **column** result to view upstream and downstream lineage for that specific column
+
+### Lineage Levels
+
+The application supports viewing lineage at three different granularity levels:
+
+#### Column-Level Lineage (Finest Granularity)
+
+View the lineage for a specific column to see exactly where its data comes from and where it flows to.
+
+**How to access:**
+- Click a column name in the Asset Browser
+- Search for a column and click the result
+- Navigate directly to `/lineage/{database}.{table}.{column}`
+
+**Display:**
+- Table nodes with column rows
+- Edges connect individual columns showing data flow
+- Detail panel shows column metadata (data type, nullable, upstream/downstream counts)
+
+**Use case:** Tracing a specific data quality issue or understanding how a business metric is calculated.
+
+#### Table-Level Lineage
+
+View lineage for all columns in a table at once. This shows how the entire table participates in data flows.
+
+**How to access:**
+- Click a table name (not the expand arrow) in the Asset Browser
+- Search for a table and click the result
+- Navigate directly to `/lineage/{database}.{table}`
+
+**Display:**
+- Selected table node is expanded showing all columns
+- All column-level edges for that table are displayed
+- Related upstream and downstream tables are shown
+
+**Use case:** Understanding all the data dependencies for a table before making schema changes.
+
+#### Database-Level Lineage
+
+View all table-to-table relationships within a database. This provides a high-level overview of data flows.
+
+**How to access:**
+- Click a database name in the Asset Browser
+- Search for a database and click the result
+- Navigate directly to `/lineage/database/{databaseName}`
+
+**Display:**
+- All tables in the database as nodes
+- Table-level relationship edges
+- Database cluster backgrounds group related tables
+- Pagination controls for large databases (see "Loading More Tables" below)
+
+**Use case:** Understanding the overall architecture of a data warehouse or identifying cross-table dependencies.
+
+### Loading More Tables
+
+For databases with many tables, the lineage graph uses pagination to maintain performance.
+
+**Pagination Controls:**
+
+The database lineage view header shows:
+```
+Database: SALES_DW (50 of 200 tables loaded)
+                         [Page Size ▼] [Load More Tables]
+```
+
+**Page Size Options:**
+- 10 tables per page (fastest loading)
+- 20 tables per page (default for cross-database views)
+- 50 tables per page (default for single database)
+
+**How to load more:**
+1. View the "(X of Y tables loaded)" indicator in the header
+2. Click the **Page Size** dropdown to change how many tables load at once
+3. Click **Load More Tables** to fetch the next batch
+4. Repeat until all tables are loaded or you have sufficient context
+
+**Behavior:**
+- Tables are deduplicated automatically when loading additional pages
+- Edges between already-loaded tables appear immediately
+- Loading indicator shows "Loading..." while fetching
+- The button is disabled during loading and when all tables are loaded
+
+**Tips for large databases:**
+- Start with a smaller page size (10-20) to quickly see the structure
+- Use the direction filter (Upstream/Downstream) to focus on relevant relationships
+- Use a lower max depth (2-3) for initial exploration
+- Once you identify the area of interest, increase depth or load more tables
 
 ---
 

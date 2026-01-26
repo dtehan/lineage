@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom';
 import { LineageGraph } from '../components/domain/LineageGraph/LineageGraph';
 import { useLineageStore } from '../stores/useLineageStore';
+import { BackButton } from '../components/common/BackButton';
 
 export function LineagePage() {
   const { assetId } = useParams<{ assetId: string }>();
@@ -13,7 +14,10 @@ export function LineagePage() {
   return (
     <div className="flex flex-col h-full">
       <header className="flex items-center justify-between px-4 py-2 bg-white border-b">
-        <h1 className="text-lg font-semibold">Lineage: {assetId}</h1>
+        <div className="flex items-center gap-4">
+          <BackButton />
+          <h1 className="text-lg font-semibold">Lineage: {assetId}</h1>
+        </div>
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2">
             <span className="text-sm text-slate-600">Depth:</span>

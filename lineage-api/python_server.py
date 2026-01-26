@@ -808,61 +808,201 @@ def get_database_lineage(database):
                             }
                         }
 
-                # Now get lineage edges where source or target is in this database's tables
+                # Get all column IDs for tables in this page
                 cur.execute(f"""
-                    SELECT DISTINCT
-                        l.source_column_id,
-                        l.source_database,
-                        l.source_table,
-                        l.source_column,
-                        l.target_column_id,
-                        l.target_database,
-                        l.target_table,
-                        l.target_column,
-                        l.transformation_type,
-                        l.confidence_score
-                    FROM LIN_COLUMN_LINEAGE l
-                    WHERE l.is_active = 'Y'
-                      AND (
-                        (UPPER(l.target_database) = UPPER(?) AND UPPER(l.target_table) IN ({table_placeholders}))
-                        OR (UPPER(l.source_database) = UPPER(?) AND UPPER(l.source_table) IN ({table_placeholders}))
-                      )
-                """, [database] + table_params + [database] + table_params)
+                    SELECT column_id
+                    FROM LIN_COLUMN
+                    WHERE UPPER(database_name) = UPPER(?)
+                      AND UPPER(table_name) IN ({table_placeholders})
+                      AND is_active = 'Y'
+                """, [database] + table_params)
 
-                for row in cur.fetchall():
-                    source_id = row[0].strip() if row[0] else ""
-                    target_id = row[4].strip() if row[4] else ""
+                column_ids = [row[0].strip() for row in cur.fetchall()]
 
-                    # Add source node if not already present (could be from another database)
-                    if source_id and source_id not in nodes:
-                        nodes[source_id] = {
-                            "id": source_id,
-                            "type": "column",
-                            "databaseName": row[1].strip() if row[1] else "",
-                            "tableName": row[2].strip() if row[2] else "",
-                            "columnName": row[3].strip() if row[3] else ""
-                        }
+                if column_ids:
+                    col_placeholders = ",".join(["?" for _ in column_ids])
 
-                    # Add target node if not already present (could be from another database)
-                    if target_id and target_id not in nodes:
-                        nodes[target_id] = {
-                            "id": target_id,
-                            "type": "column",
-                            "databaseName": row[5].strip() if row[5] else "",
-                            "tableName": row[6].strip() if row[6] else "",
-                            "columnName": row[7].strip() if row[7] else ""
-                        }
+                    # Get upstream lineage using recursive CTE (traverse to max_depth)
+                    if direction in ("upstream", "both"):
+                        cur.execute(f"""
+                            WITH RECURSIVE upstream_lineage AS (
+                                SELECT
+                                    source_column_id,
+                                    source_database,
+                                    source_table,
+                                    source_column,
+                                    target_column_id,
+                                    target_database,
+                                    target_table,
+                                    target_column,
+                                    transformation_type,
+                                    confidence_score,
+                                    1 as depth,
+                                    CAST(target_column_id || '->' || source_column_id AS VARCHAR(10000)) as path
+                                FROM LIN_COLUMN_LINEAGE
+                                WHERE target_column_id IN ({col_placeholders})
+                                  AND is_active = 'Y'
 
-                    if source_id and target_id:
-                        edge_key = f"{source_id}->{target_id}"
-                        if not any(e["id"] == edge_key for e in edges):
-                            edges.append({
-                                "id": edge_key,
-                                "source": source_id,
-                                "target": target_id,
-                                "transformationType": row[8].strip() if row[8] else "DIRECT",
-                                "confidenceScore": float(row[9]) if row[9] else 1.0
-                            })
+                                UNION ALL
+
+                                SELECT
+                                    l.source_column_id,
+                                    l.source_database,
+                                    l.source_table,
+                                    l.source_column,
+                                    l.target_column_id,
+                                    l.target_database,
+                                    l.target_table,
+                                    l.target_column,
+                                    l.transformation_type,
+                                    l.confidence_score,
+                                    u.depth + 1,
+                                    u.path || '->' || l.source_column_id
+                                FROM LIN_COLUMN_LINEAGE l
+                                INNER JOIN upstream_lineage u ON l.target_column_id = u.source_column_id
+                                WHERE l.is_active = 'Y'
+                                  AND u.depth < ?
+                                  AND POSITION(l.source_column_id IN u.path) = 0
+                            )
+                            SELECT DISTINCT
+                                source_column_id,
+                                source_database,
+                                source_table,
+                                source_column,
+                                target_column_id,
+                                target_database,
+                                target_table,
+                                target_column,
+                                transformation_type,
+                                confidence_score
+                            FROM upstream_lineage
+                        """, column_ids + [max_depth])
+
+                        for row in cur.fetchall():
+                            source_id = row[0].strip() if row[0] else ""
+                            target_id = row[4].strip() if row[4] else ""
+
+                            # Add source node (could be from another database)
+                            if source_id and source_id not in nodes:
+                                nodes[source_id] = {
+                                    "id": source_id,
+                                    "type": "column",
+                                    "databaseName": row[1].strip() if row[1] else "",
+                                    "tableName": row[2].strip() if row[2] else "",
+                                    "columnName": row[3].strip() if row[3] else ""
+                                }
+
+                            # Add target node (could be from another database)
+                            if target_id and target_id not in nodes:
+                                nodes[target_id] = {
+                                    "id": target_id,
+                                    "type": "column",
+                                    "databaseName": row[5].strip() if row[5] else "",
+                                    "tableName": row[6].strip() if row[6] else "",
+                                    "columnName": row[7].strip() if row[7] else ""
+                                }
+
+                            if source_id and target_id:
+                                edge_key = f"{source_id}->{target_id}"
+                                if not any(e["id"] == edge_key for e in edges):
+                                    edges.append({
+                                        "id": edge_key,
+                                        "source": source_id,
+                                        "target": target_id,
+                                        "transformationType": row[8].strip() if row[8] else "DIRECT",
+                                        "confidenceScore": float(row[9]) if row[9] else 1.0
+                                    })
+
+                    # Get downstream lineage using recursive CTE (traverse to max_depth)
+                    if direction in ("downstream", "both"):
+                        cur.execute(f"""
+                            WITH RECURSIVE downstream_lineage AS (
+                                SELECT
+                                    source_column_id,
+                                    source_database,
+                                    source_table,
+                                    source_column,
+                                    target_column_id,
+                                    target_database,
+                                    target_table,
+                                    target_column,
+                                    transformation_type,
+                                    confidence_score,
+                                    1 as depth,
+                                    CAST(source_column_id || '->' || target_column_id AS VARCHAR(10000)) as path
+                                FROM LIN_COLUMN_LINEAGE
+                                WHERE source_column_id IN ({col_placeholders})
+                                  AND is_active = 'Y'
+
+                                UNION ALL
+
+                                SELECT
+                                    l.source_column_id,
+                                    l.source_database,
+                                    l.source_table,
+                                    l.source_column,
+                                    l.target_column_id,
+                                    l.target_database,
+                                    l.target_table,
+                                    l.target_column,
+                                    l.transformation_type,
+                                    l.confidence_score,
+                                    d.depth + 1,
+                                    d.path || '->' || l.target_column_id
+                                FROM LIN_COLUMN_LINEAGE l
+                                INNER JOIN downstream_lineage d ON l.source_column_id = d.target_column_id
+                                WHERE l.is_active = 'Y'
+                                  AND d.depth < ?
+                                  AND POSITION(l.target_column_id IN d.path) = 0
+                            )
+                            SELECT DISTINCT
+                                source_column_id,
+                                source_database,
+                                source_table,
+                                source_column,
+                                target_column_id,
+                                target_database,
+                                target_table,
+                                target_column,
+                                transformation_type,
+                                confidence_score
+                            FROM downstream_lineage
+                        """, column_ids + [max_depth])
+
+                        for row in cur.fetchall():
+                            source_id = row[0].strip() if row[0] else ""
+                            target_id = row[4].strip() if row[4] else ""
+
+                            # Add source node (could be from another database)
+                            if source_id and source_id not in nodes:
+                                nodes[source_id] = {
+                                    "id": source_id,
+                                    "type": "column",
+                                    "databaseName": row[1].strip() if row[1] else "",
+                                    "tableName": row[2].strip() if row[2] else "",
+                                    "columnName": row[3].strip() if row[3] else ""
+                                }
+
+                            # Add target node (could be from another database)
+                            if target_id and target_id not in nodes:
+                                nodes[target_id] = {
+                                    "id": target_id,
+                                    "type": "column",
+                                    "databaseName": row[5].strip() if row[5] else "",
+                                    "tableName": row[6].strip() if row[6] else "",
+                                    "columnName": row[7].strip() if row[7] else ""
+                                }
+
+                            if source_id and target_id:
+                                edge_key = f"{source_id}->{target_id}"
+                                if not any(e["id"] == edge_key for e in edges):
+                                    edges.append({
+                                        "id": edge_key,
+                                        "source": source_id,
+                                        "target": target_id,
+                                        "transformationType": row[8].strip() if row[8] else "DIRECT",
+                                        "confidenceScore": float(row[9]) if row[9] else 1.0
+                                    })
 
         return jsonify({
             "databaseName": database,
@@ -988,68 +1128,193 @@ def get_all_databases_lineage():
                             }
                         }
 
-                # Build OR conditions for each db.table pair
-                conditions = []
-                params = []
-                for db, tbl in db_table_pairs:
-                    conditions.append("(UPPER(l.target_database) = ? AND UPPER(l.target_table) = ?)")
-                    conditions.append("(UPPER(l.source_database) = ? AND UPPER(l.source_table) = ?)")
-                    params.extend([db, tbl, db, tbl])
+                # Get all column IDs from selected tables for recursive traversal
+                column_ids = list(nodes.keys())
 
-                where_clause = " OR ".join(conditions)
+                if column_ids:
+                    col_placeholders = ",".join(["?" for _ in column_ids])
 
-                # Get all lineage edges in a single query
-                cur.execute(f"""
-                    SELECT DISTINCT
-                        l.source_column_id,
-                        l.source_database,
-                        l.source_table,
-                        l.source_column,
-                        l.target_column_id,
-                        l.target_database,
-                        l.target_table,
-                        l.target_column,
-                        l.transformation_type,
-                        l.confidence_score
-                    FROM LIN_COLUMN_LINEAGE l
-                    WHERE l.is_active = 'Y'
-                      AND ({where_clause})
-                """, params)
+                    # Get upstream lineage using recursive CTE (traverse to max_depth)
+                    if direction in ("upstream", "both"):
+                        cur.execute(f"""
+                            WITH RECURSIVE upstream_lineage AS (
+                                SELECT
+                                    source_column_id,
+                                    source_database,
+                                    source_table,
+                                    source_column,
+                                    target_column_id,
+                                    target_database,
+                                    target_table,
+                                    target_column,
+                                    transformation_type,
+                                    confidence_score,
+                                    1 as depth,
+                                    CAST(target_column_id || '->' || source_column_id AS VARCHAR(10000)) as path
+                                FROM LIN_COLUMN_LINEAGE
+                                WHERE target_column_id IN ({col_placeholders})
+                                  AND is_active = 'Y'
 
-                for row in cur.fetchall():
-                    source_id = row[0].strip() if row[0] else ""
-                    target_id = row[4].strip() if row[4] else ""
+                                UNION ALL
 
-                    # Add source node if not already present (could be from another database)
-                    if source_id and source_id not in nodes:
-                        nodes[source_id] = {
-                            "id": source_id,
-                            "type": "column",
-                            "databaseName": row[1].strip() if row[1] else "",
-                            "tableName": row[2].strip() if row[2] else "",
-                            "columnName": row[3].strip() if row[3] else ""
-                        }
+                                SELECT
+                                    l.source_column_id,
+                                    l.source_database,
+                                    l.source_table,
+                                    l.source_column,
+                                    l.target_column_id,
+                                    l.target_database,
+                                    l.target_table,
+                                    l.target_column,
+                                    l.transformation_type,
+                                    l.confidence_score,
+                                    u.depth + 1,
+                                    u.path || '->' || l.source_column_id
+                                FROM LIN_COLUMN_LINEAGE l
+                                INNER JOIN upstream_lineage u ON l.target_column_id = u.source_column_id
+                                WHERE l.is_active = 'Y'
+                                  AND u.depth < ?
+                                  AND POSITION(l.source_column_id IN u.path) = 0
+                            )
+                            SELECT DISTINCT
+                                source_column_id,
+                                source_database,
+                                source_table,
+                                source_column,
+                                target_column_id,
+                                target_database,
+                                target_table,
+                                target_column,
+                                transformation_type,
+                                confidence_score
+                            FROM upstream_lineage
+                        """, column_ids + [max_depth])
 
-                    # Add target node if not already present (could be from another database)
-                    if target_id and target_id not in nodes:
-                        nodes[target_id] = {
-                            "id": target_id,
-                            "type": "column",
-                            "databaseName": row[5].strip() if row[5] else "",
-                            "tableName": row[6].strip() if row[6] else "",
-                            "columnName": row[7].strip() if row[7] else ""
-                        }
+                        for row in cur.fetchall():
+                            source_id = row[0].strip() if row[0] else ""
+                            target_id = row[4].strip() if row[4] else ""
 
-                    if source_id and target_id:
-                        edge_key = f"{source_id}->{target_id}"
-                        if not any(e["id"] == edge_key for e in edges):
-                            edges.append({
-                                "id": edge_key,
-                                "source": source_id,
-                                "target": target_id,
-                                "transformationType": row[8].strip() if row[8] else "DIRECT",
-                                "confidenceScore": float(row[9]) if row[9] else 1.0
-                            })
+                            # Add source node (could be from another database)
+                            if source_id and source_id not in nodes:
+                                nodes[source_id] = {
+                                    "id": source_id,
+                                    "type": "column",
+                                    "databaseName": row[1].strip() if row[1] else "",
+                                    "tableName": row[2].strip() if row[2] else "",
+                                    "columnName": row[3].strip() if row[3] else ""
+                                }
+
+                            # Add target node (could be from another database)
+                            if target_id and target_id not in nodes:
+                                nodes[target_id] = {
+                                    "id": target_id,
+                                    "type": "column",
+                                    "databaseName": row[5].strip() if row[5] else "",
+                                    "tableName": row[6].strip() if row[6] else "",
+                                    "columnName": row[7].strip() if row[7] else ""
+                                }
+
+                            if source_id and target_id:
+                                edge_key = f"{source_id}->{target_id}"
+                                if not any(e["id"] == edge_key for e in edges):
+                                    edges.append({
+                                        "id": edge_key,
+                                        "source": source_id,
+                                        "target": target_id,
+                                        "transformationType": row[8].strip() if row[8] else "DIRECT",
+                                        "confidenceScore": float(row[9]) if row[9] else 1.0
+                                    })
+
+                    # Get downstream lineage using recursive CTE (traverse to max_depth)
+                    if direction in ("downstream", "both"):
+                        cur.execute(f"""
+                            WITH RECURSIVE downstream_lineage AS (
+                                SELECT
+                                    source_column_id,
+                                    source_database,
+                                    source_table,
+                                    source_column,
+                                    target_column_id,
+                                    target_database,
+                                    target_table,
+                                    target_column,
+                                    transformation_type,
+                                    confidence_score,
+                                    1 as depth,
+                                    CAST(source_column_id || '->' || target_column_id AS VARCHAR(10000)) as path
+                                FROM LIN_COLUMN_LINEAGE
+                                WHERE source_column_id IN ({col_placeholders})
+                                  AND is_active = 'Y'
+
+                                UNION ALL
+
+                                SELECT
+                                    l.source_column_id,
+                                    l.source_database,
+                                    l.source_table,
+                                    l.source_column,
+                                    l.target_column_id,
+                                    l.target_database,
+                                    l.target_table,
+                                    l.target_column,
+                                    l.transformation_type,
+                                    l.confidence_score,
+                                    d.depth + 1,
+                                    d.path || '->' || l.target_column_id
+                                FROM LIN_COLUMN_LINEAGE l
+                                INNER JOIN downstream_lineage d ON l.source_column_id = d.target_column_id
+                                WHERE l.is_active = 'Y'
+                                  AND d.depth < ?
+                                  AND POSITION(l.target_column_id IN d.path) = 0
+                            )
+                            SELECT DISTINCT
+                                source_column_id,
+                                source_database,
+                                source_table,
+                                source_column,
+                                target_column_id,
+                                target_database,
+                                target_table,
+                                target_column,
+                                transformation_type,
+                                confidence_score
+                            FROM downstream_lineage
+                        """, column_ids + [max_depth])
+
+                        for row in cur.fetchall():
+                            source_id = row[0].strip() if row[0] else ""
+                            target_id = row[4].strip() if row[4] else ""
+
+                            # Add source node (could be from another database)
+                            if source_id and source_id not in nodes:
+                                nodes[source_id] = {
+                                    "id": source_id,
+                                    "type": "column",
+                                    "databaseName": row[1].strip() if row[1] else "",
+                                    "tableName": row[2].strip() if row[2] else "",
+                                    "columnName": row[3].strip() if row[3] else ""
+                                }
+
+                            # Add target node (could be from another database)
+                            if target_id and target_id not in nodes:
+                                nodes[target_id] = {
+                                    "id": target_id,
+                                    "type": "column",
+                                    "databaseName": row[5].strip() if row[5] else "",
+                                    "tableName": row[6].strip() if row[6] else "",
+                                    "columnName": row[7].strip() if row[7] else ""
+                                }
+
+                            if source_id and target_id:
+                                edge_key = f"{source_id}->{target_id}"
+                                if not any(e["id"] == edge_key for e in edges):
+                                    edges.append({
+                                        "id": edge_key,
+                                        "source": source_id,
+                                        "target": target_id,
+                                        "transformationType": row[8].strip() if row[8] else "DIRECT",
+                                        "confidenceScore": float(row[9]) if row[9] else 1.0
+                                    })
 
         return jsonify({
             "graph": {

@@ -1,4 +1,4 @@
-import { Menu, Search } from 'lucide-react';
+import { Menu, Search, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '../../stores/useUIStore';
 
@@ -15,6 +15,13 @@ export function Header() {
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 flex items-center px-4 gap-4">
+      <button
+        onClick={() => navigate('/')}
+        className="p-2 rounded hover:bg-slate-100"
+        aria-label="Go to home page"
+      >
+        <Home className="w-5 h-5 text-slate-600" />
+      </button>
       <button
         onClick={toggleSidebar}
         className="p-2 rounded hover:bg-slate-100"

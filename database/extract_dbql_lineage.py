@@ -174,7 +174,8 @@ class DBQLLineageExtractor:
                     q.QueryID,
                     q.StatementType,
                     CAST(s.SQLTextInfo AS VARCHAR(32000)) as query_text,
-                    q.StartTime
+                    q.StartTime,
+                    q.DefaultDatabase
                 FROM DBC.DBQLogTbl q
                 JOIN DBC.DBQLSQLTbl s
                     ON q.QueryID = s.QueryID
@@ -193,7 +194,8 @@ class DBQLLineageExtractor:
                     q.QueryID,
                     q.StatementType,
                     CAST(s.SQLTextInfo AS VARCHAR(32000)) as query_text,
-                    q.StartTime
+                    q.StartTime,
+                    q.DefaultDatabase
                 FROM DBC.DBQLogTbl q
                 JOIN DBC.DBQLSQLTbl s
                     ON q.QueryID = s.QueryID
@@ -269,7 +271,7 @@ class DBQLLineageExtractor:
         column_lineage_records: List[Dict] = []
         latest_query_time = None
 
-        for i, (query_id, stmt_type, query_text, query_time) in enumerate(queries):
+        for i, (query_id, stmt_type, query_text, query_time, default_database) in enumerate(queries):
             if not query_text:
                 continue
 
@@ -283,6 +285,11 @@ class DBQLLineageExtractor:
                 latest_query_time = query_time
 
             try:
+                # Set the default database context for this query
+                # This ensures unqualified table names resolve to the correct database
+                if default_database:
+                    self.parser.default_database = default_database.strip()
+
                 # Parse SQL and extract lineage
                 records = self.parser.extract_column_lineage(query_text, stmt_type)
 

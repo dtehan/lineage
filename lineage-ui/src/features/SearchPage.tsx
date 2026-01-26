@@ -4,6 +4,7 @@ import { useSearch } from '../api/hooks/useSearch';
 import { SearchBar } from '../components/domain/Search/SearchBar';
 import { SearchResults } from '../components/domain/Search/SearchResults';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
+import { BackButton } from '../components/common/BackButton';
 
 export function SearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -12,17 +13,21 @@ export function SearchPage() {
   const { data, isLoading } = useSearch({ query });
 
   useEffect(() => {
+    // Use replace: true to avoid pushing to history on every keystroke
     if (query) {
-      setSearchParams({ q: query });
+      setSearchParams({ q: query }, { replace: true });
     } else {
-      setSearchParams({});
+      setSearchParams({}, { replace: true });
     }
   }, [query, setSearchParams]);
 
   return (
     <div className="h-full overflow-auto">
       <div className="max-w-3xl mx-auto p-6">
-        <h1 className="text-2xl font-bold text-slate-900 mb-6">Search Assets</h1>
+        <div className="flex items-center gap-4 mb-6">
+          <BackButton />
+          <h1 className="text-2xl font-bold text-slate-900">Search Assets</h1>
+        </div>
 
         <SearchBar
           value={query}

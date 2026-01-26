@@ -323,17 +323,17 @@ function AllDatabasesLineageGraphInner() {
     );
   }
 
-  // Handle empty lineage data
-  if (mergedData.edges.length === 0 && !isLoading) {
+  // Handle empty lineage data - only show message if there are no nodes at all
+  if (mergedData.nodes.length === 0 && !isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500">
         <Network className="w-16 h-16 mb-4 text-slate-300" />
         <h3 className="text-lg font-medium text-slate-700 mb-2">No Lineage Data Available</h3>
         <p className="text-sm text-slate-500 text-center max-w-md">
-          No lineage relationships have been discovered across the databases.
+          No tables or lineage relationships have been discovered across the databases.
         </p>
         <p className="text-sm text-slate-400 mt-2 text-center max-w-md">
-          Lineage data may not have been extracted yet, or the selected databases have no relationships.
+          Lineage data may not have been extracted yet, or the selected databases have no tables.
         </p>
       </div>
     );

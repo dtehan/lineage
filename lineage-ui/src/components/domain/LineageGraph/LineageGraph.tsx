@@ -129,13 +129,17 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
   // Update nodes/edges when data changes
   useEffect(() => {
     if (data?.graph) {
-      layoutGraph(data.graph.nodes, data.graph.edges).then(
-        ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+      layoutGraph(data.graph.nodes, data.graph.edges)
+        .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
           setGraph(data.graph.nodes, data.graph.edges);
-        }
-      );
+        })
+        .catch((error) => {
+          console.error('Layout error:', error);
+          // Fallback: set nodes without layout
+          setGraph(data.graph.nodes, data.graph.edges);
+        });
     }
   }, [data, setNodes, setEdges, setGraph]);
 

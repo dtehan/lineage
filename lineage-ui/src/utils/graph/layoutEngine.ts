@@ -175,9 +175,31 @@ function transformToTableNodes(
   return { nodes, columnToTableMap };
 }
 
+// Constants for database cluster padding
+const DATABASE_CLUSTER_PADDING = 40;
+const DATABASE_CLUSTER_HEADER_HEIGHT = 50;
+
+/**
+ * Groups table nodes by their database name
+ */
+function groupTablesByDatabase(tableNodes: TableNodeData[]): Map<string, TableNodeData[]> {
+  const groups = new Map<string, TableNodeData[]>();
+
+  for (const tableNode of tableNodes) {
+    const dbName = tableNode.databaseName;
+    if (!groups.has(dbName)) {
+      groups.set(dbName, []);
+    }
+    groups.get(dbName)!.push(tableNode);
+  }
+
+  return groups;
+}
+
 /**
  * Main layout function - transforms LineageNodes/Edges to React Flow format
- * with table-grouped nodes and column-level edge routing
+ * with table-grouped nodes and column-level edge routing.
+ * Uses ELK compound nodes to ensure tables stay within their database boundaries.
  */
 export async function layoutGraph(
   rawNodes: LineageNode[],
@@ -201,66 +223,251 @@ export async function layoutGraph(
   // Transform to table node format
   const { nodes: tableNodeData, columnToTableMap } = transformToTableNodes(tableGroups, rawEdges);
 
-  // Create ELK nodes with ports
-  const elkNodes: ElkNode[] = tableNodeData.map((tableNode) => {
-    const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
-    const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
+  // Group tables by database for compound node layout
+  const databaseGroups = groupTablesByDatabase(tableNodeData);
 
-    return {
-      id: tableNode.id,
-      width,
-      height,
-      ports: createElkPorts(tableNode.id, tableNode.columns),
-      labels: [{ text: `${tableNode.databaseName}.${tableNode.tableName}` }],
-    };
+  // Build a map of tableKey -> databaseName for edge routing
+  const tableToDatabase = new Map<string, string>();
+  tableNodeData.forEach((t) => tableToDatabase.set(t.id, t.databaseName));
+
+  // Check if there are cross-database edges
+  let hasCrossDatabaseEdges = false;
+  const allElkEdges: ElkExtendedEdge[] = [];
+
+  rawEdges.forEach((edge) => {
+    const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
+    const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
+
+    if (!sourceTableKey || !targetTableKey) {
+      return;
+    }
+
+    const sourceDb = tableToDatabase.get(sourceTableKey);
+    const targetDb = tableToDatabase.get(targetTableKey);
+
+    if (sourceDb !== targetDb) {
+      hasCrossDatabaseEdges = true;
+    }
+
+    allElkEdges.push({
+      id: edge.id,
+      sources: [`${sourceTableKey}-${edge.source}-source`],
+      targets: [`${targetTableKey}-${edge.target}-target`],
+    });
   });
 
-  // Create ELK edges with port references
-  const elkEdges: ElkExtendedEdge[] = rawEdges
-    .map((edge) => {
-      const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
-      const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
-
-      if (!sourceTableKey || !targetTableKey) {
-        return null;
-      }
+  
+  // If there are cross-database edges, use flat layout (no compound nodes)
+  // This avoids ELK's limitation with cross-hierarchy edge routing
+  if (hasCrossDatabaseEdges) {
+    // Create flat table nodes (no database grouping)
+    const elkTableNodes: ElkNode[] = tableNodeData.map((tableNode) => {
+      const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
+      const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
 
       return {
-        id: edge.id,
-        sources: [`${sourceTableKey}-${edge.source}-source`],
-        targets: [`${targetTableKey}-${edge.target}-target`],
+        id: tableNode.id,
+        width,
+        height,
+        ports: createElkPorts(tableNode.id, tableNode.columns),
+        labels: [{ text: `${tableNode.databaseName}.${tableNode.tableName}` }],
       };
-    })
-    .filter((edge): edge is ElkExtendedEdge => edge !== null);
+    });
 
-  // Configure and run ELK layout
+    const elkGraph: ElkNode = {
+      id: 'root',
+      layoutOptions: {
+        'elk.algorithm': 'layered',
+        'elk.direction': direction,
+        'elk.spacing.nodeNode': String(nodeSpacing),
+        'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+        'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+        'elk.portConstraints': 'FIXED_ORDER',
+      },
+      children: elkTableNodes,
+      edges: allElkEdges,
+    };
+
+    
+    const layoutedGraph = await elk.layout(elkGraph);
+
+    
+    // Transform to React Flow nodes
+    const layoutedNodes: Node[] = (layoutedGraph.children || []).map((elkNode) => {
+      const tableNode = tableNodeData.find((n) => n.id === elkNode.id);
+      if (tableNode) {
+        return {
+          id: elkNode.id,
+          type: 'tableNode',
+          position: { x: elkNode.x || 0, y: elkNode.y || 0 },
+          data: tableNode,
+        };
+      }
+      return null;
+    }).filter((n): n is Node => n !== null);
+
+    // Transform to React Flow edges
+    const layoutedEdges: Edge[] = rawEdges
+      .map((edge) => {
+        const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
+        const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
+
+        if (!sourceTableKey || !targetTableKey) {
+          return null;
+        }
+
+        return {
+          id: edge.id,
+          source: sourceTableKey,
+          sourceHandle: `${sourceTableKey}-${edge.source}-source`,
+          target: targetTableKey,
+          targetHandle: `${targetTableKey}-${edge.target}-target`,
+          type: 'lineageEdge',
+          animated: false,
+          data: {
+            sourceColumnId: edge.source,
+            targetColumnId: edge.target,
+            transformationType: edge.transformationType || 'unknown',
+            confidenceScore: edge.confidenceScore,
+          },
+          style: {
+            stroke: getEdgeColor(edge),
+            strokeWidth: 2,
+          },
+          markerEnd: {
+            type: 'arrowclosed' as const,
+            color: getEdgeColor(edge),
+          },
+        } as Edge;
+      })
+      .filter((edge): edge is Edge => edge !== null);
+
+        return { nodes: layoutedNodes, edges: layoutedEdges };
+  }
+
+  // No cross-database edges - use compound node layout for database clustering
+  const internalEdgesByDb = new Map<string, ElkExtendedEdge[]>();
+
+  rawEdges.forEach((edge) => {
+    const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
+    const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
+
+    if (!sourceTableKey || !targetTableKey) {
+      return;
+    }
+
+    const sourceDb = tableToDatabase.get(sourceTableKey);
+
+    const elkEdge: ElkExtendedEdge = {
+      id: edge.id,
+      sources: [`${sourceTableKey}-${edge.source}-source`],
+      targets: [`${targetTableKey}-${edge.target}-target`],
+    };
+
+    if (sourceDb) {
+      if (!internalEdgesByDb.has(sourceDb)) {
+        internalEdgesByDb.set(sourceDb, []);
+      }
+      internalEdgesByDb.get(sourceDb)!.push(elkEdge);
+    }
+  });
+
+  // Create ELK compound nodes (database clusters containing table nodes)
+  const elkDatabaseNodes: ElkNode[] = [];
+
+  databaseGroups.forEach((tables, databaseName) => {
+    // Create child table nodes for this database
+    const childTableNodes: ElkNode[] = tables.map((tableNode) => {
+      const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
+      const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
+
+      return {
+        id: tableNode.id,
+        width,
+        height,
+        ports: createElkPorts(tableNode.id, tableNode.columns),
+        labels: [{ text: tableNode.tableName }],
+      };
+    });
+
+    const internalEdges = internalEdgesByDb.get(databaseName) || [];
+    const hasInternalEdges = internalEdges.length > 0;
+
+    // Choose algorithm based on whether there are internal edges
+    const innerLayoutOptions: Record<string, string> = {
+      'elk.padding': `[top=${DATABASE_CLUSTER_HEADER_HEIGHT},left=${DATABASE_CLUSTER_PADDING},bottom=${DATABASE_CLUSTER_PADDING},right=${DATABASE_CLUSTER_PADDING}]`,
+      'elk.spacing.nodeNode': String(nodeSpacing),
+    };
+
+    if (hasInternalEdges) {
+      innerLayoutOptions['elk.algorithm'] = 'layered';
+      innerLayoutOptions['elk.direction'] = direction;
+      innerLayoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = String(layerSpacing);
+      innerLayoutOptions['elk.portConstraints'] = 'FIXED_ORDER';
+    } else {
+      innerLayoutOptions['elk.algorithm'] = 'rectpacking';
+      innerLayoutOptions['elk.rectpacking.widthApproximation.strategy'] = 'MAX_SCALE_DRIVEN';
+      innerLayoutOptions['elk.rectpacking.widthApproximation.targetWidth'] = String(1200);
+      innerLayoutOptions['elk.contentAlignment'] = 'V_CENTER H_LEFT';
+    }
+
+    // Create database compound node containing all its tables
+    elkDatabaseNodes.push({
+      id: `db-${databaseName}`,
+      labels: [{ text: databaseName }],
+      layoutOptions: innerLayoutOptions,
+      children: childTableNodes,
+      edges: internalEdges,
+    });
+  });
+
+  // Configure and run ELK layout with compound node support
   const elkGraph: ElkNode = {
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': direction,
-      'elk.spacing.nodeNode': String(nodeSpacing),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+      'elk.spacing.nodeNode': String(nodeSpacing * 2),
+      'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing * 1.5),
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
       'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
       'elk.portConstraints': 'FIXED_ORDER',
       'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
     },
-    children: elkNodes,
-    edges: elkEdges,
+    children: elkDatabaseNodes,
+    edges: [], // No external edges in this path
   };
 
+  
   const layoutedGraph = await elk.layout(elkGraph);
 
-  // Transform to React Flow nodes
-  const layoutedNodes: Node[] = (layoutedGraph.children || []).map((elkNode) => {
-    const tableNode = tableNodeData.find((n) => n.id === elkNode.id)!;
-    return {
-      id: elkNode.id,
-      type: 'tableNode',
-      position: { x: elkNode.x || 0, y: elkNode.y || 0 },
-      data: tableNode,
-    };
+  
+  // Transform to React Flow nodes - extract table positions from within database compound nodes
+  const layoutedNodes: Node[] = [];
+
+  (layoutedGraph.children || []).forEach((elkDbNode) => {
+    // Get database position offset
+    const dbX = elkDbNode.x || 0;
+    const dbY = elkDbNode.y || 0;
+
+    // Extract table nodes from within the database compound node
+    (elkDbNode.children || []).forEach((elkTableNode) => {
+      const tableNode = tableNodeData.find((n) => n.id === elkTableNode.id);
+      if (tableNode) {
+        layoutedNodes.push({
+          id: elkTableNode.id,
+          type: 'tableNode',
+          // Position is relative to database container, so add the database offset
+          position: {
+            x: dbX + (elkTableNode.x || 0),
+            y: dbY + (elkTableNode.y || 0)
+          },
+          data: tableNode,
+        });
+      }
+    });
   });
 
   // Transform to React Flow edges with handles
@@ -299,7 +506,7 @@ export async function layoutGraph(
     })
     .filter((edge): edge is Edge => edge !== null);
 
-  return { nodes: layoutedNodes, edges: layoutedEdges };
+    return { nodes: layoutedNodes, edges: layoutedEdges };
 }
 
 /**
