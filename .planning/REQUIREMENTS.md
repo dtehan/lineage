@@ -1,0 +1,121 @@
+# Requirements: Lineage Application Production Hardening
+
+**Defined:** 2026-01-29
+**Core Value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
+
+## v1 Requirements
+
+Requirements for production hardening. Each maps to roadmap phases.
+
+### Input Validation
+
+- [ ] **VALID-01**: API validates maxDepth parameter is integer between 1 and 20, returns 400 Bad Request for invalid values
+- [ ] **VALID-02**: API validates direction parameter is one of "upstream", "downstream", or "both", returns 400 Bad Request for invalid values
+- [ ] **VALID-03**: API returns structured error response with error code, message, and request ID for all validation failures
+- [ ] **VALID-04**: Validation limits are configurable via environment variables with documented defaults
+
+### Security Hardening
+
+- [ ] **SEC-01**: Remove all default credentials from source code; require TERADATA_PASSWORD environment variable
+- [ ] **SEC-02**: Application fails fast at startup if required credentials are missing (no silent fallback to defaults)
+- [ ] **SEC-03**: API wraps all database errors in generic error responses; detailed errors logged server-side only
+- [ ] **SEC-04**: Error responses never expose database schema, table names, SQL syntax, or connection details
+- [ ] **SEC-05**: Structured logging with log/slog captures error context (request ID, user context, timestamp) for debugging
+- [ ] **SEC-06**: Security documentation describes authentication/rate limiting deployment requirements and assumptions
+
+### Pagination
+
+- [ ] **PAGE-01**: Asset listing endpoints (databases, tables, columns) support limit and offset query parameters
+- [ ] **PAGE-02**: Default page size is 100; maximum page size is 500; API returns 400 for values outside bounds
+- [ ] **PAGE-03**: Paginated responses include metadata: total count, has_next boolean, current page info
+- [ ] **PAGE-04**: Backend repositories implement pagination with LIMIT/OFFSET at database layer
+- [ ] **PAGE-05**: Frontend updates to handle paginated responses and load additional pages as needed
+
+### DBQL Error Handling
+
+- [ ] **DBQL-01**: DBQL extraction detects missing DBQL access and provides clear error message with fallback guidance
+- [ ] **DBQL-02**: Extraction handles malformed queries in DBQL gracefully (log and skip, don't fail entire extraction)
+- [ ] **DBQL-03**: Partial extraction failures logged with specific error context (query ID, table name, error type)
+- [ ] **DBQL-04**: Extraction validates DBQL data completeness (row counts, null checks) and reports anomalies
+
+### Testing
+
+- [ ] **TEST-01**: Unit tests verify maxDepth and direction validation with edge cases (null, negative, string values)
+- [ ] **TEST-02**: Integration tests verify error responses never expose internal details
+- [ ] **TEST-03**: Tests verify application startup fails with missing credentials (no silent fallback)
+- [ ] **TEST-04**: Tests verify pagination bounds enforcement and metadata correctness
+- [ ] **TEST-05**: Tests verify DBQL error handling for missing access and malformed queries
+
+## v2 Requirements
+
+Deferred to future milestones.
+
+### High Priority Concerns
+
+- **REDIS-01**: Integrate Redis caching or remove dead code
+- **PARSER-01**: Improve SQL parser with confidence tracking and fallback visibility
+- **GRAPH-01**: Validate lineage graph building correctness with complex patterns
+- **EXTRACT-01**: Harden database extraction logic against Teradata version changes
+- **E2E-01**: End-to-end lineage validation testing through multiple hops
+- **CREDS-01**: Integrate with secrets vault (HashiCorp Vault, AWS Secrets Manager)
+
+### Medium Priority Concerns
+
+- **SEARCH-01**: Add secondary indexes for search performance
+- **CTE-01**: Optimize recursive CTE performance for deep graphs
+- **POOL-01**: Configure connection pooling (MaxOpenConns, MaxIdleConns, ConnMaxLifetime)
+- **DEP-01**: Pin SQLGlot version with compatibility tests
+- **REFRESH-01**: Implement selective lineage refresh from DBQL
+- **PERF-01**: Large graph performance testing (100+ nodes)
+
+## Out of Scope
+
+Explicitly excluded from this milestone.
+
+| Feature | Reason |
+|---------|--------|
+| Authentication middleware implementation | Assumes deployment behind auth proxy; document assumptions only per SEC-06 |
+| Rate limiting implementation | Infrastructure-level rate limiting (API gateway) preferred; document in SEC-06 |
+| Low priority concerns (13 items) | Not blocking production; defer to backlog |
+| New features or UI enhancements | Focus on production hardening only |
+| Backwards compatibility preservation | Breaking changes acceptable; will update frontend simultaneously |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| VALID-01 | TBD | Pending |
+| VALID-02 | TBD | Pending |
+| VALID-03 | TBD | Pending |
+| VALID-04 | TBD | Pending |
+| SEC-01 | TBD | Pending |
+| SEC-02 | TBD | Pending |
+| SEC-03 | TBD | Pending |
+| SEC-04 | TBD | Pending |
+| SEC-05 | TBD | Pending |
+| SEC-06 | TBD | Pending |
+| PAGE-01 | TBD | Pending |
+| PAGE-02 | TBD | Pending |
+| PAGE-03 | TBD | Pending |
+| PAGE-04 | TBD | Pending |
+| PAGE-05 | TBD | Pending |
+| DBQL-01 | TBD | Pending |
+| DBQL-02 | TBD | Pending |
+| DBQL-03 | TBD | Pending |
+| DBQL-04 | TBD | Pending |
+| TEST-01 | TBD | Pending |
+| TEST-02 | TBD | Pending |
+| TEST-03 | TBD | Pending |
+| TEST-04 | TBD | Pending |
+| TEST-05 | TBD | Pending |
+
+**Coverage:**
+- v1 requirements: 24 total
+- Mapped to phases: 0 (pending roadmap creation)
+- Unmapped: 24 ⚠️
+
+---
+*Requirements defined: 2026-01-29*
+*Last updated: 2026-01-29 after initial definition*
