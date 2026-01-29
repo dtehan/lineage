@@ -86,36 +86,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| VALID-01 | TBD | Pending |
-| VALID-02 | TBD | Pending |
-| VALID-03 | TBD | Pending |
-| VALID-04 | TBD | Pending |
-| SEC-01 | TBD | Pending |
-| SEC-02 | TBD | Pending |
-| SEC-03 | TBD | Pending |
-| SEC-04 | TBD | Pending |
-| SEC-05 | TBD | Pending |
-| SEC-06 | TBD | Pending |
-| PAGE-01 | TBD | Pending |
-| PAGE-02 | TBD | Pending |
-| PAGE-03 | TBD | Pending |
-| PAGE-04 | TBD | Pending |
-| PAGE-05 | TBD | Pending |
-| DBQL-01 | TBD | Pending |
-| DBQL-02 | TBD | Pending |
-| DBQL-03 | TBD | Pending |
-| DBQL-04 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| TEST-04 | TBD | Pending |
-| TEST-05 | TBD | Pending |
+| VALID-01 | Phase 3 | Pending |
+| VALID-02 | Phase 3 | Pending |
+| VALID-03 | Phase 3 | Pending |
+| VALID-04 | Phase 3 | Pending |
+| SEC-01 | Phase 2 | Pending |
+| SEC-02 | Phase 2 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| SEC-04 | Phase 1 | Pending |
+| SEC-05 | Phase 1 | Pending |
+| SEC-06 | Phase 6 | Pending |
+| PAGE-01 | Phase 4 | Pending |
+| PAGE-02 | Phase 4 | Pending |
+| PAGE-03 | Phase 4 | Pending |
+| PAGE-04 | Phase 4 | Pending |
+| PAGE-05 | Phase 4 | Pending |
+| DBQL-01 | Phase 5 | Pending |
+| DBQL-02 | Phase 5 | Pending |
+| DBQL-03 | Phase 5 | Pending |
+| DBQL-04 | Phase 5 | Pending |
+| TEST-01 | Phase 3 | Pending |
+| TEST-02 | Phase 1 | Pending |
+| TEST-03 | Phase 2 | Pending |
+| TEST-04 | Phase 4 | Pending |
+| TEST-05 | Phase 5 | Pending |
 
 **Coverage:**
 - v1 requirements: 24 total
-- Mapped to phases: 0 (pending roadmap creation)
-- Unmapped: 24 ⚠️
+- Mapped to phases: 24
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-29*
-*Last updated: 2026-01-29 after initial definition*
+*Last updated: 2026-01-29 after roadmap creation*
