@@ -46,10 +46,10 @@ Plans:
   2. Application exits with clear error message if TERADATA_PASSWORD environment variable is missing
   3. Startup validation checks all required environment variables before accepting requests
   4. Tests verify application fails to start when credentials are missing
-**Plans**: TBD
+**Plans**: 1 plan in 1 wave
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md - Remove default credentials and add fail-fast validation
 
 ### Phase 3: Input Validation
 **Goal**: All user-supplied parameters are validated with bounds enforcement and clear error messages
@@ -116,7 +116,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Error Handling Foundation | 0/3 | Planned | - |
-| 2. Credential Security | 0/TBD | Not started | - |
+| 2. Credential Security | 0/1 | Planned | - |
 | 3. Input Validation | 0/TBD | Not started | - |
 | 4. Pagination | 0/TBD | Not started | - |
 | 5. DBQL Error Handling | 0/TBD | Not started | - |
