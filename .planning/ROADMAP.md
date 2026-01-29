@@ -61,10 +61,11 @@ Plans:
   3. Validation error responses include error code, descriptive message, and request ID
   4. Validation limits (maxDepth, page size) are configurable via environment variables
   5. Unit tests cover edge cases: null, negative numbers, strings, boundary values
-**Plans**: TBD
+**Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 03-01: TBD
+- [ ] 03-01-PLAN.md - Create validation infrastructure (config + validation module)
+- [ ] 03-02-PLAN.md - Update handlers with validation and add unit tests
 
 ### Phase 4: Pagination
 **Goal**: Asset listing endpoints return paginated results with metadata for efficient navigation
@@ -117,7 +118,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Error Handling Foundation | 0/3 | Planned | - |
 | 2. Credential Security | 0/1 | Planned | - |
-| 3. Input Validation | 0/TBD | Not started | - |
+| 3. Input Validation | 0/2 | Planned | - |
 | 4. Pagination | 0/TBD | Not started | - |
 | 5. DBQL Error Handling | 0/TBD | Not started | - |
 | 6. Security Documentation | 0/TBD | Not started | - |
