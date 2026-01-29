@@ -30,10 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Error responses contain request ID but no SQL, table names, or connection details
   3. Server logs include full error details with request ID, timestamp, and stack trace
   4. Integration tests verify error responses contain no database schema information
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 01-01: TBD
+- [ ] 01-01-PLAN.md - Create error handling infrastructure (logger + response format)
+- [ ] 01-02-PLAN.md - Update handlers with secure error handling
+- [ ] 01-03-PLAN.md - Create error response security tests
 
 ### Phase 2: Credential Security
 **Goal**: Application requires explicit credential configuration and fails immediately if missing
@@ -113,7 +115,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Error Handling Foundation | 0/TBD | Not started | - |
+| 1. Error Handling Foundation | 0/3 | Planned | - |
 | 2. Credential Security | 0/TBD | Not started | - |
 | 3. Input Validation | 0/TBD | Not started | - |
 | 4. Pagination | 0/TBD | Not started | - |
