@@ -9,16 +9,17 @@ This roadmap continues from v1.0 (shipped 2026-01-30) to address technical debt 
 
 ## Current Milestone: v2.0 Configuration Improvements
 
-### Phase 7: Environment Variable Consolidation
+### Phase 7: Environment Variable Consolidation ✓
 
 **Goal:** Unify Teradata connection configuration across Python scripts and Go/Python server with consistent naming
 **Depends on:** v1.0 complete
 **Plans:** 3 plans (2 waves)
+**Completed:** 2026-01-30
 
 Plans:
-- [ ] 07-01-PLAN.md - Python configuration consolidation (db_config.py, python_server.py)
-- [ ] 07-02-PLAN.md - Go configuration consolidation (config.go)
-- [ ] 07-03-PLAN.md - Documentation consolidation (.env.example, CLAUDE.md, user_guide.md, SECURITY.md)
+- [x] 07-01-PLAN.md - Python configuration consolidation (db_config.py, python_server.py)
+- [x] 07-02-PLAN.md - Go configuration consolidation (config.go)
+- [x] 07-03-PLAN.md - Documentation consolidation (.env.example, CLAUDE.md, user_guide.md, SECURITY.md)
 
 **Details:**
 Standardize on TERADATA_* as primary variable names with TD_* as deprecated legacy fallback. Change PORT to API_PORT with PORT as fallback. Update all documentation to reflect consolidated naming.
