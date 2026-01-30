@@ -12,6 +12,8 @@ A comprehensive guide for using the column-level data lineage application for Te
 6. [Common Tasks](#common-tasks)
 7. [Troubleshooting](#troubleshooting)
 8. [Glossary](#glossary)
+9. [OpenLineage Integration](#openlineage-integration)
+10. [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction)
 
 ---
 
@@ -1530,6 +1532,104 @@ For the ClearScape Analytics test environment:
 | Database | `demo_user` |
 
 ---
+
+---
+
+## OpenLineage Integration
+
+This application supports the [OpenLineage](https://openlineage.io/) standard (spec version 2-0-2) for data lineage metadata interoperability.
+
+### OpenLineage Schema
+
+The OpenLineage-aligned schema provides:
+
+- **Namespace-based identification**: Assets are identified using URIs (e.g., `teradata://host:1025`)
+- **Standardized transformation types**: DIRECT/INDIRECT with subtypes (IDENTITY, TRANSFORMATION, AGGREGATION, JOIN, FILTER, etc.)
+- **Event-based model**: Supports tracking lineage discovery through job runs
+- **Facet extensibility**: Schema designed for future facet additions
+
+### Setting Up OpenLineage Tables
+
+```bash
+# Create OpenLineage tables alongside legacy tables
+cd database
+python setup_lineage_schema.py --openlineage
+
+# Populate OpenLineage tables
+python populate_lineage.py --openlineage
+```
+
+### v2 API Endpoints
+
+The v2 API follows OpenLineage conventions:
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/v2/openlineage/namespaces` | List all data source namespaces |
+| `GET /api/v2/openlineage/namespaces/{id}` | Get namespace details |
+| `GET /api/v2/openlineage/namespaces/{id}/datasets` | List datasets in namespace |
+| `GET /api/v2/openlineage/datasets/{id}` | Get dataset with fields |
+| `GET /api/v2/openlineage/datasets/search?q=query` | Search datasets |
+| `GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}` | Get field lineage graph |
+
+### Lineage Query Parameters
+
+The lineage endpoint supports:
+
+| Parameter | Values | Default | Description |
+|-----------|--------|---------|-------------|
+| `direction` | `upstream`, `downstream`, `both` | `both` | Lineage direction to traverse |
+| `maxDepth` | 1-20 | 5 | Maximum traversal depth |
+
+### Transformation Types
+
+OpenLineage defines two primary transformation types:
+
+| Type | Subtypes | Description |
+|------|----------|-------------|
+| DIRECT | IDENTITY, TRANSFORMATION, AGGREGATION | Value directly derived from source |
+| INDIRECT | JOIN, FILTER, GROUP_BY, SORT, WINDOW, CONDITIONAL | Value influenced by source but not directly derived |
+
+### Migration from v1 to v2 API
+
+The v1 API (`/api/v1/*`) remains fully functional for backward compatibility. Key differences:
+
+| Aspect | v1 API | v2 API |
+|--------|--------|--------|
+| Asset identification | `database.table.column` format | Namespace + dataset + field |
+| Transformation types | Single type (DIRECT, CALCULATION, etc.) | Type + subtype (DIRECT/IDENTITY, etc.) |
+| Schema alignment | Custom LIN_* tables | OpenLineage OL_* tables |
+| Namespace | Implicit | Explicit URI format |
+
+### Example: Fetching Lineage
+
+```bash
+# v2 API example
+curl "http://localhost:8080/api/v2/openlineage/lineage/demo_user.STG_CUSTOMER/customer_id?direction=upstream&maxDepth=3"
+```
+
+Response includes OpenLineage-structured graph with transformation type/subtype:
+
+```json
+{
+  "datasetId": "demo_user.STG_CUSTOMER",
+  "fieldName": "customer_id",
+  "direction": "upstream",
+  "maxDepth": 3,
+  "graph": {
+    "nodes": [...],
+    "edges": [
+      {
+        "id": "...",
+        "source": "demo_user.SRC_CUSTOMER/customer_id",
+        "target": "demo_user.STG_CUSTOMER/customer_id",
+        "transformationType": "DIRECT",
+        "transformationSubtype": "IDENTITY"
+      }
+    ]
+  }
+}
+```
 
 ---
 
