@@ -35,7 +35,7 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 
 	databases, err := h.assetService.ListDatabases(ctx)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -51,7 +51,7 @@ func (h *Handler) ListTables(w http.ResponseWriter, r *http.Request) {
 
 	tables, err := h.assetService.ListTables(ctx, databaseName)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -68,7 +68,7 @@ func (h *Handler) ListColumns(w http.ResponseWriter, r *http.Request) {
 
 	columns, err := h.assetService.ListColumns(ctx, databaseName, tableName)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -103,7 +103,7 @@ func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetLineageGraph(ctx, req)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -124,7 +124,7 @@ func (h *Handler) GetUpstreamLineage(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetUpstreamLineage(ctx, assetID, maxDepth)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -145,7 +145,7 @@ func (h *Handler) GetDownstreamLineage(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetDownstreamLineage(ctx, assetID, maxDepth)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -166,7 +166,7 @@ func (h *Handler) GetImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetImpactAnalysis(ctx, assetID, maxDepth)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -195,7 +195,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.searchService.Search(ctx, req)
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		respondError(w, r, http.StatusInternalServerError, err.Error())
 		return
 	}
 
