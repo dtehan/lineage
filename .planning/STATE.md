@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** Phase 7 complete - ready for Phase 8 (OpenLineage alignment)
+**Current focus:** Phase 8 in progress - OpenLineage standard alignment
 
 ## Current Position
 
-Phase: 7 of 8 (Environment Variable Consolidation)
-Plan: 3 of 3 in current phase
-Status: Phase complete
-Last activity: 2026-01-30 - Completed 07-03-PLAN.md
-Next Phase: Phase 8 (OpenLineage Standard Alignment)
+Phase: 8 of 8 (OpenLineage Standard Alignment)
+Plan: 1 of 7 in current phase
+Status: In progress
+Last activity: 2026-01-30 - Completed 08-01-PLAN.md
 
-Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 plans [COMPLETE]
+Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Phase 8: 1/7 plans
+[=================.......] 17/23 plans (74%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16
+- Total plans completed: 17
 - Average duration: 4 min
-- Total execution time: 54 min
+- Total execution time: 57 min
 
 **By Phase:**
 
@@ -35,9 +35,10 @@ Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 plans [COMPLETE
 | 05-dbql-error-handling | 2 | 5 min | 2.5 min |
 | 06-security-documentation | 1 | 2 min | 2 min |
 | 07-environment-variable-consolidation | 3 | 5 min | 1.7 min |
+| 08-open-lineage-standard-alignment | 1 | 3 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 06-01 (2 min), 07-01 (2 min), 07-02 (1 min), 07-03 (2 min)
+- Last 5 plans: 07-01 (2 min), 07-02 (1 min), 07-03 (2 min), 08-01 (3 min)
 - Trend: Excellent velocity
 
 *Updated after each plan completion*
@@ -100,6 +101,11 @@ Recent decisions affecting current work:
 - [07-02]: Place fallback bindings after defaults, before Config struct assignment
 - [07-03]: Single consolidated environment variable table in documentation
 - [07-03]: Inline deprecation notes rather than separate section
+- [08-01]: OL_* table prefix for OpenLineage-aligned tables (clear distinction from LIN_*)
+- [08-01]: Materialized column lineage in OL_COLUMN_LINEAGE (efficient graph queries)
+- [08-01]: --openlineage and --openlineage-only CLI flags (backward compatibility)
+- [08-01]: transformation_type + transformation_subtype columns (OpenLineage spec v2-0-2)
+- [08-01]: OL_SCHEMA_VERSION table for spec version tracking
 
 ### Pending Todos
 
@@ -117,5 +123,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 07-03-PLAN.md, Phase 7 complete
+Stopped at: Completed 08-01-PLAN.md
 Resume file: None
