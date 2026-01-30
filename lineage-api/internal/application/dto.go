@@ -81,3 +81,78 @@ type SearchResponse struct {
 	Total   int                   `json:"total"`
 	Query   string                `json:"query"`
 }
+
+// OpenLineage API DTOs
+
+// OpenLineageNamespaceResponse represents a namespace in API responses
+type OpenLineageNamespaceResponse struct {
+	ID          string `json:"id"`
+	URI         string `json:"uri"`
+	Description string `json:"description,omitempty"`
+	SpecVersion string `json:"specVersion"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+// OpenLineageDatasetResponse represents a dataset in API responses
+type OpenLineageDatasetResponse struct {
+	ID          string                      `json:"id"`
+	Namespace   string                      `json:"namespace"`
+	Name        string                      `json:"name"`
+	Description string                      `json:"description,omitempty"`
+	SourceType  string                      `json:"sourceType,omitempty"`
+	Fields      []OpenLineageFieldResponse  `json:"fields,omitempty"`
+	CreatedAt   string                      `json:"createdAt"`
+	UpdatedAt   string                      `json:"updatedAt"`
+}
+
+// OpenLineageFieldResponse represents a field in API responses
+type OpenLineageFieldResponse struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Type            string `json:"type,omitempty"`
+	Description     string `json:"description,omitempty"`
+	OrdinalPosition int    `json:"ordinalPosition"`
+	Nullable        bool   `json:"nullable"`
+}
+
+// OpenLineageLineageResponse represents lineage data in API responses
+type OpenLineageLineageResponse struct {
+	DatasetID string                     `json:"datasetId"`
+	FieldName string                     `json:"fieldName"`
+	Direction string                     `json:"direction"`
+	MaxDepth  int                        `json:"maxDepth"`
+	Graph     *OpenLineageGraphResponse  `json:"graph"`
+}
+
+// OpenLineageGraphResponse represents a lineage graph in API responses
+type OpenLineageGraphResponse struct {
+	Nodes []OpenLineageNodeResponse `json:"nodes"`
+	Edges []OpenLineageEdgeResponse `json:"edges"`
+}
+
+// OpenLineageNodeResponse represents a node in the lineage graph
+type OpenLineageNodeResponse struct {
+	ID        string         `json:"id"`
+	Type      string         `json:"type"`
+	Namespace string         `json:"namespace,omitempty"`
+	Dataset   string         `json:"dataset"`
+	Field     string         `json:"field,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+}
+
+// OpenLineageEdgeResponse represents an edge in the lineage graph
+type OpenLineageEdgeResponse struct {
+	ID                    string  `json:"id"`
+	Source                string  `json:"source"`
+	Target                string  `json:"target"`
+	TransformationType    string  `json:"transformationType"`
+	TransformationSubtype string  `json:"transformationSubtype"`
+	ConfidenceScore       float64 `json:"confidenceScore,omitempty"`
+}
+
+// PaginatedDatasetsResponse represents paginated datasets
+type PaginatedDatasetsResponse struct {
+	Datasets   []OpenLineageDatasetResponse `json:"datasets"`
+	Total      int                          `json:"total"`
+	Pagination *PaginationMeta              `json:"pagination,omitempty"`
+}
