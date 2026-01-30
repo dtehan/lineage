@@ -3,19 +3,25 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/lineage-api/internal/application"
 	httpAdapter "github.com/lineage-api/internal/adapter/inbound/http"
 	"github.com/lineage-api/internal/adapter/outbound/teradata"
+	"github.com/lineage-api/internal/application"
 	"github.com/lineage-api/internal/infrastructure/config"
+	"github.com/lineage-api/internal/infrastructure/logging"
 )
 
 func main() {
+	// Initialize structured JSON logging
+	logger := logging.NewLogger(slog.LevelInfo)
+	logging.SetDefault(logger)
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
