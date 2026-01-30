@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -1187,4 +1189,291 @@ func TestAllHandlersReturnGenericError(t *testing.T) {
 			assert.NotContains(t, body, "FROM", "%s should not leak FROM", tt.name)
 		})
 	}
+}
+
+// =============================================================================
+// Pagination Validation Tests (PAGE-01, PAGE-02, TEST-04)
+// =============================================================================
+
+// TEST-04: pagination validation for ListDatabases
+func TestListDatabases_PaginationValidation(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+
+	tests := []struct {
+		name         string
+		limitParam   string
+		offsetParam  string
+		expectStatus int
+		expectError  bool
+	}{
+		// Valid cases
+		{"default values", "", "", http.StatusOK, false},
+		{"valid limit", "50", "", http.StatusOK, false},
+		{"valid limit and offset", "50", "100", http.StatusOK, false},
+		{"min limit", "1", "0", http.StatusOK, false},
+		{"max limit", "500", "0", http.StatusOK, false},
+		{"large offset", "100", "1000", http.StatusOK, false},
+
+		// Invalid limit
+		{"limit zero", "0", "", http.StatusBadRequest, true},
+		{"limit negative", "-1", "", http.StatusBadRequest, true},
+		{"limit above max", "501", "", http.StatusBadRequest, true},
+		{"limit way above max", "10000", "", http.StatusBadRequest, true},
+		{"limit non-integer", "abc", "", http.StatusBadRequest, true},
+		{"limit float", "50.5", "", http.StatusBadRequest, true},
+
+		// Invalid offset
+		{"offset negative", "100", "-1", http.StatusBadRequest, true},
+		{"offset non-integer", "100", "abc", http.StatusBadRequest, true},
+		{"offset float", "100", "10.5", http.StatusBadRequest, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, assetRepo, _, _ := setupTestHandler()
+			assetRepo.Databases = []domain.Database{{ID: "db-001", Name: "test"}}
+			assetRepo.DatabaseCount = 1
+
+			url := "/api/v1/assets/databases"
+			params := []string{}
+			if tt.limitParam != "" {
+				params = append(params, "limit="+tt.limitParam)
+			}
+			if tt.offsetParam != "" {
+				params = append(params, "offset="+tt.offsetParam)
+			}
+			if len(params) > 0 {
+				url += "?" + strings.Join(params, "&")
+			}
+
+			req := newTestRequestWithRequestID("GET", url, nil)
+			w := httptest.NewRecorder()
+
+			handler.ListDatabases(w, req)
+
+			assert.Equal(t, tt.expectStatus, w.Code, "status code mismatch for %s", tt.name)
+			if tt.expectError {
+				var response ValidationErrorResponse
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, "VALIDATION_ERROR", response.Code)
+			}
+		})
+	}
+}
+
+// TEST-04: pagination validation for ListTables
+func TestListTables_PaginationValidation(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+
+	tests := []struct {
+		name         string
+		limitParam   string
+		offsetParam  string
+		expectStatus int
+		expectError  bool
+	}{
+		{"default values", "", "", http.StatusOK, false},
+		{"valid params", "50", "100", http.StatusOK, false},
+		{"limit zero", "0", "", http.StatusBadRequest, true},
+		{"limit above max", "501", "", http.StatusBadRequest, true},
+		{"offset negative", "100", "-1", http.StatusBadRequest, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, assetRepo, _, _ := setupTestHandler()
+			assetRepo.Tables = []domain.Table{{ID: "tbl-001", DatabaseName: "test_db", TableName: "users"}}
+			assetRepo.TableCount = 1
+
+			url := "/api/v1/assets/databases/test_db/tables"
+			params := []string{}
+			if tt.limitParam != "" {
+				params = append(params, "limit="+tt.limitParam)
+			}
+			if tt.offsetParam != "" {
+				params = append(params, "offset="+tt.offsetParam)
+			}
+			if len(params) > 0 {
+				url += "?" + strings.Join(params, "&")
+			}
+
+			req := newTestRequestWithRequestID("GET", url, map[string]string{"database": "test_db"})
+			w := httptest.NewRecorder()
+
+			handler.ListTables(w, req)
+
+			assert.Equal(t, tt.expectStatus, w.Code, "status code mismatch for %s", tt.name)
+			if tt.expectError {
+				assert.Contains(t, w.Body.String(), "VALIDATION_ERROR")
+			}
+		})
+	}
+}
+
+// TEST-04: pagination validation for ListColumns
+func TestListColumns_PaginationValidation(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+
+	tests := []struct {
+		name         string
+		limitParam   string
+		offsetParam  string
+		expectStatus int
+		expectError  bool
+	}{
+		{"default values", "", "", http.StatusOK, false},
+		{"valid params", "50", "100", http.StatusOK, false},
+		{"limit zero", "0", "", http.StatusBadRequest, true},
+		{"offset negative", "100", "-1", http.StatusBadRequest, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, assetRepo, _, _ := setupTestHandler()
+			assetRepo.Columns = []domain.Column{{ID: "col-001", DatabaseName: "test_db", TableName: "users", ColumnName: "id"}}
+			assetRepo.ColumnCount = 1
+
+			url := "/api/v1/assets/databases/test_db/tables/users/columns"
+			params := []string{}
+			if tt.limitParam != "" {
+				params = append(params, "limit="+tt.limitParam)
+			}
+			if tt.offsetParam != "" {
+				params = append(params, "offset="+tt.offsetParam)
+			}
+			if len(params) > 0 {
+				url += "?" + strings.Join(params, "&")
+			}
+
+			req := newTestRequestWithRequestID("GET", url, map[string]string{"database": "test_db", "table": "users"})
+			w := httptest.NewRecorder()
+
+			handler.ListColumns(w, req)
+
+			assert.Equal(t, tt.expectStatus, w.Code, "status code mismatch for %s", tt.name)
+			if tt.expectError {
+				assert.Contains(t, w.Body.String(), "VALIDATION_ERROR")
+			}
+		})
+	}
+}
+
+// PAGE-03: Pagination metadata in response
+func TestListDatabases_PaginationMetadata(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+	handler, assetRepo, _, _ := setupTestHandler()
+
+	// Setup: 25 databases, request page with offset 10, limit 10
+	for i := 0; i < 25; i++ {
+		assetRepo.Databases = append(assetRepo.Databases, domain.Database{
+			ID:   fmt.Sprintf("db-%03d", i),
+			Name: fmt.Sprintf("database_%d", i),
+		})
+	}
+	assetRepo.DatabaseCount = 25
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/assets/databases?limit=10&offset=10", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListDatabases(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response application.DatabaseListResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Verify pagination metadata
+	require.NotNil(t, response.Pagination, "pagination should be present")
+	assert.Equal(t, 25, response.Pagination.TotalCount, "total_count should be 25")
+	assert.Equal(t, 10, response.Pagination.Limit, "limit should be 10")
+	assert.Equal(t, 10, response.Pagination.Offset, "offset should be 10")
+	assert.True(t, response.Pagination.HasNext, "has_next should be true (10+10 < 25)")
+
+	// Verify we got 10 items
+	assert.Len(t, response.Databases, 10)
+}
+
+// PAGE-03: has_next is false on last page
+func TestListDatabases_HasNextFalseOnLastPage(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+	handler, assetRepo, _, _ := setupTestHandler()
+
+	// Setup: 25 databases, request last page (offset 20, limit 10 = items 20-24)
+	for i := 0; i < 25; i++ {
+		assetRepo.Databases = append(assetRepo.Databases, domain.Database{
+			ID:   fmt.Sprintf("db-%03d", i),
+			Name: fmt.Sprintf("database_%d", i),
+		})
+	}
+	assetRepo.DatabaseCount = 25
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/assets/databases?limit=10&offset=20", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListDatabases(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response application.DatabaseListResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	require.NotNil(t, response.Pagination)
+	assert.False(t, response.Pagination.HasNext, "has_next should be false on last page (20+10 >= 25)")
+	assert.Len(t, response.Databases, 5, "should return remaining 5 items")
+}
+
+// PAGE-02: Default page size is 100
+func TestListDatabases_DefaultPageSize(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+	handler, assetRepo, _, _ := setupTestHandler()
+
+	assetRepo.Databases = []domain.Database{{ID: "db-001", Name: "test"}}
+	assetRepo.DatabaseCount = 1
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/assets/databases", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListDatabases(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response application.DatabaseListResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	require.NotNil(t, response.Pagination)
+	assert.Equal(t, 100, response.Pagination.Limit, "default limit should be 100")
+	assert.Equal(t, 0, response.Pagination.Offset, "default offset should be 0")
+}
+
+// Verify multiple validation errors are reported
+func TestListDatabases_MultipleValidationErrors(t *testing.T) {
+	SetPaginationConfig(1, 500, 100)
+	handler, _, _, _ := setupTestHandler()
+
+	// Both limit and offset invalid
+	req := newTestRequestWithRequestID("GET", "/api/v1/assets/databases?limit=abc&offset=-5", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListDatabases(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response ValidationErrorResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, "VALIDATION_ERROR", response.Code)
+	assert.GreaterOrEqual(t, len(response.Details), 2, "should report both errors")
+
+	// Verify both fields are mentioned
+	fields := make(map[string]bool)
+	for _, detail := range response.Details {
+		fields[detail.Field] = true
+	}
+	assert.True(t, fields["limit"], "should include limit error")
+	assert.True(t, fields["offset"], "should include offset error")
 }
