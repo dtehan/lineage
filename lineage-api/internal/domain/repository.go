@@ -34,3 +34,32 @@ type CacheRepository interface {
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
 }
+
+// OpenLineageRepository defines operations for OpenLineage-aligned data
+type OpenLineageRepository interface {
+	// Namespace operations
+	GetNamespace(ctx context.Context, namespaceID string) (*OpenLineageNamespace, error)
+	GetNamespaceByURI(ctx context.Context, uri string) (*OpenLineageNamespace, error)
+	ListNamespaces(ctx context.Context) ([]OpenLineageNamespace, error)
+
+	// Dataset operations
+	GetDataset(ctx context.Context, datasetID string) (*OpenLineageDataset, error)
+	ListDatasets(ctx context.Context, namespaceID string, limit, offset int) ([]OpenLineageDataset, int, error)
+	SearchDatasets(ctx context.Context, query string, limit int) ([]OpenLineageDataset, error)
+
+	// Field operations
+	GetField(ctx context.Context, fieldID string) (*OpenLineageField, error)
+	ListFields(ctx context.Context, datasetID string) ([]OpenLineageField, error)
+
+	// Job operations
+	GetJob(ctx context.Context, jobID string) (*OpenLineageJob, error)
+	ListJobs(ctx context.Context, namespaceID string, limit, offset int) ([]OpenLineageJob, int, error)
+
+	// Run operations
+	GetRun(ctx context.Context, runID string) (*OpenLineageRun, error)
+	ListRuns(ctx context.Context, jobID string, limit int) ([]OpenLineageRun, error)
+
+	// Lineage operations (core)
+	GetColumnLineage(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) ([]OpenLineageColumnLineage, error)
+	GetColumnLineageGraph(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) (*OpenLineageGraph, error)
+}
