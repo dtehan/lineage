@@ -32,21 +32,34 @@ Wave 2 (sequential):
 
 ### Phase 8: Open Lineage Standard Alignment
 
-**Goal:** Align database LIN_ tables to Open Lineage standard for interoperability and industry best practices
+**Goal:** Align database LIN_ tables to OpenLineage standard (spec v2-0-2) for interoperability and industry best practices
 **Depends on:** Phase 7
-**Plans:** 0 plans
+**Plans:** 7 plans (5 waves)
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 8 to break down)
+- [ ] 08-01-PLAN.md - Database schema (OL_* tables DDL in setup_lineage_schema.py)
+- [ ] 08-02-PLAN.md - Data population (populate_lineage.py with --openlineage flag)
+- [ ] 08-03-PLAN.md - Go domain layer (OpenLineage entities and repository interface)
+- [ ] 08-04-PLAN.md - Go repository (Teradata OpenLineage repository implementation)
+- [ ] 08-05-PLAN.md - Go service/handlers (v2 API endpoints)
+- [ ] 08-06-PLAN.md - Frontend types and hooks (TypeScript + TanStack Query)
+- [ ] 08-07-PLAN.md - Documentation updates (user guide, CLAUDE.md, database README)
 
 **Details:**
-The database LIN_ tables should align to the Open Lineage standard, as defined in openlineage.io web site. This will require changes to:
-- Database schema (LIN_* tables)
-- Scripts that populate the database (populate_lineage.py, extract_dbql_lineage.py)
-- API layer (Go backend handlers, services, repositories)
-- GUI (React frontend components, data models)
+Transform custom LIN_* schema to OpenLineage-compliant OL_* tables following spec v2-0-2. Creates new tables alongside existing ones for backward compatibility. Exposes v2 API at /api/v2/openlineage/* while maintaining v1 API unchanged.
 
-This alignment will enable interoperability with other lineage tools and follow industry best practices for lineage metadata management.
+Wave structure:
+- Wave 1: Plan 08-01 (Database schema)
+- Wave 2: Plans 08-02, 08-03 (Data population + Go domain) - parallel
+- Wave 3: Plan 08-04 (Go repository)
+- Wave 4: Plan 08-05 (Go service/handlers)
+- Wave 5: Plans 08-06, 08-07 (Frontend + Documentation) - parallel
+
+Key changes:
+- New OL_* tables: OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD, OL_JOB, OL_RUN, OL_COLUMN_LINEAGE
+- Namespace URI format: teradata://{host}:{port}
+- Transformation types: DIRECT/INDIRECT with subtypes (IDENTITY, TRANSFORMATION, AGGREGATION, JOIN, FILTER, etc.)
+- v2 API endpoints alongside existing v1
 
 ---
 
