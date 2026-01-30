@@ -300,3 +300,169 @@ func TestLineageGraphEmpty(t *testing.T) {
 	assert.Contains(t, jsonStr, `"nodes":[]`)
 	assert.Contains(t, jsonStr, `"edges":[]`)
 }
+
+// TC-UNIT-009: OpenLineage TransformationType Constants
+func TestTransformationTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		typ      TransformationType
+		expected string
+	}{
+		{"Direct", TransformationDirect, "DIRECT"},
+		{"Indirect", TransformationIndirect, "INDIRECT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if string(tt.typ) != tt.expected {
+				t.Errorf("TransformationType %s = %s, want %s", tt.name, tt.typ, tt.expected)
+			}
+		})
+	}
+}
+
+// TC-UNIT-010: OpenLineage TransformationSubtype Constants
+func TestTransformationSubtypes(t *testing.T) {
+	subtypes := []struct {
+		subtype  TransformationSubtype
+		expected string
+	}{
+		{SubtypeIdentity, "IDENTITY"},
+		{SubtypeTransformation, "TRANSFORMATION"},
+		{SubtypeAggregation, "AGGREGATION"},
+		{SubtypeJoin, "JOIN"},
+		{SubtypeFilter, "FILTER"},
+		{SubtypeGroupBy, "GROUP_BY"},
+		{SubtypeSort, "SORT"},
+		{SubtypeWindow, "WINDOW"},
+		{SubtypeConditional, "CONDITIONAL"},
+	}
+
+	for _, tt := range subtypes {
+		t.Run(tt.expected, func(t *testing.T) {
+			if string(tt.subtype) != tt.expected {
+				t.Errorf("TransformationSubtype = %s, want %s", tt.subtype, tt.expected)
+			}
+		})
+	}
+}
+
+// TC-UNIT-011: OpenLineageColumnLineage Entity
+func TestOpenLineageColumnLineage(t *testing.T) {
+	lineage := OpenLineageColumnLineage{
+		ID:                    "test-lineage-id",
+		SourceNamespace:       "teradata://host:1025",
+		SourceDataset:         "demo_user.SRC_CUSTOMER",
+		SourceField:           "customer_id",
+		TargetNamespace:       "teradata://host:1025",
+		TargetDataset:         "demo_user.STG_CUSTOMER",
+		TargetField:           "customer_id",
+		TransformationType:    TransformationDirect,
+		TransformationSubtype: SubtypeIdentity,
+		ConfidenceScore:       1.0,
+		IsActive:              true,
+	}
+
+	if lineage.TransformationType != TransformationDirect {
+		t.Errorf("TransformationType = %s, want DIRECT", lineage.TransformationType)
+	}
+	if lineage.TransformationSubtype != SubtypeIdentity {
+		t.Errorf("TransformationSubtype = %s, want IDENTITY", lineage.TransformationSubtype)
+	}
+
+	// Test JSON serialization
+	jsonBytes, err := json.Marshal(lineage)
+	require.NoError(t, err)
+
+	var unmarshaled OpenLineageColumnLineage
+	err = json.Unmarshal(jsonBytes, &unmarshaled)
+	require.NoError(t, err)
+
+	assert.Equal(t, lineage.ID, unmarshaled.ID)
+	assert.Equal(t, lineage.SourceNamespace, unmarshaled.SourceNamespace)
+	assert.Equal(t, lineage.TransformationType, unmarshaled.TransformationType)
+	assert.Equal(t, lineage.TransformationSubtype, unmarshaled.TransformationSubtype)
+}
+
+// TC-UNIT-012: OpenLineageNamespace Entity
+func TestOpenLineageNamespace(t *testing.T) {
+	now := time.Now()
+	ns := OpenLineageNamespace{
+		ID:          "ns-001",
+		URI:         "teradata://myhost:1025",
+		Description: "Production Teradata",
+		SpecVersion: "2-0-2",
+		CreatedAt:   now,
+	}
+
+	assert.Equal(t, "ns-001", ns.ID)
+	assert.Equal(t, "teradata://myhost:1025", ns.URI)
+	assert.Equal(t, "2-0-2", ns.SpecVersion)
+
+	// Test JSON serialization
+	jsonBytes, err := json.Marshal(ns)
+	require.NoError(t, err)
+
+	jsonStr := string(jsonBytes)
+	assert.Contains(t, jsonStr, `"uri"`)
+	assert.Contains(t, jsonStr, `"specVersion"`)
+}
+
+// TC-UNIT-013: OpenLineageDataset Entity
+func TestOpenLineageDataset(t *testing.T) {
+	now := time.Now()
+	dataset := OpenLineageDataset{
+		ID:          "ds-001",
+		NamespaceID: "ns-001",
+		Name:        "demo_user.SRC_CUSTOMER",
+		Description: "Source customer table",
+		SourceType:  "TABLE",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		IsActive:    true,
+	}
+
+	assert.Equal(t, "demo_user.SRC_CUSTOMER", dataset.Name)
+	assert.Equal(t, "TABLE", dataset.SourceType)
+	assert.True(t, dataset.IsActive)
+
+	// Test JSON serialization
+	jsonBytes, err := json.Marshal(dataset)
+	require.NoError(t, err)
+
+	var unmarshaled OpenLineageDataset
+	err = json.Unmarshal(jsonBytes, &unmarshaled)
+	require.NoError(t, err)
+
+	assert.Equal(t, dataset.Name, unmarshaled.Name)
+	assert.Equal(t, dataset.IsActive, unmarshaled.IsActive)
+}
+
+// TC-UNIT-014: OpenLineageGraph Entity
+func TestOpenLineageGraph(t *testing.T) {
+	nodes := []OpenLineageNode{
+		{ID: "node-1", Type: "field", Namespace: "teradata://host:1025", Dataset: "db.table1", Field: "col1"},
+		{ID: "node-2", Type: "field", Namespace: "teradata://host:1025", Dataset: "db.table2", Field: "col2"},
+	}
+
+	edges := []OpenLineageEdge{
+		{
+			ID:                    "edge-1",
+			Source:                "node-1",
+			Target:                "node-2",
+			TransformationType:    TransformationDirect,
+			TransformationSubtype: SubtypeIdentity,
+			ConfidenceScore:       1.0,
+		},
+	}
+
+	graph := OpenLineageGraph{
+		Nodes: nodes,
+		Edges: edges,
+	}
+
+	assert.Len(t, graph.Nodes, 2)
+	assert.Len(t, graph.Edges, 1)
+	assert.Equal(t, TransformationDirect, graph.Edges[0].TransformationType)
+	assert.Equal(t, SubtypeIdentity, graph.Edges[0].TransformationSubtype)
+}
