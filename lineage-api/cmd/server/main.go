@@ -22,6 +22,13 @@ func main() {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
+	// Initialize validation configuration from loaded config
+	httpAdapter.SetValidationConfig(
+		cfg.Validation.MinMaxDepth,
+		cfg.Validation.MaxDepthLimit,
+		cfg.Validation.DefaultMaxDepth,
+	)
+
 	// Database connection
 	db, err := teradata.NewConnection(cfg.Teradata)
 	if err != nil {
