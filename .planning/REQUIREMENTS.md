@@ -9,10 +9,10 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Input Validation
 
-- [ ] **VALID-01**: API validates maxDepth parameter is integer between 1 and 20, returns 400 Bad Request for invalid values
-- [ ] **VALID-02**: API validates direction parameter is one of "upstream", "downstream", or "both", returns 400 Bad Request for invalid values
-- [ ] **VALID-03**: API returns structured error response with error code, message, and request ID for all validation failures
-- [ ] **VALID-04**: Validation limits are configurable via environment variables with documented defaults
+- [x] **VALID-01**: API validates maxDepth parameter is integer between 1 and 20, returns 400 Bad Request for invalid values (Phase 3)
+- [x] **VALID-02**: API validates direction parameter is one of "upstream", "downstream", or "both", returns 400 Bad Request for invalid values (Phase 3)
+- [x] **VALID-03**: API returns structured error response with error code, message, and request ID for all validation failures (Phase 3)
+- [x] **VALID-04**: Validation limits are configurable via environment variables with documented defaults (Phase 3)
 
 ### Security Hardening
 
@@ -40,7 +40,7 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Testing
 
-- [ ] **TEST-01**: Unit tests verify maxDepth and direction validation with edge cases (null, negative, string values)
+- [x] **TEST-01**: Unit tests verify maxDepth and direction validation with edge cases (null, negative, string values) (Phase 3)
 - [ ] **TEST-02**: Integration tests verify error responses never expose internal details
 - [x] **TEST-03**: Tests verify application startup fails with missing credentials (no silent fallback) (Phase 2)
 - [ ] **TEST-04**: Tests verify pagination bounds enforcement and metadata correctness

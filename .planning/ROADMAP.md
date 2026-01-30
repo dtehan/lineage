@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Error Handling Foundation** - Wrap database errors in generic responses, establish structured logging
 - [x] **Phase 2: Credential Security** - Remove default credentials, fail fast on missing config
-- [ ] **Phase 3: Input Validation** - Validate maxDepth and direction parameters with bounds enforcement
+- [x] **Phase 3: Input Validation** - Validate maxDepth and direction parameters with bounds enforcement
 - [ ] **Phase 4: Pagination** - Implement limit/offset pagination for asset listing endpoints
 - [ ] **Phase 5: DBQL Error Handling** - Graceful extraction failures with detailed logging
 - [ ] **Phase 6: Security Documentation** - Document authentication and rate limiting deployment requirements
@@ -64,8 +64,8 @@ Plans:
 **Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 03-01-PLAN.md - Create validation infrastructure (config + validation module)
-- [ ] 03-02-PLAN.md - Update handlers with validation and add unit tests
+- [x] 03-01-PLAN.md - Create validation infrastructure (config + validation module)
+- [x] 03-02-PLAN.md - Update handlers with validation and add unit tests
 
 ### Phase 4: Pagination
 **Goal**: Asset listing endpoints return paginated results with metadata for efficient navigation
@@ -118,7 +118,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 |-------|----------------|--------|-----------|
 | 1. Error Handling Foundation | 0/3 | Planned | - |
 | 2. Credential Security | 1/1 | ✓ Complete | 2026-01-29 |
-| 3. Input Validation | 0/2 | Planned | - |
+| 3. Input Validation | 2/2 | ✓ Complete | 2026-01-29 |
 | 4. Pagination | 0/TBD | Not started | - |
 | 5. DBQL Error Handling | 0/TBD | Not started | - |
 | 6. Security Documentation | 0/TBD | Not started | - |
