@@ -5,13 +5,22 @@ Database Configuration Module
 Reads database credentials from .env file and environment variables with fallback defaults.
 Environment variables take precedence over .env file values.
 
-REQUIRED Environment Variables (at least one must be set):
-    TD_PASSWORD or TERADATA_PASSWORD - Teradata password (required)
+PRIMARY Environment Variables (recommended):
+    TERADATA_HOST     - Teradata host (default: ClearScape test environment)
+    TERADATA_USER     - Teradata username (default: demo_user)
+    TERADATA_PASSWORD - Teradata password (REQUIRED)
+    TERADATA_DATABASE - Default database (default: demo_user)
+    TERADATA_PORT     - Teradata port (default: 1025)
 
-OPTIONAL Environment Variables (with defaults):
-    TD_HOST     - Teradata host (default: ClearScape test environment)
-    TD_USER     - Teradata username (default: demo_user)
-    TD_DATABASE - Default database (default: demo_user)
+LEGACY Environment Variables (deprecated, still supported):
+    TD_HOST     - Fallback for TERADATA_HOST
+    TD_USER     - Fallback for TERADATA_USER
+    TD_PASSWORD - Fallback for TERADATA_PASSWORD
+    TD_DATABASE - Fallback for TERADATA_DATABASE
+    TD_PORT     - Fallback for TERADATA_PORT
+
+Migration: Replace TD_* variables with TERADATA_* equivalents for consistency
+with the Go backend and Python server configurations.
 """
 
 import os
@@ -32,50 +41,40 @@ except ImportError:
     pass  # python-dotenv not installed, rely on environment variables
 
 
-# Required credentials that must be provided (primary, fallback) - at least one must be set
-REQUIRED_CREDENTIALS = [
-    ("TERADATA_PASSWORD", "TD_PASSWORD"),  # At least one must be set
-]
-
-
-def validate_required_credentials():
+def get_env(*names: str, required: bool = False, default: str = None) -> str:
     """
-    Validate that all required credentials are set.
-    Exits with code 1 if any required credentials are missing.
+    Get an environment variable, trying multiple names in priority order.
+
+    Args:
+        *names: Variable names to try, in priority order (TERADATA_* first, TD_* second)
+        required: If True, exit with error if no value found
+        default: Default value if not required and no value found
+
+    Returns:
+        First non-empty value found, or default if none found
     """
-    missing = []
-
-    for primary, fallback in REQUIRED_CREDENTIALS:
-        primary_val = os.environ.get(primary, "").strip()
-        fallback_val = os.environ.get(fallback, "").strip()
-
-        if not primary_val and not fallback_val:
-            missing.append(f"{primary} (or {fallback})")
-
-    if missing:
-        print("ERROR: Missing required environment variables:", file=sys.stderr)
-        for var in missing:
-            print(f"  - {var}", file=sys.stderr)
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    if required:
+        print("ERROR: Missing required environment variable:", file=sys.stderr)
+        print(f"  Set one of: {', '.join(names)}", file=sys.stderr)
         print("", file=sys.stderr)
         print("Please set these in your environment or .env file.", file=sys.stderr)
         print("See .env.example for configuration template.", file=sys.stderr)
         sys.exit(1)
-
-
-# Run validation at module load time (after dotenv loading)
-validate_required_credentials()
+    return default
 
 
 def get_config():
     """Get database configuration from environment variables."""
-    # Password is required - validation already ran, so at least one is set
-    password = os.environ.get("TERADATA_PASSWORD") or os.environ.get("TD_PASSWORD")
-
     return {
-        "host": os.environ.get("TD_HOST", "test-sad3sstx4u4llczi.env.clearscape.teradata.com"),
-        "user": os.environ.get("TD_USER", "demo_user"),
-        "password": password,
-        "database": os.environ.get("TD_DATABASE", "demo_user")
+        "host": get_env("TERADATA_HOST", "TD_HOST", default="test-sad3sstx4u4llczi.env.clearscape.teradata.com"),
+        "user": get_env("TERADATA_USER", "TD_USER", default="demo_user"),
+        "password": get_env("TERADATA_PASSWORD", "TD_PASSWORD", required=True),
+        "database": get_env("TERADATA_DATABASE", "TD_DATABASE", default="demo_user"),
+        "port": int(get_env("TERADATA_PORT", "TD_PORT", default="1025"))
     }
 
 
