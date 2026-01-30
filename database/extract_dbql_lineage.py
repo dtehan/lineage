@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import logging
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
 
@@ -65,6 +66,44 @@ def configure_logging(verbose: bool = False) -> logging.Logger:
 # Module-level logger (configured in main())
 logger = logging.getLogger('dbql_extractor')
 
+
+@dataclass
+class ExtractionStats:
+    """Track extraction outcomes for summary reporting."""
+    processed: int = 0
+    succeeded: int = 0
+    failed: int = 0
+    skipped: int = 0
+    errors: List[Dict] = field(default_factory=list)
+
+    def record_success(self):
+        """Record a successfully processed query."""
+        self.processed += 1
+        self.succeeded += 1
+
+    def record_failure(self, query_id: str, table_name: str, error_type: str, error_msg: str):
+        """Record a failed query with error context."""
+        self.processed += 1
+        self.failed += 1
+        # Limit stored errors to prevent memory issues
+        if len(self.errors) < 1000:
+            self.errors.append({
+                'query_id': query_id,
+                'table_name': table_name,
+                'error_type': error_type,
+                'error_message': error_msg[:200]  # Truncate long messages
+            })
+
+    def record_skip(self, reason: str = ""):
+        """Record a skipped query."""
+        self.processed += 1
+        self.skipped += 1
+
+    def summary(self) -> str:
+        """Return summary string for logging."""
+        return f"{self.succeeded} succeeded, {self.failed} failed, {self.skipped} skipped"
+
+
 # Default lookback period for initial extraction (30 days)
 DEFAULT_LOOKBACK_DAYS = 30
 
@@ -95,6 +134,7 @@ class DBQLLineageExtractor:
         self.conn = None
         self.cursor = None
         self.parser = None
+        self.extraction_stats = ExtractionStats()
         self.stats = {
             'queries_processed': 0,
             'queries_with_lineage': 0,
