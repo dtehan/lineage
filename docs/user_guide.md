@@ -77,13 +77,13 @@ cp .env.example .env
 **Option B: Using environment variables**
 
 ```bash
-export TD_HOST="your-teradata-host"
-export TD_USER="your-username"
-export TD_PASSWORD="your-password"
-export TD_DATABASE="demo_user"
+export TERADATA_HOST="your-teradata-host"
+export TERADATA_USER="your-username"
+export TERADATA_PASSWORD="your-password"
+export TERADATA_DATABASE="demo_user"
 ```
 
-**Note:** Environment variables take precedence over `.env` file values.
+**Note:** Environment variables take precedence over `.env` file values. Legacy `TD_*` variables are supported as fallbacks.
 
 Create the lineage schema:
 
@@ -1093,29 +1093,30 @@ cp .env.example .env
 
 ### Environment Variables
 
-**Database Scripts (Python):**
+**Database Connection (All Components):**
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `TD_HOST` | Teradata server hostname | `localhost` |
-| `TD_USER` | Teradata username | `demo_user` |
-| `TD_PASSWORD` | Teradata password | (empty) |
-| `TD_DATABASE` | Default database | `demo_user` |
-
-**Backend API (Go and Python Flask):**
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TERADATA_HOST` | Teradata server hostname | - |
-| `TERADATA_USER` | Teradata username | - |
-| `TERADATA_PASSWORD` | Teradata password | - |
-| `TERADATA_DATABASE` | Teradata database name | `demo_user` |
+| `TERADATA_HOST` | Teradata server hostname | `localhost` |
+| `TERADATA_USER` | Teradata username | `demo_user` |
+| `TERADATA_PASSWORD` | Teradata password | (required) |
+| `TERADATA_DATABASE` | Default database | `demo_user` |
 | `TERADATA_PORT` | Teradata port | `1025` |
+
+*Legacy aliases `TD_HOST`, `TD_USER`, `TD_PASSWORD`, `TD_DATABASE` are supported for backwards compatibility.*
+
+**Server Configuration:**
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `API_PORT` | HTTP server port | `8080` |
 | `REDIS_ADDR` | Redis server address | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis password | (empty) |
-| `PORT` | HTTP server port | `8080` |
+| `REDIS_DB` | Redis database number | `0` |
 
-**Note:** The Python Flask server supports both `TD_*` and `TERADATA_*` prefixes. `TERADATA_*` variables take precedence if both are set.
+*Legacy alias `PORT` is supported as a fallback for `API_PORT`.*
+
+**Note:** All Python scripts and both Go/Python servers use the same `TERADATA_*` environment variables. Legacy `TD_*` variables are checked as fallbacks if `TERADATA_*` are not set.
 
 **Frontend (Vite):**
 

@@ -140,7 +140,7 @@ lineage-ui/
 
 ```
 database/
-├── db_config.py              # Connection config (uses TD_HOST, TD_USER, TD_PASSWORD env vars)
+├── db_config.py              # Connection config (uses TERADATA_* env vars, TD_* as fallback)
 ├── setup_lineage_schema.py   # Creates LIN_* tables and indexes
 ├── setup_test_data.py        # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
 ├── populate_lineage.py       # Extracts metadata and populates lineage (manual or DBQL mode)
@@ -199,20 +199,20 @@ cp .env.example .env
 
 **Environment Variables:**
 
-| Variable | Used By | Description |
-|----------|---------|-------------|
-| `TD_HOST` | Python scripts | Teradata host |
-| `TD_USER` | Python scripts | Teradata username |
-| `TD_PASSWORD` | Python scripts | Teradata password |
-| `TD_DATABASE` | Python scripts | Default database |
-| `TERADATA_HOST` | Go/Python server | Teradata host (takes precedence over TD_*) |
-| `TERADATA_USER` | Go/Python server | Teradata username |
-| `TERADATA_PASSWORD` | Go/Python server | Teradata password |
-| `TERADATA_DATABASE` | Go/Python server | Default database |
-| `TERADATA_PORT` | Go/Python server | Teradata port (default: 1025) |
-| `REDIS_ADDR` | Go server | Redis address (default: localhost:6379) |
-| `REDIS_PASSWORD` | Go server | Redis password (optional) |
-| `REDIS_DB` | Go server | Redis database number (default: 0) |
-| `PORT` | Go server | HTTP port (default: 8080) |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TERADATA_HOST` | Teradata host | - |
+| `TERADATA_USER` | Teradata username | - |
+| `TERADATA_PASSWORD` | Teradata password (required) | - |
+| `TERADATA_DATABASE` | Default database | `demo_user` |
+| `TERADATA_PORT` | Teradata port | `1025` |
+| `API_PORT` | HTTP server port | `8080` |
+| `REDIS_ADDR` | Redis address | `localhost:6379` |
+| `REDIS_PASSWORD` | Redis password | - |
+| `REDIS_DB` | Redis database number | `0` |
+
+**Legacy aliases (deprecated, still supported):**
+- `TD_HOST`, `TD_USER`, `TD_PASSWORD`, `TD_DATABASE` - fallbacks for `TERADATA_*`
+- `PORT` - fallback for `API_PORT`
 
 The frontend proxies `/api/*` requests to `http://localhost:8080` via Vite config.
