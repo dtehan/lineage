@@ -281,7 +281,7 @@ OL_DDL_STATEMENTS = [
     """
 ]
 
-# Index creation statements
+# Index creation statements for LIN_* tables
 # Note: Teradata syntax is CREATE INDEX name (columns) ON table, not CREATE INDEX name ON table (columns)
 INDEX_STATEMENTS = [
     "CREATE INDEX idx_lin_database_name (database_name) ON demo_user.LIN_DATABASE",
@@ -297,6 +297,41 @@ INDEX_STATEMENTS = [
     "CREATE INDEX idx_lin_tbl_lineage_target (target_table_id) ON demo_user.LIN_TABLE_LINEAGE",
     "CREATE INDEX idx_lin_query_user (user_name) ON demo_user.LIN_QUERY",
     "CREATE INDEX idx_lin_query_time (start_time) ON demo_user.LIN_QUERY"
+]
+
+# Index creation statements for OL_* tables (OpenLineage-aligned)
+OL_INDEX_STATEMENTS = [
+    # Namespace lookups
+    "CREATE INDEX idx_ol_namespace_uri (namespace_uri) ON demo_user.OL_NAMESPACE",
+
+    # Dataset lookups
+    "CREATE INDEX idx_ol_dataset_ns (namespace_id) ON demo_user.OL_DATASET",
+    "CREATE INDEX idx_ol_dataset_name (name) ON demo_user.OL_DATASET",
+
+    # Field lookups
+    "CREATE INDEX idx_ol_field_dataset (dataset_id) ON demo_user.OL_DATASET_FIELD",
+    "CREATE INDEX idx_ol_field_name (field_name) ON demo_user.OL_DATASET_FIELD",
+
+    # Job lookups
+    "CREATE INDEX idx_ol_job_ns (namespace_id) ON demo_user.OL_JOB",
+    "CREATE INDEX idx_ol_job_name (name) ON demo_user.OL_JOB",
+
+    # Run lookups
+    "CREATE INDEX idx_ol_run_job (job_id) ON demo_user.OL_RUN",
+    "CREATE INDEX idx_ol_run_time (event_time) ON demo_user.OL_RUN",
+    "CREATE INDEX idx_ol_run_type (event_type) ON demo_user.OL_RUN",
+
+    # Run input/output lookups
+    "CREATE INDEX idx_ol_run_input_ds (dataset_id) ON demo_user.OL_RUN_INPUT",
+    "CREATE INDEX idx_ol_run_output_ds (dataset_id) ON demo_user.OL_RUN_OUTPUT",
+
+    # Column lineage lookups (critical for graph traversal)
+    "CREATE INDEX idx_ol_lineage_src_ds (source_dataset) ON demo_user.OL_COLUMN_LINEAGE",
+    "CREATE INDEX idx_ol_lineage_src_field (source_field) ON demo_user.OL_COLUMN_LINEAGE",
+    "CREATE INDEX idx_ol_lineage_tgt_ds (target_dataset) ON demo_user.OL_COLUMN_LINEAGE",
+    "CREATE INDEX idx_ol_lineage_tgt_field (target_field) ON demo_user.OL_COLUMN_LINEAGE",
+    "CREATE INDEX idx_ol_lineage_run (run_id) ON demo_user.OL_COLUMN_LINEAGE",
+    "CREATE INDEX idx_ol_lineage_type (transformation_type) ON demo_user.OL_COLUMN_LINEAGE",
 ]
 
 
