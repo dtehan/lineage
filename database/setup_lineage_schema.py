@@ -153,6 +153,134 @@ DDL_STATEMENTS = [
     """
 ]
 
+# OpenLineage-aligned table DDL statements (OL_* tables)
+# Follows OpenLineage spec v2-0-2 with materialized lineage views
+OL_DDL_STATEMENTS = [
+    # OL_NAMESPACE - Namespace registry (connection URIs)
+    """
+    CREATE MULTISET TABLE demo_user.OL_NAMESPACE (
+        namespace_id VARCHAR(64) NOT NULL,
+        namespace_uri VARCHAR(512) NOT NULL,
+        description VARCHAR(2000),
+        spec_version VARCHAR(20) DEFAULT '2-0-2',
+        created_at TIMESTAMP(0),
+        PRIMARY KEY (namespace_id)
+    )
+    """,
+
+    # OL_DATASET - Dataset registry (tables)
+    """
+    CREATE MULTISET TABLE demo_user.OL_DATASET (
+        dataset_id VARCHAR(256) NOT NULL,
+        namespace_id VARCHAR(64) NOT NULL,
+        name VARCHAR(256) NOT NULL,
+        description VARCHAR(2000),
+        source_type VARCHAR(50),
+        created_at TIMESTAMP(0),
+        updated_at TIMESTAMP(0),
+        is_active CHAR(1) DEFAULT 'Y',
+        PRIMARY KEY (dataset_id)
+    )
+    """,
+
+    # OL_DATASET_FIELD - Dataset fields (columns)
+    """
+    CREATE MULTISET TABLE demo_user.OL_DATASET_FIELD (
+        field_id VARCHAR(512) NOT NULL,
+        dataset_id VARCHAR(256) NOT NULL,
+        field_name VARCHAR(256) NOT NULL,
+        field_type VARCHAR(256),
+        field_description VARCHAR(2000),
+        ordinal_position INTEGER,
+        nullable CHAR(1),
+        created_at TIMESTAMP(0),
+        PRIMARY KEY (field_id)
+    )
+    """,
+
+    # OL_JOB - Job definitions (ETL processes)
+    """
+    CREATE MULTISET TABLE demo_user.OL_JOB (
+        job_id VARCHAR(256) NOT NULL,
+        namespace_id VARCHAR(64) NOT NULL,
+        name VARCHAR(256) NOT NULL,
+        description VARCHAR(2000),
+        job_type VARCHAR(50),
+        created_at TIMESTAMP(0),
+        updated_at TIMESTAMP(0),
+        PRIMARY KEY (job_id)
+    )
+    """,
+
+    # OL_RUN - Run instances (job executions)
+    """
+    CREATE MULTISET TABLE demo_user.OL_RUN (
+        run_id VARCHAR(64) NOT NULL,
+        job_id VARCHAR(256) NOT NULL,
+        event_type VARCHAR(20),
+        event_time TIMESTAMP(6),
+        nominal_start_time TIMESTAMP(0),
+        nominal_end_time TIMESTAMP(0),
+        producer VARCHAR(512),
+        schema_url VARCHAR(512),
+        created_at TIMESTAMP(0),
+        PRIMARY KEY (run_id)
+    )
+    """,
+
+    # OL_RUN_INPUT - Run input datasets
+    """
+    CREATE MULTISET TABLE demo_user.OL_RUN_INPUT (
+        run_id VARCHAR(64) NOT NULL,
+        dataset_id VARCHAR(256) NOT NULL,
+        PRIMARY KEY (run_id, dataset_id)
+    )
+    """,
+
+    # OL_RUN_OUTPUT - Run output datasets
+    """
+    CREATE MULTISET TABLE demo_user.OL_RUN_OUTPUT (
+        run_id VARCHAR(64) NOT NULL,
+        dataset_id VARCHAR(256) NOT NULL,
+        PRIMARY KEY (run_id, dataset_id)
+    )
+    """,
+
+    # OL_COLUMN_LINEAGE - Materialized column lineage (core query table)
+    """
+    CREATE MULTISET TABLE demo_user.OL_COLUMN_LINEAGE (
+        lineage_id VARCHAR(64) NOT NULL,
+        run_id VARCHAR(64),
+        source_namespace VARCHAR(512) NOT NULL,
+        source_dataset VARCHAR(256) NOT NULL,
+        source_field VARCHAR(256) NOT NULL,
+        target_namespace VARCHAR(512) NOT NULL,
+        target_dataset VARCHAR(256) NOT NULL,
+        target_field VARCHAR(256) NOT NULL,
+        transformation_type VARCHAR(20),
+        transformation_subtype VARCHAR(50),
+        transformation_description VARCHAR(2000),
+        masking CHAR(1) DEFAULT 'N',
+        confidence_score DECIMAL(3,2),
+        discovered_at TIMESTAMP(0),
+        is_active CHAR(1) DEFAULT 'Y',
+        PRIMARY KEY (lineage_id)
+    )
+    """,
+
+    # OL_SCHEMA_VERSION - Track schema version
+    """
+    CREATE MULTISET TABLE demo_user.OL_SCHEMA_VERSION (
+        version_id INTEGER NOT NULL,
+        openlineage_spec_version VARCHAR(20) NOT NULL,
+        schema_version VARCHAR(20) NOT NULL,
+        applied_at TIMESTAMP(0),
+        description VARCHAR(500),
+        PRIMARY KEY (version_id)
+    )
+    """
+]
+
 # Index creation statements
 # Note: Teradata syntax is CREATE INDEX name (columns) ON table, not CREATE INDEX name ON table (columns)
 INDEX_STATEMENTS = [
