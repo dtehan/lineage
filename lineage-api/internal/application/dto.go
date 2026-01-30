@@ -15,20 +15,32 @@ type SearchRequest struct {
 	Limit      int      `json:"limit,omitempty"`
 }
 
+// PaginationMeta provides pagination information in list responses.
+// Implements PAGE-03: total_count, has_next, and current page info.
+type PaginationMeta struct {
+	TotalCount int  `json:"total_count"`
+	Limit      int  `json:"limit"`
+	Offset     int  `json:"offset"`
+	HasNext    bool `json:"has_next"`
+}
+
 // Response DTOs
 type DatabaseListResponse struct {
-	Databases []domain.Database `json:"databases"`
-	Total     int               `json:"total"`
+	Databases  []domain.Database `json:"databases"`
+	Total      int               `json:"total"`
+	Pagination *PaginationMeta   `json:"pagination,omitempty"`
 }
 
 type TableListResponse struct {
-	Tables []domain.Table `json:"tables"`
-	Total  int            `json:"total"`
+	Tables     []domain.Table  `json:"tables"`
+	Total      int             `json:"total"`
+	Pagination *PaginationMeta `json:"pagination,omitempty"`
 }
 
 type ColumnListResponse struct {
-	Columns []domain.Column `json:"columns"`
-	Total   int             `json:"total"`
+	Columns    []domain.Column `json:"columns"`
+	Total      int             `json:"total"`
+	Pagination *PaginationMeta `json:"pagination,omitempty"`
 }
 
 type LineageResponse struct {
