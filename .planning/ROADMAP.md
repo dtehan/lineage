@@ -31,21 +31,22 @@ Wave 1 (parallel):
 Wave 2 (sequential):
 - Plan 07-03: Documentation updates
 
-### Phase 8: Open Lineage Standard Alignment
+### Phase 8: Open Lineage Standard Alignment ✓
 
 **Goal:** Align database LIN_ tables to OpenLineage standard (spec v2-0-2) for interoperability and industry best practices
 **Depends on:** Phase 7
 **Plans:** 8 plans (6 waves)
+**Completed:** 2026-01-30
 
 Plans:
-- [ ] 08-01-PLAN.md - Database schema (OL_* tables DDL in setup_lineage_schema.py)
-- [ ] 08-02-PLAN.md - Data population (populate_lineage.py with --openlineage flag)
-- [ ] 08-03-PLAN.md - Go domain layer (OpenLineage entities and repository interface)
-- [ ] 08-04-PLAN.md - Go repository (Teradata OpenLineage repository implementation)
-- [ ] 08-05-PLAN.md - Go service/handlers (v2 API endpoints)
-- [ ] 08-06-PLAN.md - Frontend types and hooks (TypeScript + TanStack Query)
-- [ ] 08-07-PLAN.md - Documentation updates (user guide, CLAUDE.md, database README)
-- [ ] 08-08-PLAN.md - Gap closure: Wire OpenLineage handler in main.go
+- [x] 08-01-PLAN.md - Database schema (OL_* tables DDL in setup_lineage_schema.py)
+- [x] 08-02-PLAN.md - Data population (populate_lineage.py with --openlineage flag)
+- [x] 08-03-PLAN.md - Go domain layer (OpenLineage entities and repository interface)
+- [x] 08-04-PLAN.md - Go repository (Teradata OpenLineage repository implementation)
+- [x] 08-05-PLAN.md - Go service/handlers (v2 API endpoints)
+- [x] 08-06-PLAN.md - Frontend types and hooks (TypeScript + TanStack Query)
+- [x] 08-07-PLAN.md - Documentation updates (user guide, CLAUDE.md, database README)
+- [x] 08-08-PLAN.md - Gap closure: Wire OpenLineage handler in main.go
 
 **Details:**
 Transform custom LIN_* schema to OpenLineage-compliant OL_* tables following spec v2-0-2. Creates new tables alongside existing ones for backward compatibility. Exposes v2 API at /api/v2/openlineage/* while maintaining v1 API unchanged.
@@ -66,4 +67,4 @@ Key changes:
 
 ---
 
-_Last updated: 2026-01-29_
+_Last updated: 2026-01-30_
