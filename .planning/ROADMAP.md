@@ -35,7 +35,7 @@ Wave 2 (sequential):
 
 **Goal:** Align database LIN_ tables to OpenLineage standard (spec v2-0-2) for interoperability and industry best practices
 **Depends on:** Phase 7
-**Plans:** 7 plans (5 waves)
+**Plans:** 8 plans (6 waves)
 
 Plans:
 - [ ] 08-01-PLAN.md - Database schema (OL_* tables DDL in setup_lineage_schema.py)
@@ -45,6 +45,7 @@ Plans:
 - [ ] 08-05-PLAN.md - Go service/handlers (v2 API endpoints)
 - [ ] 08-06-PLAN.md - Frontend types and hooks (TypeScript + TanStack Query)
 - [ ] 08-07-PLAN.md - Documentation updates (user guide, CLAUDE.md, database README)
+- [ ] 08-08-PLAN.md - Gap closure: Wire OpenLineage handler in main.go
 
 **Details:**
 Transform custom LIN_* schema to OpenLineage-compliant OL_* tables following spec v2-0-2. Creates new tables alongside existing ones for backward compatibility. Exposes v2 API at /api/v2/openlineage/* while maintaining v1 API unchanged.
@@ -55,6 +56,7 @@ Wave structure:
 - Wave 3: Plan 08-04 (Go repository)
 - Wave 4: Plan 08-05 (Go service/handlers)
 - Wave 5: Plans 08-06, 08-07 (Frontend + Documentation) - parallel
+- Wave 6: Plan 08-08 (Gap closure - main.go wiring)
 
 Key changes:
 - New OL_* tables: OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD, OL_JOB, OL_RUN, OL_COLUMN_LINEAGE
