@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -439,21 +438,26 @@ func TestSearch_WithLimit(t *testing.T) {
 	assert.LessOrEqual(t, len(response.Results), 10)
 }
 
-// TC-ERR-002: Invalid maxDepth Parameter
+// TC-ERR-002: Invalid maxDepth Parameter (UPDATED: now returns 400)
 func TestGetLineage_InvalidMaxDepth(t *testing.T) {
-	handler, _, lineageRepo, _ := setupTestHandler()
+	// Ensure validation config is set
+	SetValidationConfig(1, 20, 5)
 
-	lineageRepo.UpstreamData["col-001"] = []domain.ColumnLineage{}
-	lineageRepo.DownstreamData["col-001"] = []domain.ColumnLineage{}
-	
-	req := httptest.NewRequest("GET", "/api/v1/lineage/col-001?maxDepth=invalid", nil)
-	req = withChiURLParams(req, map[string]string{"assetId": "col-001"})
+	handler, _, _, _ := setupTestHandler()
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001?maxDepth=invalid", map[string]string{"assetId": "col-001"})
 	w := httptest.NewRecorder()
 
 	handler.GetLineage(w, req)
 
-	// Should use default maxDepth=5 and succeed
-	assert.Equal(t, http.StatusOK, w.Code)
+	// Should return 400 with validation error
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+
+	var response ValidationErrorResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "VALIDATION_ERROR", response.Code)
+	assert.Contains(t, w.Body.String(), "maxDepth")
 }
 
 // TC-HEALTH-001: Health Endpoint Returns Healthy
@@ -670,6 +674,318 @@ func TestRouterRegistersRoutes(t *testing.T) {
 
 			// Should not return 404 (route exists)
 			assert.NotEqual(t, http.StatusNotFound, w.Code, "Route %s %s should exist", tc.method, tc.path)
+		})
+	}
+}
+
+// ============================================================================
+// VALIDATION TESTS (VALID-01, VALID-02, VALID-03, TEST-01)
+// ============================================================================
+
+// TEST-01: maxDepth validation edge cases
+func TestGetLineage_MaxDepthValidation(t *testing.T) {
+	// Setup - ensure validation config is set
+	SetValidationConfig(1, 20, 5)
+
+	tests := []struct {
+		name          string
+		maxDepthParam string
+		expectStatus  int
+		expectError   bool
+	}{
+		// Valid cases
+		{"valid min boundary", "1", http.StatusOK, false},
+		{"valid max boundary", "20", http.StatusOK, false},
+		{"valid mid-range", "10", http.StatusOK, false},
+		{"empty uses default", "", http.StatusOK, false},
+
+		// Invalid: below minimum
+		{"zero", "0", http.StatusBadRequest, true},
+		{"negative", "-1", http.StatusBadRequest, true},
+		{"large negative", "-999", http.StatusBadRequest, true},
+
+		// Invalid: above maximum
+		{"above max", "21", http.StatusBadRequest, true},
+		{"way above max", "100", http.StatusBadRequest, true},
+		{"extreme value", "999999", http.StatusBadRequest, true},
+
+		// Invalid: non-integer
+		{"string value", "abc", http.StatusBadRequest, true},
+		{"float value", "5.5", http.StatusBadRequest, true},
+		{"null string", "null", http.StatusBadRequest, true},
+		{"special chars", "5%3B%20DROP%20TABLE", http.StatusBadRequest, true}, // URL encoded "5; DROP TABLE"
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, _, lineageRepo, _ := setupTestHandler()
+
+			// Setup mock data for successful cases
+			lineageRepo.UpstreamData["col-001"] = []domain.ColumnLineage{}
+			lineageRepo.DownstreamData["col-001"] = []domain.ColumnLineage{}
+
+			url := "/api/v1/lineage/col-001"
+			if tt.maxDepthParam != "" {
+				url += "?maxDepth=" + tt.maxDepthParam
+			}
+
+			req := newTestRequestWithRequestID("GET", url, map[string]string{"assetId": "col-001"})
+			w := httptest.NewRecorder()
+
+			handler.GetLineage(w, req)
+
+			assert.Equal(t, tt.expectStatus, w.Code, "status code mismatch for %s", tt.name)
+
+			if tt.expectError {
+				var response ValidationErrorResponse
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				require.NoError(t, err, "response should be valid JSON")
+				assert.Equal(t, "VALIDATION_ERROR", response.Code)
+				assert.Contains(t, w.Body.String(), "maxDepth")
+			}
+		})
+	}
+}
+
+// TEST-01: direction validation edge cases
+func TestGetLineage_DirectionValidation(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+
+	tests := []struct {
+		name         string
+		direction    string
+		expectStatus int
+		expectError  bool
+	}{
+		// Valid cases
+		{"upstream lowercase", "upstream", http.StatusOK, false},
+		{"downstream lowercase", "downstream", http.StatusOK, false},
+		{"both lowercase", "both", http.StatusOK, false},
+		{"empty uses default both", "", http.StatusOK, false},
+
+		// Invalid: wrong case
+		{"wrong case UPSTREAM", "UPSTREAM", http.StatusBadRequest, true},
+		{"wrong case Both", "Both", http.StatusBadRequest, true},
+		{"wrong case Downstream", "Downstream", http.StatusBadRequest, true},
+
+		// Invalid: unknown values
+		{"invalid value", "invalid", http.StatusBadRequest, true},
+		{"typo upsteam", "upsteam", http.StatusBadRequest, true},
+		{"number", "1", http.StatusBadRequest, true},
+		{"special chars", "up%3Bstream", http.StatusBadRequest, true}, // URL encoded "up;stream"
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, _, lineageRepo, _ := setupTestHandler()
+
+			// Setup mock data for successful cases
+			lineageRepo.UpstreamData["col-001"] = []domain.ColumnLineage{}
+			lineageRepo.DownstreamData["col-001"] = []domain.ColumnLineage{}
+
+			url := "/api/v1/lineage/col-001"
+			if tt.direction != "" {
+				url += "?direction=" + tt.direction
+			}
+
+			req := newTestRequestWithRequestID("GET", url, map[string]string{"assetId": "col-001"})
+			w := httptest.NewRecorder()
+
+			handler.GetLineage(w, req)
+
+			assert.Equal(t, tt.expectStatus, w.Code, "status code mismatch for %s", tt.name)
+
+			if tt.expectError {
+				var response ValidationErrorResponse
+				err := json.Unmarshal(w.Body.Bytes(), &response)
+				require.NoError(t, err)
+				assert.Equal(t, "VALIDATION_ERROR", response.Code)
+				assert.Contains(t, w.Body.String(), "direction")
+			}
+		})
+	}
+}
+
+// VALID-03: Validation error response structure
+func TestValidationErrorResponse_Structure(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, _, _ := setupTestHandler()
+
+	// Send request with multiple validation errors
+	req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001?maxDepth=-1&direction=invalid", map[string]string{"assetId": "col-001"})
+	w := httptest.NewRecorder()
+
+	handler.GetLineage(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+	var response ValidationErrorResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// VALID-03 requirements
+	assert.Equal(t, "VALIDATION_ERROR", response.Code, "must include error code")
+	assert.Equal(t, "Validation failed", response.Error, "must include error message")
+	assert.NotEmpty(t, response.RequestID, "must include request ID")
+	assert.GreaterOrEqual(t, len(response.Details), 2, "should report multiple field errors")
+
+	// Verify field-level details
+	fields := make(map[string]bool)
+	for _, detail := range response.Details {
+		fields[detail.Field] = true
+		assert.NotEmpty(t, detail.Message, "each field error must have message")
+	}
+	assert.True(t, fields["maxDepth"], "should include maxDepth error")
+	assert.True(t, fields["direction"], "should include direction error")
+}
+
+// Test validation for upstream lineage endpoint
+func TestGetUpstreamLineage_MaxDepthValidation(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, _, _ := setupTestHandler()
+
+	// Invalid maxDepth should return 400
+	req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001/upstream?maxDepth=999", map[string]string{"assetId": "col-001"})
+	w := httptest.NewRecorder()
+
+	handler.GetUpstreamLineage(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+	assert.Contains(t, w.Body.String(), "maxDepth")
+}
+
+// Test validation for downstream lineage endpoint
+func TestGetDownstreamLineage_MaxDepthValidation(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, _, _ := setupTestHandler()
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001/downstream?maxDepth=-5", map[string]string{"assetId": "col-001"})
+	w := httptest.NewRecorder()
+
+	handler.GetDownstreamLineage(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// Test validation for impact analysis endpoint
+func TestGetImpactAnalysis_MaxDepthValidation(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, _, _ := setupTestHandler()
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001/impact?maxDepth=abc", map[string]string{"assetId": "col-001"})
+	w := httptest.NewRecorder()
+
+	handler.GetImpactAnalysis(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+// Test that empty parameters use defaults (not errors)
+func TestGetLineage_EmptyParametersUseDefaults(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, lineageRepo, _ := setupTestHandler()
+
+	// Setup mock data
+	lineageRepo.UpstreamData["col-001"] = []domain.ColumnLineage{}
+	lineageRepo.DownstreamData["col-001"] = []domain.ColumnLineage{}
+
+	// Request with no query params
+	req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001", map[string]string{"assetId": "col-001"})
+	w := httptest.NewRecorder()
+
+	handler.GetLineage(w, req)
+
+	// Should succeed with defaults
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var response application.LineageGraphResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	require.NoError(t, err)
+	assert.Equal(t, "col-001", response.AssetID)
+}
+
+// Test that upstream endpoint accepts valid maxDepth and defaults
+func TestGetUpstreamLineage_ValidMaxDepthAndDefaults(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, lineageRepo, _ := setupTestHandler()
+
+	lineageRepo.UpstreamData["col-001"] = []domain.ColumnLineage{}
+
+	tests := []struct {
+		name  string
+		param string
+	}{
+		{"no param uses default", ""},
+		{"valid boundary 1", "?maxDepth=1"},
+		{"valid boundary 20", "?maxDepth=20"},
+		{"valid mid-range", "?maxDepth=10"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001/upstream"+tt.param, map[string]string{"assetId": "col-001"})
+			w := httptest.NewRecorder()
+
+			handler.GetUpstreamLineage(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code, "should succeed for %s", tt.name)
+		})
+	}
+}
+
+// Test that downstream endpoint accepts valid maxDepth and defaults
+func TestGetDownstreamLineage_ValidMaxDepthAndDefaults(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, lineageRepo, _ := setupTestHandler()
+
+	lineageRepo.DownstreamData["col-001"] = []domain.ColumnLineage{}
+
+	tests := []struct {
+		name  string
+		param string
+	}{
+		{"no param uses default", ""},
+		{"valid boundary 1", "?maxDepth=1"},
+		{"valid boundary 20", "?maxDepth=20"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001/downstream"+tt.param, map[string]string{"assetId": "col-001"})
+			w := httptest.NewRecorder()
+
+			handler.GetDownstreamLineage(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code, "should succeed for %s", tt.name)
+		})
+	}
+}
+
+// Test that impact endpoint accepts valid maxDepth and defaults
+func TestGetImpactAnalysis_ValidMaxDepthAndDefaults(t *testing.T) {
+	SetValidationConfig(1, 20, 5)
+	handler, _, lineageRepo, _ := setupTestHandler()
+
+	lineageRepo.DownstreamData["col-001"] = []domain.ColumnLineage{}
+
+	tests := []struct {
+		name  string
+		param string
+	}{
+		{"no param uses default", ""},
+		{"valid boundary 1", "?maxDepth=1"},
+		{"valid boundary 20", "?maxDepth=20"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := newTestRequestWithRequestID("GET", "/api/v1/lineage/col-001/impact"+tt.param, map[string]string{"assetId": "col-001"})
+			w := httptest.NewRecorder()
+
+			handler.GetImpactAnalysis(w, req)
+
+			assert.Equal(t, http.StatusOK, w.Code, "should succeed for %s", tt.name)
 		})
 	}
 }
