@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** Phase 5 - DBQL Error Handling (1 of 3 plans complete)
+**Current focus:** Phase 5 - DBQL Error Handling (2 of 3 plans complete)
 
 ## Current Position
 
 Phase: 5 of 6 (DBQL Error Handling)
-Plan: 1 of 3 in current phase
-Status: In progress - Plan 05-01 complete
-Last activity: 2026-01-30 - Completed 05-01-PLAN.md (Logging Infrastructure)
+Plan: 2 of 3 in current phase
+Status: In progress - Plan 05-02 complete
+Last activity: 2026-01-30 - Completed 05-02-PLAN.md (Continue-on-Failure and Data Validation)
 
-Progress: [#########-] 92% (phases 1-4, 6 complete; phase 5 plan 1/3 complete)
+Progress: [#########-] 94% (phases 1-4, 6 complete; phase 5 plan 2/3 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
+- Total plans completed: 12
 - Average duration: 4 min
-- Total execution time: 43 min
+- Total execution time: 46 min
 
 **By Phase:**
 
@@ -31,11 +31,11 @@ Progress: [#########-] 92% (phases 1-4, 6 complete; phase 5 plan 1/3 complete)
 | 02-credential-security | 1 | 12 min | 12 min |
 | 03-input-validation | 2 | 7 min | 3.5 min |
 | 04-pagination | 3 | 11 min | 3.7 min |
-| 05-dbql-error-handling | 1 | 2 min | 2 min |
+| 05-dbql-error-handling | 2 | 5 min | 2.5 min |
 | 06-security-documentation | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 04-02 (3 min), 04-03 (5 min), 05-01 (2 min)
+- Last 5 plans: 04-03 (5 min), 05-01 (2 min), 05-02 (3 min)
 - Trend: Excellent velocity
 
 *Updated after each plan completion*
@@ -83,6 +83,10 @@ Recent decisions affecting current work:
 - [05-01]: Limit stored errors to 1000 entries, truncate messages to 200 chars
 - [05-01]: Return Tuple[bool, str] from check_dbql_access for actionable errors
 - [05-01]: Include fallback guidance to populate_lineage.py --manual
+- [05-02]: Guard parser existence with hasattr before use in query loop
+- [05-02]: Log progress every 1000 queries for visibility
+- [05-02]: validate_dbql_data warns on NULL query_text and short queries (>10% under 20 chars)
+- [05-02]: print_summary shows first 10 failed query details in verbose mode
 
 ### Pending Todos
 
@@ -95,5 +99,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 05-01-PLAN.md, ready for 05-02-PLAN.md
+Stopped at: Completed 05-02-PLAN.md, ready for 05-03-PLAN.md
 Resume file: None
