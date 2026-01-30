@@ -36,7 +36,14 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	databases, err := h.assetService.ListDatabases(ctx)
+	// Validate pagination params
+	limit, offset, validationErrors := parseAndValidatePaginationParams(r)
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
+	}
+
+	databases, totalCount, err := h.assetService.ListDatabasesPaginated(ctx, limit, offset)
 	if err != nil {
 		requestID := middleware.GetReqID(ctx)
 		slog.ErrorContext(ctx, "failed to list databases",
@@ -50,9 +57,17 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasNext := offset+limit < totalCount
+
 	respondJSON(w, http.StatusOK, application.DatabaseListResponse{
 		Databases: databases,
 		Total:     len(databases),
+		Pagination: &application.PaginationMeta{
+			TotalCount: totalCount,
+			Limit:      limit,
+			Offset:     offset,
+			HasNext:    hasNext,
+		},
 	})
 }
 
@@ -60,7 +75,14 @@ func (h *Handler) ListTables(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	databaseName := chi.URLParam(r, "database")
 
-	tables, err := h.assetService.ListTables(ctx, databaseName)
+	// Validate pagination params
+	limit, offset, validationErrors := parseAndValidatePaginationParams(r)
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
+	}
+
+	tables, totalCount, err := h.assetService.ListTablesPaginated(ctx, databaseName, limit, offset)
 	if err != nil {
 		requestID := middleware.GetReqID(ctx)
 		slog.ErrorContext(ctx, "failed to list tables",
@@ -75,9 +97,17 @@ func (h *Handler) ListTables(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasNext := offset+limit < totalCount
+
 	respondJSON(w, http.StatusOK, application.TableListResponse{
 		Tables: tables,
 		Total:  len(tables),
+		Pagination: &application.PaginationMeta{
+			TotalCount: totalCount,
+			Limit:      limit,
+			Offset:     offset,
+			HasNext:    hasNext,
+		},
 	})
 }
 
@@ -86,7 +116,14 @@ func (h *Handler) ListColumns(w http.ResponseWriter, r *http.Request) {
 	databaseName := chi.URLParam(r, "database")
 	tableName := chi.URLParam(r, "table")
 
-	columns, err := h.assetService.ListColumns(ctx, databaseName, tableName)
+	// Validate pagination params
+	limit, offset, validationErrors := parseAndValidatePaginationParams(r)
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
+	}
+
+	columns, totalCount, err := h.assetService.ListColumnsPaginated(ctx, databaseName, tableName, limit, offset)
 	if err != nil {
 		requestID := middleware.GetReqID(ctx)
 		slog.ErrorContext(ctx, "failed to list columns",
@@ -102,9 +139,17 @@ func (h *Handler) ListColumns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	hasNext := offset+limit < totalCount
+
 	respondJSON(w, http.StatusOK, application.ColumnListResponse{
 		Columns: columns,
 		Total:   len(columns),
+		Pagination: &application.PaginationMeta{
+			TotalCount: totalCount,
+			Limit:      limit,
+			Offset:     offset,
+			HasNext:    hasNext,
+		},
 	})
 }
 

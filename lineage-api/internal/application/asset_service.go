@@ -37,3 +37,18 @@ func (s *AssetService) ListColumns(ctx context.Context, databaseName, tableName 
 func (s *AssetService) GetColumn(ctx context.Context, databaseName, tableName, columnName string) (*domain.Column, error) {
 	return s.assetRepo.GetColumn(ctx, databaseName, tableName, columnName)
 }
+
+// ListDatabasesPaginated returns a paginated list of databases.
+func (s *AssetService) ListDatabasesPaginated(ctx context.Context, limit, offset int) ([]domain.Database, int, error) {
+	return s.assetRepo.ListDatabasesPaginated(ctx, limit, offset)
+}
+
+// ListTablesPaginated returns a paginated list of tables for a database.
+func (s *AssetService) ListTablesPaginated(ctx context.Context, databaseName string, limit, offset int) ([]domain.Table, int, error) {
+	return s.assetRepo.ListTablesPaginated(ctx, databaseName, limit, offset)
+}
+
+// ListColumnsPaginated returns a paginated list of columns for a table.
+func (s *AssetService) ListColumnsPaginated(ctx context.Context, databaseName, tableName string, limit, offset int) ([]domain.Column, int, error) {
+	return s.assetRepo.ListColumnsPaginated(ctx, databaseName, tableName, limit, offset)
+}
