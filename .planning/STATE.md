@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 ## Current Position
 
 Phase: 8 of 8 (OpenLineage Standard Alignment)
-Plan: 4 of 7 in current phase
+Plan: 5 of 7 in current phase
 Status: In progress
-Last activity: 2026-01-30 - Completed 08-04-PLAN.md
+Last activity: 2026-01-30 - Completed 08-05-PLAN.md
 
-Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Phase 8: 4/7 plans
-[===================.....] 20/23 plans (87%)
+Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Phase 8: 5/7 plans
+[=====================...] 21/23 plans (91%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20
+- Total plans completed: 21
 - Average duration: 3 min
-- Total execution time: 67 min
+- Total execution time: 69 min
 
 **By Phase:**
 
@@ -35,10 +35,10 @@ Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Ph
 | 05-dbql-error-handling | 2 | 5 min | 2.5 min |
 | 06-security-documentation | 1 | 2 min | 2 min |
 | 07-environment-variable-consolidation | 3 | 5 min | 1.7 min |
-| 08-open-lineage-standard-alignment | 4 | 13 min | 3.25 min |
+| 08-open-lineage-standard-alignment | 5 | 15 min | 3 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-03 (2 min), 08-01 (3 min), 08-02 (3 min), 08-03 (3 min), 08-04 (4 min)
+- Last 5 plans: 08-01 (3 min), 08-02 (3 min), 08-03 (3 min), 08-04 (4 min), 08-05 (2 min)
 - Trend: Excellent velocity
 
 *Updated after each plan completion*
@@ -119,6 +119,10 @@ Recent decisions affecting current work:
 - [08-04]: Bidirectional query combines upstream and downstream CTEs with UNION
 - [08-04]: maxDepth enforced with depth < N check in recursive CTE
 - [08-04]: Graph nodes use dataset/field format for unique IDs
+- [08-05]: DTOs use string timestamps (RFC3339 format) for JSON serialization
+- [08-05]: OpenLineageHandler is nil-safe - v2 routes only added if handler provided
+- [08-05]: Service layer handles domain-to-DTO conversion with helper methods
+- [08-05]: Search route placed before parameterized route to avoid conflicts
 
 ### Pending Todos
 
@@ -136,5 +140,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 08-04-PLAN.md
+Stopped at: Completed 08-05-PLAN.md
 Resume file: None
