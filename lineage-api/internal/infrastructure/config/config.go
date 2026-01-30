@@ -38,7 +38,7 @@ func Load() (*Config, error) {
 	viper.AutomaticEnv()
 
 	// Set defaults
-	viper.SetDefault("PORT", "8080")
+	viper.SetDefault("API_PORT", "8080")
 	viper.SetDefault("TERADATA_PORT", 1025)
 	viper.SetDefault("TERADATA_DATABASE", "demo_user")
 	viper.SetDefault("REDIS_ADDR", "localhost:6379")
@@ -50,8 +50,16 @@ func Load() (*Config, error) {
 	// Try to read config file (not required)
 	_ = viper.ReadInConfig()
 
+	// Legacy fallbacks - bind TD_* variables if TERADATA_* not set
+	bindLegacyFallback("TERADATA_HOST", "TD_HOST")
+	bindLegacyFallback("TERADATA_USER", "TD_USER")
+	bindLegacyFallback("TERADATA_PASSWORD", "TD_PASSWORD")
+	bindLegacyFallback("TERADATA_DATABASE", "TD_DATABASE")
+	bindLegacyFallback("TERADATA_PORT", "TD_PORT")
+	bindLegacyFallback("API_PORT", "PORT")
+
 	cfg := &Config{
-		Port: viper.GetString("PORT"),
+		Port: viper.GetString("API_PORT"),
 		Teradata: teradata.Config{
 			Host:     viper.GetString("TERADATA_HOST"),
 			Port:     viper.GetInt("TERADATA_PORT"),
