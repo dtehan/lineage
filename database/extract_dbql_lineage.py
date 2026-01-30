@@ -374,19 +374,30 @@ class DBQLLineageExtractor:
         latest_query_time = None
 
         for i, (query_id, stmt_type, query_text, query_time, default_database) in enumerate(queries):
+            # Progress logging every 1000 queries
+            if (i + 1) % 1000 == 0:
+                logger.info("Progress: %d/%d queries (%.1f%%)", i + 1, len(queries), 100 * (i + 1) / len(queries))
+
+            # Skip null query text
             if not query_text:
+                self.extraction_stats.record_skip("null query_text")
                 continue
 
             self.stats['queries_processed'] += 1
-
-            if (i + 1) % 1000 == 0:
-                print(f"  Processed {i + 1}/{len(queries)} queries...")
 
             # Track latest query time for watermark
             if query_time and (latest_query_time is None or query_time > latest_query_time):
                 latest_query_time = query_time
 
             try:
+                # Guard: verify parser exists (should be set in __init__)
+                if not hasattr(self, 'parser') or self.parser is None:
+                    logger.error("Parser not initialized - cannot process queries")
+                    self.extraction_stats.record_failure(
+                        str(query_id), "UNKNOWN", "ConfigurationError", "Parser not initialized"
+                    )
+                    continue
+
                 # Set the default database context for this query
                 # This ensures unqualified table names resolve to the correct database
                 if default_database:
@@ -398,6 +409,7 @@ class DBQLLineageExtractor:
                 if records:
                     self.stats['queries_with_lineage'] += 1
 
+                    # Process records (existing logic for table_lineage_set and column_lineage_records)
                     for rec in records:
                         # Skip unresolved tables
                         if rec['source_table'] == 'UNKNOWN':
@@ -419,9 +431,28 @@ class DBQLLineageExtractor:
                             **rec
                         })
 
+                    self.extraction_stats.record_success()
+                else:
+                    # No lineage found is not a failure
+                    self.extraction_stats.record_success()
+
             except Exception as e:
-                if self.verbose:
-                    print(f"  Warning parsing query {query_id}: {e}")
+                # Extract target table from query for context
+                table_name = self._extract_target_table(query_text)
+                error_type = type(e).__name__
+
+                logger.warning(
+                    "Failed to extract lineage: query_id=%s, table=%s, error_type=%s, error=%s",
+                    query_id, table_name, error_type, str(e)[:200]
+                )
+
+                self.extraction_stats.record_failure(
+                    query_id=str(query_id),
+                    table_name=table_name,
+                    error_type=error_type,
+                    error_msg=str(e)
+                )
+                # Continue processing - don't stop on individual failures
 
         # Insert table lineage
         print(f"\nInserting table lineage ({len(table_lineage_set)} records)...")
@@ -441,6 +472,7 @@ class DBQLLineageExtractor:
                         'Y')
                 """, (lineage_id, src_tbl_id, src_db, src_tbl, tgt_tbl_id, tgt_db, tgt_tbl))
                 self.stats['table_lineage_inserted'] += 1
+                self.table_lineage_count += 1
             except teradatasql.DatabaseError as e:
                 # Handle duplicate - update last_seen_at instead
                 if "2801" in str(e):
@@ -485,6 +517,7 @@ class DBQLLineageExtractor:
                     rec['query_id']
                 ))
                 self.stats['column_lineage_inserted'] += 1
+                self.column_lineage_count += 1
             except teradatasql.DatabaseError as e:
                 # Handle duplicate - update last_seen_at
                 if "2801" in str(e):
