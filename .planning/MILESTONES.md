@@ -1,5 +1,37 @@
 # Project Milestones: Lineage Application
 
+## v2.0 Configuration Improvements (Shipped: 2026-01-30)
+
+**Delivered:** Unified environment variable configuration and OpenLineage standard alignment for industry interoperability.
+
+**Phases completed:** 7-8 (11 plans total)
+
+**Key accomplishments:**
+
+- Unified environment variable naming: TERADATA_*/API_PORT as primary with backwards-compatible TD_*/PORT fallbacks across Python and Go codebases
+- OpenLineage standard alignment: OL_* database schema following spec v2-0-2 with 9 tables (namespace, dataset, field, job, run, lineage) for industry-standard lineage interchange
+- v2 API endpoints: New /api/v2/openlineage/* REST API with namespace, dataset, field, and lineage traversal operations
+- Full-stack OpenLineage integration: Go backend (repository → service → handler) + Python data population + TypeScript frontend types/hooks
+- Consolidated documentation: Updated .env.example, CLAUDE.md, user_guide.md, SECURITY.md with unified configuration patterns
+
+**Stats:**
+
+- 48 files created/modified (+8,146 / -153 lines)
+- 2 phases, 11 plans
+- ~2 hours from planning to ship (2026-01-29 19:06 → 21:08)
+- 25 commits
+
+**Tech Debt:**
+- Frontend pagination controls not implemented (hooks ready, UI controls missing - MEDIUM priority)
+- Pagination bounds hardcoded (not configurable via env vars - LOW priority)
+- SetPaginationConfig not called in main.go (LOW priority)
+
+**Git range:** `b32ef4e` (feat(08-01)) → `28a9efa` (feat(08-08))
+
+**What's next:** Address pagination UI controls or plan next milestone for additional OpenLineage features.
+
+---
+
 ## v1.0 Production Readiness (Shipped: 2026-01-30)
 
 **Delivered:** Hardened Teradata column-level lineage application for production deployment with security, validation, and scalability fixes.

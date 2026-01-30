@@ -64,6 +64,21 @@ The lineage application must be secure and stable for production use - no data e
 - ✓ **TEST-04**: 20+ tests verify pagination bounds enforcement and metadata — v1.0
 - ✓ **TEST-05**: 27 tests verify DBQL error handling for all failure modes — v1.0
 
+**v2.0 Configuration Improvements (shipped 2026-01-30):**
+
+*Environment Variable Consolidation:*
+- ✓ **ENV-01**: TERADATA_* variables as primary with TD_* as legacy fallback across Python and Go — v2.0
+- ✓ **ENV-02**: API_PORT as primary with PORT as fallback for server configuration — v2.0
+- ✓ **ENV-03**: Consolidated documentation with deprecation notes in .env.example, CLAUDE.md, user_guide.md — v2.0
+
+*OpenLineage Standard Alignment:*
+- ✓ **OL-01**: OL_* database schema following OpenLineage spec v2-0-2 (9 tables) — v2.0
+- ✓ **OL-02**: Namespace URI format teradata://{host}:{port} for dataset identification — v2.0
+- ✓ **OL-03**: Transformation types mapped to DIRECT/INDIRECT with subtypes — v2.0
+- ✓ **OL-04**: v2 API at /api/v2/openlineage/* with namespace, dataset, field, lineage endpoints — v2.0
+- ✓ **OL-05**: Full-stack integration (Go backend + Python population + TypeScript frontend) — v2.0
+- ✓ **OL-06**: Backwards compatibility maintained (v1 API unchanged, LIN_* tables preserved) — v2.0
+
 ### Active
 
 <!-- Requirements for next milestone -->
@@ -94,26 +109,35 @@ The lineage application must be secure and stable for production use - no data e
 
 ## Context
 
-**Current State (v1.0 shipped):**
-- Production-ready Teradata column-level lineage application
-- Go backend (1,200+ LOC added): Chi router, hexagonal architecture, slog logging, input validation
-- React frontend (900+ LOC added): TypeScript, React Flow, pagination controls, TanStack Query hooks
-- Python DBQL extraction (800+ LOC added): Continue-on-failure pattern, structured error tracking
-- Test coverage: 73 database tests, 20 API tests, 396+ frontend tests (260 unit + 136 new), 21 E2E tests
-- Security: Structured logging with stack traces, generic error responses (18 sensitive pattern check), fail-fast credential validation
+**Current State (v2.0 shipped):**
+- Production-ready Teradata column-level lineage application with OpenLineage standard alignment
+- Go backend: Chi router, hexagonal architecture, slog logging, input validation, v1 + v2 APIs
+- React frontend: TypeScript, React Flow, TanStack Query hooks, types for v1 and v2 APIs
+- Python DBQL extraction: Continue-on-failure pattern, structured error tracking, OL_* table population
+- Database: LIN_* tables (custom schema) + OL_* tables (OpenLineage spec v2-0-2)
+- Test coverage: 73 database tests, 20 API tests, 396+ frontend tests, 21 E2E tests
+- Security: Structured logging, generic error responses, fail-fast credential validation, SECURITY.md deployment guide
+- Configuration: Unified TERADATA_*/API_PORT variables with TD_*/PORT fallbacks for backwards compatibility
 - Scalability: Pagination (default 100, max 500), maxDepth limit (1-20 configurable)
-- Documentation: SECURITY.md with auth proxy patterns, rate limiting guidance (Assets: 100/min, Search: 30/min, Impact: 20/min)
 
-**Milestone v1.0 Stats:**
+**Milestone v1.0 Stats (Production Readiness):**
 - 6 phases, 13 plans completed
 - 72 files modified (+12,600 / -355 lines)
 - 8 days (2026-01-21 → 2026-01-29)
 - 136+ new tests (100% pass rate)
 - Git range: `1b9ca2c` → `d281a13`
 
+**Milestone v2.0 Stats (Configuration Improvements):**
+- 2 phases, 11 plans completed
+- 48 files modified (+8,146 / -153 lines)
+- ~2 hours (2026-01-29 19:06 → 21:08)
+- 25 commits
+- Git range: `b32ef4e` → `28a9efa`
+
 **Technical Debt:**
-- Pagination bounds hardcoded (not configurable via env vars like validation bounds) — low priority, works correctly with defaults
-- Phase 4 verification report shows gaps_found status but gap was closed in plan 04-04 — informational only
+- Frontend pagination controls not implemented (hooks ready, UI controls missing) — MEDIUM priority, affects UX
+- Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe
+- SetPaginationConfig not called in main.go — LOW priority, follows validation pattern
 
 **Deployment Assumptions:**
 - Application deployed behind authentication proxy or within internal network
@@ -146,6 +170,10 @@ The lineage application must be secure and stable for production use - no data e
 | Fix order: error handling → security → validation → pagination → DBQL | Dependencies: logging infrastructure first, then credentials, then validation pattern, then scale features | ✓ Complete - Phases 1-6 followed dependency order |
 | Use slog (Go 1.21+ stdlib) for logging | Standard library, future-proof, JSON structured logging with stack traces | ✓ Complete - All handlers use slog.ErrorContext with logging.CaptureStack() |
 | Pagination bounds hardcoded (not env configurable) | Acceptable tech debt - system works correctly with safe defaults (100/500) | ⚠️ Tech Debt - Consider adding PAGINATION_MAX_LIMIT env vars for consistency with validation pattern |
+| Standardize on TERADATA_* as primary env vars (v2.0) | Clear naming convention, backwards compatible with TD_* fallbacks | ✓ Complete - Python and Go both use priority lookup pattern |
+| Implement OpenLineage spec v2-0-2 exactly (v2.0) | Future-proof interoperability with external lineage tools, industry standard | ✓ Complete - OL_* schema + v2 API endpoints |
+| Create OL_* alongside LIN_* tables (v2.0) | Backwards compatibility, gradual migration path, no breaking changes | ✓ Complete - Both schemas coexist, v1 API unchanged |
+| Expose v2 API at /api/v2/openlineage/* (v2.0) | API versioning, non-breaking change, clear separation of concerns | ✓ Complete - v1 and v2 routes registered in same router |
 
 ---
-*Last updated: 2026-01-30 after v1.0 milestone completion*
+*Last updated: 2026-01-30 after v2.0 milestone completion*
