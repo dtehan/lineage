@@ -3,11 +3,13 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -16,6 +18,37 @@ import (
 	"github.com/lineage-api/internal/domain/mocks"
 )
 
+// sensitivePatterns contains strings that should NEVER appear in error responses.
+// These patterns represent database internals, connection details, and SQL fragments
+// that could leak information to attackers.
+var sensitivePatterns = []string{
+	// Database driver/connection errors
+	"teradatasql",
+	"SQLState",
+	"clearscape.teradata.com",
+	"Connection refused",
+	"connection refused",
+	// Credentials and user info
+	"demo_user",
+	"password",
+	// Internal table names (lineage schema)
+	"LIN_DATABASE",
+	"LIN_TABLE",
+	"LIN_COLUMN",
+	"LIN_COLUMN_LINEAGE",
+	"LIN_TABLE_LINEAGE",
+	"LIN_TRANSFORMATION",
+	"LIN_QUERY",
+	"LIN_WATERMARK",
+	// SQL fragments
+	"SELECT",
+	"FROM",
+	"WHERE",
+	"INSERT",
+	"UPDATE",
+	"DELETE",
+}
+
 // Helper function to add chi URL params to request context
 func withChiURLParams(r *http.Request, params map[string]string) *http.Request {
 	rctx := chi.NewRouteContext()
@@ -23,6 +56,19 @@ func withChiURLParams(r *http.Request, params map[string]string) *http.Request {
 		rctx.URLParams.Add(key, value)
 	}
 	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+}
+
+// newTestRequestWithRequestID creates a request with Chi route context and a request ID.
+// This is required for testing error responses which include request_id from middleware.
+func newTestRequestWithRequestID(method, path string, params map[string]string) *http.Request {
+	req := httptest.NewRequest(method, path, nil)
+	rctx := chi.NewRouteContext()
+	for key, value := range params {
+		rctx.URLParams.Add(key, value)
+	}
+	ctx := context.WithValue(req.Context(), chi.RouteCtxKey, rctx)
+	ctx = context.WithValue(ctx, middleware.RequestIDKey, "test-request-id-12345")
+	return req.WithContext(ctx)
 }
 
 func setupTestHandler() (*Handler, *mocks.MockAssetRepository, *mocks.MockLineageRepository, *mocks.MockSearchRepository) {
