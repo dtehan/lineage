@@ -207,9 +207,10 @@ services:
   lineage-api:
     image: lineage-api:latest
     environment:
-      - TERADATA_HOST=${TD_HOST}
-      - TERADATA_USER=${TD_USER}
-      - TERADATA_PASSWORD=${TD_PASSWORD}
+      - TERADATA_HOST=${TERADATA_HOST}
+      - TERADATA_USER=${TERADATA_USER}
+      - TERADATA_PASSWORD=${TERADATA_PASSWORD}
+      - API_PORT=8080
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.lineage.rule=Host(`lineage.example.com`) && PathPrefix(`/api`)"
