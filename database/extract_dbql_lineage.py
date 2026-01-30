@@ -135,12 +135,25 @@ class DBQLLineageExtractor:
         self.cursor = None
         self.parser = None
         self.extraction_stats = ExtractionStats()
+        self.table_lineage_count = 0
+        self.column_lineage_count = 0
         self.stats = {
             'queries_processed': 0,
             'queries_with_lineage': 0,
             'table_lineage_inserted': 0,
             'column_lineage_inserted': 0,
         }
+
+    def _extract_target_table(self, query_text: str) -> str:
+        """Extract target table name from query text for error context."""
+        if not query_text:
+            return "UNKNOWN"
+        import re
+        # Try to match INSERT INTO or MERGE INTO
+        match = re.search(r'(?:INSERT|MERGE)\s+INTO\s+(["\w]+(?:\.["\w]+)?)', query_text, re.IGNORECASE)
+        if match:
+            return match.group(1).replace('"', '')
+        return "UNKNOWN"
 
     def connect(self) -> bool:
         """Connect to Teradata."""
