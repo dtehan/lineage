@@ -84,7 +84,8 @@ function AllDatabasesLineageGraphInner() {
   } = useLineageStore();
 
   // Get list of available databases for filtering
-  const { data: availableDatabases } = useDatabases();
+  const { data: availableDatabasesResult } = useDatabases();
+  const availableDatabases = availableDatabasesResult?.data;
 
   const {
     data,

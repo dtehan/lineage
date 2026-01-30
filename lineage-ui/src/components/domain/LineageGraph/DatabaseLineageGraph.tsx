@@ -481,7 +481,8 @@ interface DatabaseBrowserProps {
 
 function DatabaseBrowser({ databaseName, navigate }: DatabaseBrowserProps) {
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
-  const { data: tables, isLoading: tablesLoading } = useTables(databaseName);
+  const { data: tablesResult, isLoading: tablesLoading } = useTables(databaseName);
+  const tables = tablesResult?.data;
 
   const toggleTable = (tableName: string) => {
     setExpandedTables((prev) => {
@@ -558,10 +559,11 @@ interface TableBrowserItemProps {
 }
 
 function TableBrowserItem({ databaseName, table, isExpanded, onToggle, navigate }: TableBrowserItemProps) {
-  const { data: columns, isLoading: columnsLoading } = useColumns(
+  const { data: columnsResult, isLoading: columnsLoading } = useColumns(
     isExpanded ? databaseName : '',
     isExpanded ? table.tableName : ''
   );
+  const columns = columnsResult?.data;
 
   const handleTableClick = () => {
     navigate(`/lineage/${encodeURIComponent(table.id)}`);

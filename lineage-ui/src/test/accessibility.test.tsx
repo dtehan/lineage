@@ -34,28 +34,37 @@ vi.mock('../stores/useLineageStore', () => ({
   })),
 }));
 
-// Mock the API hooks
+// Mock the API hooks - using PaginatedResult format
 vi.mock('../api/hooks/useAssets', () => ({
   useDatabases: vi.fn(() => ({
-    data: [
-      { id: 'db1', name: 'database1' },
-      { id: 'db2', name: 'database2' },
-    ],
+    data: {
+      data: [
+        { id: 'db1', name: 'database1' },
+        { id: 'db2', name: 'database2' },
+      ],
+      pagination: undefined,
+    },
     isLoading: false,
     error: null,
   })),
   useTables: vi.fn(() => ({
-    data: [
-      { id: 'tbl1', tableName: 'table1' },
-      { id: 'tbl2', tableName: 'table2' },
-    ],
+    data: {
+      data: [
+        { id: 'tbl1', tableName: 'table1' },
+        { id: 'tbl2', tableName: 'table2' },
+      ],
+      pagination: undefined,
+    },
     isLoading: false,
   })),
   useColumns: vi.fn(() => ({
-    data: [
-      { id: 'col1', columnName: 'column1', columnType: 'INTEGER' },
-      { id: 'col2', columnName: 'column2', columnType: 'VARCHAR' },
-    ],
+    data: {
+      data: [
+        { id: 'col1', columnName: 'column1', columnType: 'INTEGER' },
+        { id: 'col2', columnName: 'column2', columnType: 'VARCHAR' },
+      ],
+      pagination: undefined,
+    },
     isLoading: false,
   })),
 }));

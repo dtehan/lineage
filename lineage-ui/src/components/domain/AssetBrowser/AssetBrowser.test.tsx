@@ -30,6 +30,12 @@ const mockColumns = [
   { id: 'col-2', databaseName: 'sales_db', tableName: 'orders', columnName: 'customer_id', columnType: 'INTEGER', nullable: false, columnPosition: 2 },
 ];
 
+// Helper to wrap data in PaginatedResult format
+const wrapInPaginatedResult = <T,>(data: T[] | undefined) => ({
+  data: data,
+  pagination: undefined,
+});
+
 describe('AssetBrowser Component', () => {
   const mockSetSelectedAssetId = vi.fn();
 
@@ -71,7 +77,7 @@ describe('AssetBrowser Component', () => {
 
     it('displays database list after loading', async () => {
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -79,7 +85,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,
@@ -100,7 +106,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -108,7 +114,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: mockTables,
+        data: wrapInPaginatedResult(mockTables),
         isLoading: false,
         isError: false,
         error: null,
@@ -116,7 +122,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,
@@ -139,7 +145,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -147,7 +153,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: mockTables,
+        data: wrapInPaginatedResult(mockTables),
         isLoading: false,
         isError: false,
         error: null,
@@ -155,7 +161,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,
@@ -186,7 +192,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -194,7 +200,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: mockTables,
+        data: wrapInPaginatedResult(mockTables),
         isLoading: false,
         isError: false,
         error: null,
@@ -202,7 +208,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: mockColumns,
+        data: wrapInPaginatedResult(mockColumns),
         isLoading: false,
         isError: false,
         error: null,
@@ -237,7 +243,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -245,7 +251,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: mockTables,
+        data: wrapInPaginatedResult(mockTables),
         isLoading: false,
         isError: false,
         error: null,
@@ -253,7 +259,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: mockColumns,
+        data: wrapInPaginatedResult(mockColumns),
         isLoading: false,
         isError: false,
         error: null,
@@ -291,7 +297,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -299,7 +305,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: mockTablesWithViews,
+        data: wrapInPaginatedResult(mockTablesWithViews),
         isLoading: false,
         isError: false,
         error: null,
@@ -307,7 +313,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,
@@ -335,7 +341,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -343,7 +349,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: [{ id: 'tbl-1', databaseName: 'sales_db', tableName: 'orders', tableKind: 'T' }],
+        data: wrapInPaginatedResult([{ id: 'tbl-1', databaseName: 'sales_db', tableName: 'orders', tableKind: 'T' }]),
         isLoading: false,
         isError: false,
         error: null,
@@ -351,7 +357,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,
@@ -371,7 +377,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -379,7 +385,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: [{ id: 'view-1', databaseName: 'sales_db', tableName: 'my_view', tableKind: 'V' }],
+        data: wrapInPaginatedResult([{ id: 'view-1', databaseName: 'sales_db', tableName: 'my_view', tableKind: 'V' }]),
         isLoading: false,
         isError: false,
         error: null,
@@ -387,7 +393,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,
@@ -407,7 +413,7 @@ describe('AssetBrowser Component', () => {
       const user = userEvent.setup();
 
       vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-        data: mockDatabases,
+        data: wrapInPaginatedResult(mockDatabases),
         isLoading: false,
         isError: false,
         error: null,
@@ -415,7 +421,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useDatabases>);
 
       vi.mocked(useAssetsModule.useTables).mockReturnValue({
-        data: [{ id: 'mat-1', databaseName: 'sales_db', tableName: 'my_mat_view', tableKind: 'M' }],
+        data: wrapInPaginatedResult([{ id: 'mat-1', databaseName: 'sales_db', tableName: 'my_mat_view', tableKind: 'M' }]),
         isLoading: false,
         isError: false,
         error: null,
@@ -423,7 +429,7 @@ describe('AssetBrowser Component', () => {
       } as ReturnType<typeof useAssetsModule.useTables>);
 
       vi.mocked(useAssetsModule.useColumns).mockReturnValue({
-        data: undefined,
+        data: wrapInPaginatedResult(undefined),
         isLoading: false,
         isError: false,
         error: null,

@@ -54,7 +54,8 @@ export function AssetBrowser() {
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
 
-  const { data: databases, isLoading } = useDatabases();
+  const { data: databasesResult, isLoading } = useDatabases();
+  const databases = databasesResult?.data;
 
   const toggleDatabase = (dbName: string) => {
     setExpandedDatabases((prev) => {
@@ -136,7 +137,8 @@ interface DatabaseItemProps {
 }
 
 function DatabaseItem({ database, isExpanded, onToggle, expandedTables, onToggleTable }: DatabaseItemProps) {
-  const { data: tables } = useTables(isExpanded ? database.name : '');
+  const { data: tablesResult } = useTables(isExpanded ? database.name : '');
+  const tables = tablesResult?.data;
   const navigate = useNavigate();
 
   const handleViewDatabaseLineage = (e: React.MouseEvent) => {
@@ -200,7 +202,8 @@ interface TableItemProps {
 }
 
 function TableItem({ databaseName, table, isExpanded, onToggle }: TableItemProps) {
-  const { data: columns } = useColumns(isExpanded ? databaseName : '', isExpanded ? table.tableName : '');
+  const { data: columnsResult } = useColumns(isExpanded ? databaseName : '', isExpanded ? table.tableName : '');
+  const columns = columnsResult?.data;
   const { setSelectedAssetId } = useLineageStore();
   const navigate = useNavigate();
 

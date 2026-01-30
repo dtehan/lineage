@@ -82,7 +82,7 @@ describe('AllDatabasesLineageGraph Component', () => {
     vi.clearAllMocks();
 
     vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
-      data: mockDatabases,
+      data: { data: mockDatabases, pagination: undefined },
       isLoading: false,
       isError: false,
       error: null,
