@@ -77,10 +77,12 @@ Plans:
   3. Paginated responses include total_count, has_next, and current page info
   4. Database queries use LIMIT/OFFSET at repository layer
   5. Frontend loads additional pages when scrolling or navigating
-**Plans**: TBD
+**Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md - Create pagination infrastructure (validation, DTOs, interfaces, mocks)
+- [ ] 04-02-PLAN.md - Implement pagination in repository, service, handlers with tests
+- [ ] 04-03-PLAN.md - Update frontend hooks with pagination support
 
 ### Phase 5: DBQL Error Handling
 **Goal**: DBQL extraction continues processing after individual failures with detailed error logging
@@ -120,6 +122,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 1. Error Handling Foundation | 3/3 | ✓ Complete | 2026-01-30 |
 | 2. Credential Security | 1/1 | ✓ Complete | 2026-01-29 |
 | 3. Input Validation | 2/2 | ✓ Complete | 2026-01-29 |
-| 4. Pagination | 0/TBD | Not started | - |
+| 4. Pagination | 0/3 | Planned | - |
 | 5. DBQL Error Handling | 0/2 | Planned | - |
 | 6. Security Documentation | 0/1 | Planned | - |
