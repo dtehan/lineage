@@ -101,15 +101,15 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PAGE-03 | Phase 4 | Pending |
 | PAGE-04 | Phase 4 | Pending |
 | PAGE-05 | Phase 4 | Pending |
-| DBQL-01 | Phase 5 | Pending |
-| DBQL-02 | Phase 5 | Pending |
-| DBQL-03 | Phase 5 | Pending |
-| DBQL-04 | Phase 5 | Pending |
+| DBQL-01 | Phase 5 | Complete |
+| DBQL-02 | Phase 5 | Complete |
+| DBQL-03 | Phase 5 | Complete |
+| DBQL-04 | Phase 5 | Complete |
 | TEST-01 | Phase 3 | Pending |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 2 | Pending |
 | TEST-04 | Phase 4 | Pending |
-| TEST-05 | Phase 5 | Pending |
+| TEST-05 | Phase 5 | Complete |
 
 **Coverage:**
 - v1 requirements: 24 total
