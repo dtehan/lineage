@@ -89,6 +89,33 @@ export interface PaginationInfo {
   totalPages: number;
 }
 
+// API pagination metadata (matches backend PaginationMeta)
+export interface ApiPaginationMeta {
+  total_count: number;
+  limit: number;
+  offset: number;
+  has_next: boolean;
+}
+
+// Paginated response wrapper for asset endpoints
+export interface PaginatedDatabaseResponse {
+  databases: Database[];
+  total: number;
+  pagination?: ApiPaginationMeta;
+}
+
+export interface PaginatedTableResponse {
+  tables: Table[];
+  total: number;
+  pagination?: ApiPaginationMeta;
+}
+
+export interface PaginatedColumnResponse {
+  columns: Column[];
+  total: number;
+  pagination?: ApiPaginationMeta;
+}
+
 export interface DatabaseLineageResponse {
   databaseName: string;
   graph: LineageGraph;
