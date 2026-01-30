@@ -55,9 +55,10 @@ func main() {
 	// HTTP Handler
 	handler := httpAdapter.NewHandler(assetService, lineageService, searchService)
 
-	// OpenLineage handler (nil until repository implementation is available)
-	// TODO: Wire up OpenLineageHandler when OpenLineageRepository is implemented
-	var olHandler *httpAdapter.OpenLineageHandler = nil
+	// OpenLineage repository, service, and handler
+	olRepo := teradata.NewOpenLineageRepository(db)
+	olService := application.NewOpenLineageService(olRepo)
+	olHandler := httpAdapter.NewOpenLineageHandler(olService)
 
 	router := httpAdapter.NewRouter(handler, olHandler)
 
