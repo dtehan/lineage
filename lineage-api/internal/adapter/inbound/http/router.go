@@ -6,7 +6,7 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewRouter(h *Handler) *chi.Mux {
+func NewRouter(h *Handler, olHandler *OpenLineageHandler) *chi.Mux {
 	r := chi.NewRouter()
 
 	// Middleware
@@ -25,7 +25,7 @@ func NewRouter(h *Handler) *chi.Mux {
 	// Health check
 	r.Get("/health", h.Health)
 
-	// API routes
+	// API v1 routes (backward compatible)
 	r.Route("/api/v1", func(r chi.Router) {
 		// Asset routes
 		r.Route("/assets", func(r chi.Router) {
@@ -45,6 +45,23 @@ func NewRouter(h *Handler) *chi.Mux {
 		// Search routes
 		r.Get("/search", h.Search)
 	})
+
+	// API v2 routes - OpenLineage aligned
+	if olHandler != nil {
+		r.Route("/api/v2/openlineage", func(r chi.Router) {
+			// Namespace routes
+			r.Get("/namespaces", olHandler.ListNamespaces)
+			r.Get("/namespaces/{namespaceId}", olHandler.GetNamespace)
+			r.Get("/namespaces/{namespaceId}/datasets", olHandler.ListDatasets)
+
+			// Dataset routes
+			r.Get("/datasets/search", olHandler.SearchDatasets)
+			r.Get("/datasets/{datasetId}", olHandler.GetDataset)
+
+			// Lineage routes
+			r.Get("/lineage/{datasetId}/{fieldName}", olHandler.GetLineageGraph)
+		})
+	}
 
 	return r
 }

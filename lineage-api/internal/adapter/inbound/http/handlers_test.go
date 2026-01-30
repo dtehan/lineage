@@ -467,7 +467,7 @@ func TestGetLineage_InvalidMaxDepth(t *testing.T) {
 func TestHealthEndpoint(t *testing.T) {
 	handler, _, _, _ := setupTestHandler()
 
-	router := NewRouter(handler)
+	router := NewRouter(handler, nil)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -578,7 +578,7 @@ func TestGetLineage_NonExistentAssetID(t *testing.T) {
 // TC-ERR-030: CORS Preflight Request
 func TestCORSPreflightRequest(t *testing.T) {
 	handler, _, _, _ := setupTestHandler()
-	router := NewRouter(handler)
+	router := NewRouter(handler, nil)
 
 	req := httptest.NewRequest("OPTIONS", "/api/v1/assets/databases", nil)
 	req.Header.Set("Origin", "http://localhost:3000")
@@ -600,7 +600,7 @@ func TestCORSPreflightRequest(t *testing.T) {
 func TestCORSAllowedOrigin(t *testing.T) {
 	handler, assetRepo, _, _ := setupTestHandler()
 	assetRepo.Databases = []domain.Database{{ID: "db-001", Name: "test"}}
-	router := NewRouter(handler)
+	router := NewRouter(handler, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/assets/databases", nil)
 	req.Header.Set("Origin", "http://localhost:5173")
@@ -616,7 +616,7 @@ func TestCORSAllowedOrigin(t *testing.T) {
 // TC-HEALTH-002: Health Check Response Time (verification via simple execution)
 func TestHealthEndpoint_ResponseFormat(t *testing.T) {
 	handler, _, _, _ := setupTestHandler()
-	router := NewRouter(handler)
+	router := NewRouter(handler, nil)
 
 	req := httptest.NewRequest("GET", "/health", nil)
 	w := httptest.NewRecorder()
@@ -635,7 +635,7 @@ func TestHealthEndpoint_ResponseFormat(t *testing.T) {
 // TC-HEALTH-003: Health Check Under Load (simulated)
 func TestHealthEndpoint_MultipleRequests(t *testing.T) {
 	handler, _, _, _ := setupTestHandler()
-	router := NewRouter(handler)
+	router := NewRouter(handler, nil)
 
 	// Send multiple health check requests
 	for i := 0; i < 10; i++ {
@@ -651,7 +651,7 @@ func TestHealthEndpoint_MultipleRequests(t *testing.T) {
 // Test router registers all expected routes
 func TestRouterRegistersRoutes(t *testing.T) {
 	handler, _, _, _ := setupTestHandler()
-	router := NewRouter(handler)
+	router := NewRouter(handler, nil)
 
 	testCases := []struct {
 		method string

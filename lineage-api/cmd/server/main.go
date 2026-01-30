@@ -54,7 +54,12 @@ func main() {
 
 	// HTTP Handler
 	handler := httpAdapter.NewHandler(assetService, lineageService, searchService)
-	router := httpAdapter.NewRouter(handler)
+
+	// OpenLineage handler (nil until repository implementation is available)
+	// TODO: Wire up OpenLineageHandler when OpenLineageRepository is implemented
+	var olHandler *httpAdapter.OpenLineageHandler = nil
+
+	router := httpAdapter.NewRouter(handler, olHandler)
 
 	// Server
 	server := &http.Server{
