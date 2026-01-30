@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -986,6 +987,204 @@ func TestGetImpactAnalysis_ValidMaxDepthAndDefaults(t *testing.T) {
 			handler.GetImpactAnalysis(w, req)
 
 			assert.Equal(t, http.StatusOK, w.Code, "should succeed for %s", tt.name)
+		})
+	}
+}
+
+// =============================================================================
+// Error Response Security Tests (SEC-03, SEC-04, TEST-02)
+// =============================================================================
+
+// TestErrorResponseNoSensitiveData verifies that error responses do not leak
+// sensitive database information such as table names, SQL queries, or connection details.
+// This test simulates a realistic database error with sensitive details.
+func TestErrorResponseNoSensitiveData(t *testing.T) {
+	handler, assetRepo, _, _ := setupTestHandler()
+
+	// Create a realistic database error with sensitive details
+	sensitiveErr := errors.New(
+		"teradatasql.Error: [SQLState HY000] [Version 17.20.0] " +
+			"Failed to connect to 'test-host.env.clearscape.teradata.com:1025' " +
+			"as user 'demo_user' password='****': Connection refused. " +
+			"Query: SELECT * FROM LIN_DATABASE WHERE database_name = 'test'",
+	)
+	assetRepo.ListDatabasesErr = sensitiveErr
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/assets/databases", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListDatabases(w, req)
+
+	// Verify HTTP 500 status
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+
+	// Parse response body
+	var resp map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	// Verify generic error message (not the actual error)
+	assert.Equal(t, "Internal server error", resp["error"])
+
+	// Verify request_id is present
+	assert.NotEmpty(t, resp["request_id"])
+
+	// Verify NO sensitive data in response body
+	body := w.Body.String()
+	for _, pattern := range sensitivePatterns {
+		assert.NotContains(t, body, pattern, "Response should not contain sensitive pattern: %s", pattern)
+	}
+}
+
+// TestErrorResponseHasRequestID verifies that all error responses include
+// a request_id field for correlation with server logs.
+func TestErrorResponseHasRequestID(t *testing.T) {
+	handler, assetRepo, _, _ := setupTestHandler()
+
+	assetRepo.ListDatabasesErr = errors.New("any internal error")
+
+	req := newTestRequestWithRequestID("GET", "/api/v1/assets/databases", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListDatabases(w, req)
+
+	var resp map[string]interface{}
+	err := json.Unmarshal(w.Body.Bytes(), &resp)
+	require.NoError(t, err)
+
+	// Verify request_id field exists and is a non-empty string
+	requestID, ok := resp["request_id"].(string)
+	assert.True(t, ok, "request_id should be a string")
+	assert.NotEmpty(t, requestID, "request_id should not be empty")
+	assert.Equal(t, "test-request-id-12345", requestID, "request_id should match the one set in context")
+}
+
+// TestAllHandlersReturnGenericError verifies that ALL handler endpoints return
+// generic "Internal server error" messages and never expose internal details.
+// This is a table-driven test covering all 8 handlers.
+func TestAllHandlersReturnGenericError(t *testing.T) {
+	// Create an error that contains sensitive information
+	testErr := errors.New("internal database error: SELECT * FROM LIN_TABLE WHERE id = 1")
+
+	tests := []struct {
+		name        string
+		setupMocks  func(*mocks.MockAssetRepository, *mocks.MockLineageRepository, *mocks.MockSearchRepository)
+		method      string
+		path        string
+		params      map[string]string
+		handlerFunc func(h *Handler, w http.ResponseWriter, r *http.Request)
+	}{
+		{
+			name: "ListDatabases",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				ar.ListDatabasesErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/assets/databases",
+			params:      nil,
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.ListDatabases(w, r) },
+		},
+		{
+			name: "ListTables",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				ar.ListTablesErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/assets/databases/test_db/tables",
+			params:      map[string]string{"database": "test_db"},
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.ListTables(w, r) },
+		},
+		{
+			name: "ListColumns",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				ar.ListColumnsErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/assets/databases/test_db/tables/users/columns",
+			params:      map[string]string{"database": "test_db", "table": "users"},
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.ListColumns(w, r) },
+		},
+		{
+			name: "GetLineage",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				lr.GetLineageGraphErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/lineage/col-001",
+			params:      map[string]string{"assetId": "col-001"},
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.GetLineage(w, r) },
+		},
+		{
+			name: "GetUpstreamLineage",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				lr.GetUpstreamLineageErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/lineage/col-001/upstream",
+			params:      map[string]string{"assetId": "col-001"},
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.GetUpstreamLineage(w, r) },
+		},
+		{
+			name: "GetDownstreamLineage",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				lr.GetDownstreamLineageErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/lineage/col-001/downstream",
+			params:      map[string]string{"assetId": "col-001"},
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.GetDownstreamLineage(w, r) },
+		},
+		{
+			name: "GetImpactAnalysis",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				lr.GetDownstreamLineageErr = testErr // Impact analysis uses downstream
+			},
+			method:      "GET",
+			path:        "/api/v1/lineage/col-001/impact",
+			params:      map[string]string{"assetId": "col-001"},
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.GetImpactAnalysis(w, r) },
+		},
+		{
+			name: "Search",
+			setupMocks: func(ar *mocks.MockAssetRepository, lr *mocks.MockLineageRepository, sr *mocks.MockSearchRepository) {
+				sr.SearchErr = testErr
+			},
+			method:      "GET",
+			path:        "/api/v1/search?q=test",
+			params:      nil,
+			handlerFunc: func(h *Handler, w http.ResponseWriter, r *http.Request) { h.Search(w, r) },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler, assetRepo, lineageRepo, searchRepo := setupTestHandler()
+			tt.setupMocks(assetRepo, lineageRepo, searchRepo)
+
+			req := newTestRequestWithRequestID(tt.method, tt.path, tt.params)
+			w := httptest.NewRecorder()
+
+			tt.handlerFunc(handler, w, req)
+
+			// Verify HTTP 500 status
+			assert.Equal(t, http.StatusInternalServerError, w.Code, "%s should return 500", tt.name)
+
+			// Parse response
+			var resp map[string]interface{}
+			err := json.Unmarshal(w.Body.Bytes(), &resp)
+			require.NoError(t, err, "%s response should be valid JSON", tt.name)
+
+			// Verify generic error message
+			assert.Equal(t, "Internal server error", resp["error"], "%s should return generic error", tt.name)
+
+			// Verify request_id is present
+			assert.NotEmpty(t, resp["request_id"], "%s should include request_id", tt.name)
+
+			// Verify no sensitive data leaked
+			body := w.Body.String()
+			assert.NotContains(t, body, "LIN_TABLE", "%s should not leak LIN_TABLE", tt.name)
+			assert.NotContains(t, body, "SELECT", "%s should not leak SELECT", tt.name)
+			assert.NotContains(t, body, "FROM", "%s should not leak FROM", tt.name)
 		})
 	}
 }
