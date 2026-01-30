@@ -144,6 +144,164 @@ def generate_lineage_id(source, target):
     combined = f"{source}->{target}"
     return hashlib.md5(combined.encode()).hexdigest()[:16]
 
+
+def generate_namespace_id(namespace_uri: str) -> str:
+    """Generate a stable namespace ID from URI."""
+    return hashlib.md5(namespace_uri.encode()).hexdigest()[:16]
+
+
+def generate_ol_lineage_id(source: str, target: str) -> str:
+    """Generate a stable lineage ID from source and target column paths for OpenLineage."""
+    combined = f"{source}->{target}"
+    return hashlib.md5(combined.encode()).hexdigest()[:24]
+
+
+def generate_dataset_id(namespace_id: str, database: str, table: str) -> str:
+    """Generate dataset ID in format: namespace_id/database.table"""
+    return f"{namespace_id}/{database}.{table}"
+
+
+def generate_field_id(dataset_id: str, field_name: str) -> str:
+    """Generate field ID in format: dataset_id/field_name"""
+    return f"{dataset_id}/{field_name}"
+
+
+def populate_openlineage_namespace(cursor, namespace_uri: str):
+    """Create or get the namespace entry."""
+    namespace_id = generate_namespace_id(namespace_uri)
+
+    # Check if exists
+    cursor.execute("""
+        SELECT namespace_id FROM demo_user.OL_NAMESPACE
+        WHERE namespace_id = ?
+    """, (namespace_id,))
+
+    if not cursor.fetchone():
+        cursor.execute("""
+            INSERT INTO demo_user.OL_NAMESPACE
+            (namespace_id, namespace_uri, description, spec_version, created_at)
+            VALUES (?, ?, ?, '2-0-2', CURRENT_TIMESTAMP)
+        """, (namespace_id, namespace_uri, f"Teradata instance at {namespace_uri}"))
+        print(f"  Created namespace: {namespace_uri}")
+
+    return namespace_id
+
+
+def populate_openlineage_datasets(cursor, namespace_id: str):
+    """Populate OL_DATASET from LIN_TABLE."""
+    print("\n--- Populating OL_DATASET from tables ---")
+
+    # Get distinct databases and tables from LIN_TABLE
+    cursor.execute("""
+        SELECT database_name, table_name, table_kind, comment_string, extracted_at
+        FROM demo_user.LIN_TABLE
+        WHERE is_active = 'Y'
+    """)
+
+    rows = cursor.fetchall()
+    count = 0
+    for row in rows:
+        db_name, tbl_name, tbl_kind, comment, extracted_at = row
+        dataset_name = f"{db_name}.{tbl_name}"
+        dataset_id = generate_dataset_id(namespace_id, db_name, tbl_name)
+        source_type = 'VIEW' if tbl_kind == 'V' else 'TABLE'
+
+        try:
+            cursor.execute("""
+                INSERT INTO demo_user.OL_DATASET
+                (dataset_id, namespace_id, name, description, source_type, created_at, updated_at, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'Y')
+            """, (dataset_id, namespace_id, dataset_name, comment, source_type, extracted_at))
+            count += 1
+        except Exception as e:
+            if "duplicate" not in str(e).lower():
+                print(f"  Warning: {dataset_name}: {e}")
+
+    print(f"  Created {count} datasets")
+    return count
+
+
+def populate_openlineage_fields(cursor, namespace_id: str):
+    """Populate OL_DATASET_FIELD from LIN_COLUMN."""
+    print("\n--- Populating OL_DATASET_FIELD from columns ---")
+
+    cursor.execute("""
+        SELECT database_name, table_name, column_name, column_type,
+               nullable, comment_string, column_position, extracted_at
+        FROM demo_user.LIN_COLUMN
+        WHERE is_active = 'Y'
+    """)
+
+    rows = cursor.fetchall()
+    count = 0
+    for row in rows:
+        db_name, tbl_name, col_name, col_type, nullable, comment, position, extracted_at = row
+        dataset_id = generate_dataset_id(namespace_id, db_name, tbl_name)
+        field_id = generate_field_id(dataset_id, col_name)
+
+        try:
+            cursor.execute("""
+                INSERT INTO demo_user.OL_DATASET_FIELD
+                (field_id, dataset_id, field_name, field_type, field_description,
+                 ordinal_position, nullable, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (field_id, dataset_id, col_name, col_type, comment, position, nullable, extracted_at))
+            count += 1
+        except Exception as e:
+            if "duplicate" not in str(e).lower():
+                pass  # Skip duplicate errors silently for fields
+
+    print(f"  Created {count} fields")
+    return count
+
+
+def populate_openlineage_lineage(cursor, namespace_id: str, namespace_uri: str):
+    """Populate OL_COLUMN_LINEAGE from manual mappings."""
+    print("\n--- Populating OL_COLUMN_LINEAGE ---")
+
+    insert_sql = """
+        INSERT INTO demo_user.OL_COLUMN_LINEAGE
+        (lineage_id, run_id, source_namespace, source_dataset, source_field,
+         target_namespace, target_dataset, target_field,
+         transformation_type, transformation_subtype, transformation_description,
+         confidence_score, discovered_at, is_active)
+        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'Y')
+    """
+
+    count = 0
+    for src, tgt, trans_type, confidence in COLUMN_LINEAGE_MAPPINGS:
+        src_parts = src.split(".")
+        tgt_parts = tgt.split(".")
+
+        lineage_id = generate_ol_lineage_id(src, tgt)
+        ol_type, ol_subtype = map_transformation_type(trans_type)
+
+        source_dataset = f"{src_parts[0]}.{src_parts[1]}"
+        target_dataset = f"{tgt_parts[0]}.{tgt_parts[1]}"
+
+        try:
+            cursor.execute(insert_sql, (
+                lineage_id,
+                namespace_uri,
+                source_dataset,
+                src_parts[2],  # source_field
+                namespace_uri,
+                target_dataset,
+                tgt_parts[2],  # target_field
+                ol_type,
+                ol_subtype,
+                f"Mapped from {trans_type}",
+                confidence
+            ))
+            count += 1
+        except Exception as e:
+            if "duplicate" not in str(e).lower():
+                print(f"  Warning: {src}->{tgt}: {e}")
+
+    print(f"  Created {count} lineage records")
+    return count
+
+
 # Column lineage records based on known data flows
 # Format: (source_column_id, target_column_id, transformation_type, confidence_score)
 COLUMN_LINEAGE_MAPPINGS = [
