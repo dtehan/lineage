@@ -6,13 +6,17 @@ Implements the same API as the Go backend using teradatasql driver.
 Reads configuration from .env file and environment variables.
 Environment variables take precedence over .env file values.
 
-REQUIRED Environment Variables (at least one must be set):
-    TD_PASSWORD or TERADATA_PASSWORD - Teradata password (required)
+DATABASE Environment Variables:
+    TERADATA_HOST     - Teradata host (default: ClearScape test environment)
+    TERADATA_USER     - Teradata username (default: demo_user)
+    TERADATA_PASSWORD - Teradata password (REQUIRED)
+    TERADATA_DATABASE - Default database (default: demo_user)
 
-OPTIONAL Environment Variables (with defaults):
-    TD_HOST / TERADATA_HOST     - Teradata host (default: ClearScape test environment)
-    TD_USER / TERADATA_USER     - Teradata username (default: demo_user)
-    TD_DATABASE / TERADATA_DATABASE - Default database (default: demo_user)
+    Legacy aliases (deprecated): TD_HOST, TD_USER, TD_PASSWORD, TD_DATABASE
+
+SERVER Environment Variables:
+    API_PORT - Server port (default: 8080)
+    PORT     - Legacy alias for API_PORT
 """
 
 import os
@@ -1480,7 +1484,7 @@ def search():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", "8080"))
+    port = int(os.environ.get("API_PORT") or os.environ.get("PORT", "8080"))
     print(f"Starting Python Lineage API on port {port}")
     print(f"Database: {DB_CONFIG['host']}")
     app.run(host="0.0.0.0", port=port, debug=False)
