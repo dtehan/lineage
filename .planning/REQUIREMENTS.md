@@ -25,11 +25,11 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Pagination
 
-- [ ] **PAGE-01**: Asset listing endpoints (databases, tables, columns) support limit and offset query parameters
-- [ ] **PAGE-02**: Default page size is 100; maximum page size is 500; API returns 400 for values outside bounds
-- [ ] **PAGE-03**: Paginated responses include metadata: total count, has_next boolean, current page info
-- [ ] **PAGE-04**: Backend repositories implement pagination with LIMIT/OFFSET at database layer
-- [ ] **PAGE-05**: Frontend updates to handle paginated responses and load additional pages as needed
+- [x] **PAGE-01**: Asset listing endpoints (databases, tables, columns) support limit and offset query parameters (Phase 4)
+- [x] **PAGE-02**: Default page size is 100; maximum page size is 500; API returns 400 for values outside bounds (Phase 4)
+- [x] **PAGE-03**: Paginated responses include metadata: total count, has_next boolean, current page info (Phase 4)
+- [x] **PAGE-04**: Backend repositories implement pagination with LIMIT/OFFSET at database layer (Phase 4)
+- [x] **PAGE-05**: Frontend updates to handle paginated responses and load additional pages as needed (Phase 4)
 
 ### DBQL Error Handling
 
@@ -43,7 +43,7 @@ Requirements for production hardening. Each maps to roadmap phases.
 - [x] **TEST-01**: Unit tests verify maxDepth and direction validation with edge cases (null, negative, string values) (Phase 3)
 - [ ] **TEST-02**: Integration tests verify error responses never expose internal details
 - [x] **TEST-03**: Tests verify application startup fails with missing credentials (no silent fallback) (Phase 2)
-- [ ] **TEST-04**: Tests verify pagination bounds enforcement and metadata correctness
+- [x] **TEST-04**: Tests verify pagination bounds enforcement and metadata correctness (Phase 4)
 - [ ] **TEST-05**: Tests verify DBQL error handling for missing access and malformed queries
 
 ## v2 Requirements
@@ -96,11 +96,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-04 | Phase 1 | Complete |
 | SEC-05 | Phase 1 | Complete |
 | SEC-06 | Phase 6 | Complete |
-| PAGE-01 | Phase 4 | Pending |
-| PAGE-02 | Phase 4 | Pending |
-| PAGE-03 | Phase 4 | Pending |
-| PAGE-04 | Phase 4 | Pending |
-| PAGE-05 | Phase 4 | Pending |
+| PAGE-01 | Phase 4 | Complete |
+| PAGE-02 | Phase 4 | Complete |
+| PAGE-03 | Phase 4 | Complete |
+| PAGE-04 | Phase 4 | Complete |
+| PAGE-05 | Phase 4 | Complete |
 | DBQL-01 | Phase 5 | Complete |
 | DBQL-02 | Phase 5 | Complete |
 | DBQL-03 | Phase 5 | Complete |
@@ -108,7 +108,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-01 | Phase 3 | Pending |
 | TEST-02 | Phase 1 | Complete |
 | TEST-03 | Phase 2 | Pending |
-| TEST-04 | Phase 4 | Pending |
+| TEST-04 | Phase 4 | Complete |
 | TEST-05 | Phase 5 | Complete |
 
 **Coverage:**
