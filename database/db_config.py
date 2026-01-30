@@ -79,3 +79,15 @@ def get_config():
 
 
 CONFIG = get_config()
+
+
+def get_openlineage_namespace():
+    """Generate OpenLineage namespace URI from Teradata connection config.
+
+    Format: teradata://{host}:{port}
+    Example: teradata://demo.teradata.com:1025
+    """
+    host = CONFIG.get('host', 'localhost')
+    # Default Teradata port is 1025
+    port = CONFIG.get('port', 1025)
+    return f"teradata://{host}:{port}"
