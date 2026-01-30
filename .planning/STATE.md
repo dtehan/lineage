@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-01-29)
 ## Current Position
 
 Phase: 8 of 8 (OpenLineage Standard Alignment)
-Plan: 3 of 7 in current phase
+Plan: 4 of 7 in current phase
 Status: In progress
-Last activity: 2026-01-30 - Completed 08-03-PLAN.md
+Last activity: 2026-01-30 - Completed 08-04-PLAN.md
 
-Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Phase 8: 3/7 plans
-[==================......] 19/23 plans (83%)
+Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Phase 8: 4/7 plans
+[===================.....] 20/23 plans (87%)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: 3 min
-- Total execution time: 63 min
+- Total execution time: 67 min
 
 **By Phase:**
 
@@ -35,10 +35,10 @@ Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7: 3/3 [COMPLETE] | Ph
 | 05-dbql-error-handling | 2 | 5 min | 2.5 min |
 | 06-security-documentation | 1 | 2 min | 2 min |
 | 07-environment-variable-consolidation | 3 | 5 min | 1.7 min |
-| 08-open-lineage-standard-alignment | 3 | 9 min | 3 min |
+| 08-open-lineage-standard-alignment | 4 | 13 min | 3.25 min |
 
 **Recent Trend:**
-- Last 5 plans: 07-02 (1 min), 07-03 (2 min), 08-01 (3 min), 08-03 (3 min)
+- Last 5 plans: 07-03 (2 min), 08-01 (3 min), 08-02 (3 min), 08-03 (3 min), 08-04 (4 min)
 - Trend: Excellent velocity
 
 *Updated after each plan completion*
@@ -114,6 +114,11 @@ Recent decisions affecting current work:
 - [08-02]: OPENLINEAGE_TRANSFORMATION_MAPPING maps 5 types to OpenLineage type/subtype pairs
 - [08-02]: Hierarchical ID format namespace_id/db.table/field_name for OpenLineage datasets
 - [08-02]: populate_lineage.py --openlineage flag for OL_* table population
+- [08-04]: Query builders are separate methods for upstream/downstream/bidirectional
+- [08-04]: Cycle detection uses POSITION(lineage_id IN path) = 0
+- [08-04]: Bidirectional query combines upstream and downstream CTEs with UNION
+- [08-04]: maxDepth enforced with depth < N check in recursive CTE
+- [08-04]: Graph nodes use dataset/field format for unique IDs
 
 ### Pending Todos
 
@@ -131,5 +136,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 08-03-PLAN.md
+Stopped at: Completed 08-04-PLAN.md
 Resume file: None
