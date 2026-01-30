@@ -123,6 +123,10 @@ Recent decisions affecting current work:
 - [08-05]: OpenLineageHandler is nil-safe - v2 routes only added if handler provided
 - [08-05]: Service layer handles domain-to-DTO conversion with helper methods
 - [08-05]: Search route placed before parameterized route to avoid conflicts
+- [08-06]: TypeScript types mirror backend DTO structure exactly (camelCase JSON)
+- [08-06]: Separate apiClientV2 axios instance without /api/v1 baseURL
+- [08-06]: Query key factory (openLineageKeys) for consistent cache invalidation
+- [08-06]: Hooks use enabled flag to prevent invalid requests
 - [08-07]: Add OpenLineage section before DBQL section in user guide
 - [08-07]: Document migration path from v1 to v2 API in user guide
 - [08-07]: Include transformation type mapping table in database README
