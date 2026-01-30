@@ -172,20 +172,38 @@ class DBQLLineageExtractor:
             print("  Install sqlglot: pip install sqlglot>=25.0.0")
             return False
 
-    def check_dbql_access(self) -> bool:
-        """Verify access to DBQL tables."""
-        print("\nChecking DBQL access...")
+    def check_dbql_access(self) -> Tuple[bool, str]:
+        """
+        Verify access to DBQL tables.
+
+        Returns:
+            Tuple of (has_access: bool, message: str with guidance if no access)
+        """
+        logger.info("Checking DBQL access...")
         try:
             self.cursor.execute("SELECT TOP 1 1 FROM DBC.DBQLogTbl")
-            print("  DBQL access confirmed")
-            return True
+            logger.info("DBQL access confirmed")
+            return True, "DBQL access confirmed"
         except teradatasql.DatabaseError as e:
-            if "3523" in str(e) or "access" in str(e).lower():
-                print("  ERROR: No access to DBQL tables")
-                print("  DBQL logging may not be enabled or you lack SELECT privileges")
+            error_str = str(e)
+            if "3523" in error_str or "access" in error_str.lower():
+                message = (
+                    "No access to DBQL tables.\n\n"
+                    "This may indicate:\n"
+                    "  1. DBQL logging is not enabled on this Teradata system\n"
+                    "  2. Your user lacks SELECT privileges on DBC.DBQLogTbl\n"
+                    "  3. Your Teradata environment doesn't support DBQL\n\n"
+                    "Fallback: Use manual lineage mappings instead:\n"
+                    "  python populate_lineage.py --manual\n\n"
+                    "To enable DBQL access, contact your DBA to grant:\n"
+                    "  GRANT SELECT ON DBC.DBQLogTbl TO your_user;\n"
+                    "  GRANT SELECT ON DBC.DBQLSQLTbl TO your_user;"
+                )
+                logger.warning("No DBQL access: %s", e)
+                return False, message
             else:
-                print(f"  ERROR: {e}")
-            return False
+                logger.error("DBQL check failed: %s", e)
+                return False, f"DBQL check failed: {e}"
 
     def get_watermark(self) -> Optional[datetime]:
         """Get the last extraction timestamp from watermark table."""
@@ -590,11 +608,9 @@ Examples:
 
     try:
         # Check DBQL access
-        if not extractor.check_dbql_access():
-            print("\nDBQL is not accessible. Possible reasons:")
-            print("  1. DBQL logging is not enabled on this system")
-            print("  2. Your user lacks SELECT privileges on DBC.DBQLogTbl")
-            print("\nFor non-DBQL environments, use: python populate_lineage.py --manual")
+        has_access, access_message = extractor.check_dbql_access()
+        if not has_access:
+            print(access_message)
             return 1
 
         # Run extraction
