@@ -232,3 +232,238 @@ func (r *OpenLineageRepository) SearchDatasets(ctx context.Context, query string
 	}
 	return datasets, rows.Err()
 }
+
+// Field operations
+
+// GetField retrieves a field by its ID.
+func (r *OpenLineageRepository) GetField(ctx context.Context, fieldID string) (*domain.OpenLineageField, error) {
+	query := `
+		SELECT field_id, dataset_id, field_name, field_type, field_description, ordinal_position, nullable, created_at
+		FROM demo_user.OL_DATASET_FIELD
+		WHERE field_id = ?`
+
+	var f domain.OpenLineageField
+	var fieldType, description sql.NullString
+	var createdAt sql.NullTime
+	var nullable string
+
+	err := r.db.QueryRowContext(ctx, query, fieldID).Scan(
+		&f.ID, &f.DatasetID, &f.Name, &fieldType, &description,
+		&f.OrdinalPosition, &nullable, &createdAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get field: %w", err)
+	}
+
+	f.Type = fieldType.String
+	f.Description = description.String
+	f.Nullable = nullable == "Y"
+	if createdAt.Valid {
+		f.CreatedAt = createdAt.Time
+	}
+	return &f, nil
+}
+
+// ListFields retrieves all fields for a dataset.
+func (r *OpenLineageRepository) ListFields(ctx context.Context, datasetID string) ([]domain.OpenLineageField, error) {
+	query := `
+		SELECT field_id, dataset_id, field_name, field_type, field_description, ordinal_position, nullable, created_at
+		FROM demo_user.OL_DATASET_FIELD
+		WHERE dataset_id = ?
+		ORDER BY ordinal_position`
+
+	rows, err := r.db.QueryContext(ctx, query, datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("list fields: %w", err)
+	}
+	defer rows.Close()
+
+	var fields []domain.OpenLineageField
+	for rows.Next() {
+		var f domain.OpenLineageField
+		var fieldType, description sql.NullString
+		var createdAt sql.NullTime
+		var nullable string
+
+		if err := rows.Scan(&f.ID, &f.DatasetID, &f.Name, &fieldType, &description,
+			&f.OrdinalPosition, &nullable, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan field: %w", err)
+		}
+		f.Type = fieldType.String
+		f.Description = description.String
+		f.Nullable = nullable == "Y"
+		if createdAt.Valid {
+			f.CreatedAt = createdAt.Time
+		}
+		fields = append(fields, f)
+	}
+	return fields, rows.Err()
+}
+
+// Job operations
+
+// GetJob retrieves a job by its ID.
+func (r *OpenLineageRepository) GetJob(ctx context.Context, jobID string) (*domain.OpenLineageJob, error) {
+	query := `
+		SELECT job_id, namespace_id, name, description, job_type, created_at, updated_at
+		FROM demo_user.OL_JOB
+		WHERE job_id = ?`
+
+	var j domain.OpenLineageJob
+	var description, jobType sql.NullString
+	var createdAt, updatedAt sql.NullTime
+
+	err := r.db.QueryRowContext(ctx, query, jobID).Scan(
+		&j.ID, &j.NamespaceID, &j.Name, &description, &jobType, &createdAt, &updatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get job: %w", err)
+	}
+
+	j.Description = description.String
+	j.JobType = jobType.String
+	if createdAt.Valid {
+		j.CreatedAt = createdAt.Time
+	}
+	if updatedAt.Valid {
+		j.UpdatedAt = updatedAt.Time
+	}
+	return &j, nil
+}
+
+// ListJobs retrieves jobs for a namespace with pagination.
+func (r *OpenLineageRepository) ListJobs(ctx context.Context, namespaceID string, limit, offset int) ([]domain.OpenLineageJob, int, error) {
+	countQuery := `SELECT COUNT(*) FROM demo_user.OL_JOB WHERE namespace_id = ?`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, namespaceID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count jobs: %w", err)
+	}
+
+	query := `
+		SELECT job_id, namespace_id, name, description, job_type, created_at, updated_at
+		FROM demo_user.OL_JOB
+		WHERE namespace_id = ?
+		ORDER BY name
+		OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`
+
+	rows, err := r.db.QueryContext(ctx, query, namespaceID, offset, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list jobs: %w", err)
+	}
+	defer rows.Close()
+
+	var jobs []domain.OpenLineageJob
+	for rows.Next() {
+		var j domain.OpenLineageJob
+		var description, jobType sql.NullString
+		var createdAt, updatedAt sql.NullTime
+
+		if err := rows.Scan(&j.ID, &j.NamespaceID, &j.Name, &description, &jobType,
+			&createdAt, &updatedAt); err != nil {
+			return nil, 0, fmt.Errorf("scan job: %w", err)
+		}
+		j.Description = description.String
+		j.JobType = jobType.String
+		if createdAt.Valid {
+			j.CreatedAt = createdAt.Time
+		}
+		if updatedAt.Valid {
+			j.UpdatedAt = updatedAt.Time
+		}
+		jobs = append(jobs, j)
+	}
+	return jobs, total, rows.Err()
+}
+
+// Run operations
+
+// GetRun retrieves a run by its ID.
+func (r *OpenLineageRepository) GetRun(ctx context.Context, runID string) (*domain.OpenLineageRun, error) {
+	query := `
+		SELECT run_id, job_id, event_type, event_time, nominal_start_time, nominal_end_time, producer, schema_url, created_at
+		FROM demo_user.OL_RUN
+		WHERE run_id = ?`
+
+	var run domain.OpenLineageRun
+	var eventType, producer, schemaURL sql.NullString
+	var eventTime, nominalStart, nominalEnd, createdAt sql.NullTime
+
+	err := r.db.QueryRowContext(ctx, query, runID).Scan(
+		&run.ID, &run.JobID, &eventType, &eventTime,
+		&nominalStart, &nominalEnd, &producer, &schemaURL, &createdAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get run: %w", err)
+	}
+
+	run.EventType = eventType.String
+	run.Producer = producer.String
+	run.SchemaURL = schemaURL.String
+	if eventTime.Valid {
+		run.EventTime = eventTime.Time
+	}
+	if nominalStart.Valid {
+		run.NominalStartTime = nominalStart.Time
+	}
+	if nominalEnd.Valid {
+		run.NominalEndTime = nominalEnd.Time
+	}
+	if createdAt.Valid {
+		run.CreatedAt = createdAt.Time
+	}
+	return &run, nil
+}
+
+// ListRuns retrieves runs for a job, ordered by most recent first.
+func (r *OpenLineageRepository) ListRuns(ctx context.Context, jobID string, limit int) ([]domain.OpenLineageRun, error) {
+	query := `
+		SELECT run_id, job_id, event_type, event_time, nominal_start_time, nominal_end_time, producer, schema_url, created_at
+		FROM demo_user.OL_RUN
+		WHERE job_id = ?
+		ORDER BY event_time DESC
+		FETCH FIRST ? ROWS ONLY`
+
+	rows, err := r.db.QueryContext(ctx, query, jobID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list runs: %w", err)
+	}
+	defer rows.Close()
+
+	var runs []domain.OpenLineageRun
+	for rows.Next() {
+		var run domain.OpenLineageRun
+		var eventType, producer, schemaURL sql.NullString
+		var eventTime, nominalStart, nominalEnd, createdAt sql.NullTime
+
+		if err := rows.Scan(&run.ID, &run.JobID, &eventType, &eventTime,
+			&nominalStart, &nominalEnd, &producer, &schemaURL, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan run: %w", err)
+		}
+		run.EventType = eventType.String
+		run.Producer = producer.String
+		run.SchemaURL = schemaURL.String
+		if eventTime.Valid {
+			run.EventTime = eventTime.Time
+		}
+		if nominalStart.Valid {
+			run.NominalStartTime = nominalStart.Time
+		}
+		if nominalEnd.Valid {
+			run.NominalEndTime = nominalEnd.Time
+		}
+		if createdAt.Valid {
+			run.CreatedAt = createdAt.Time
+		}
+		runs = append(runs, run)
+	}
+	return runs, rows.Err()
+}
