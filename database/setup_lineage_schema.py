@@ -4,6 +4,7 @@ Setup Lineage Schema for Teradata
 Creates all core lineage tables in the demo_user database.
 """
 
+import argparse
 import teradatasql
 import sys
 
@@ -348,6 +349,14 @@ def drop_table_if_exists(cursor, table_name):
 
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Setup lineage schema for Teradata")
+    parser.add_argument("--openlineage", "-o", action="store_true",
+                        help="Create OpenLineage-aligned OL_* tables (in addition to LIN_* tables)")
+    parser.add_argument("--openlineage-only", action="store_true",
+                        help="Only create OpenLineage tables (skip LIN_* tables)")
+    args = parser.parse_args()
+
     print("=" * 60)
     print("Lineage Schema Setup for Teradata")
     print("=" * 60)
@@ -362,9 +371,8 @@ def main():
         print(f"ERROR: Failed to connect: {e}")
         sys.exit(1)
 
-    # Drop existing tables in reverse order (to handle any dependencies)
-    print("\n--- Dropping existing tables ---")
-    tables_to_drop = [
+    # LIN_* tables to drop (in reverse order to handle dependencies)
+    lin_tables_to_drop = [
         "LIN_WATERMARK",
         "LIN_QUERY",
         "LIN_TRANSFORMATION",
@@ -374,45 +382,114 @@ def main():
         "LIN_TABLE",
         "LIN_DATABASE"
     ]
-    for table in tables_to_drop:
-        drop_table_if_exists(cursor, table)
 
-    # Create tables
-    print("\n--- Creating core tables ---")
-    for i, ddl in enumerate(DDL_STATEMENTS, 1):
-        table_name = ddl.split("demo_user.")[1].split()[0]
-        print(f"  Creating {table_name}...", end=" ")
-        try:
-            cursor.execute(ddl)
-            print("OK")
-        except Exception as e:
-            print(f"FAILED: {e}")
-            sys.exit(1)
+    # OL_* tables to drop (in reverse order to handle dependencies)
+    ol_tables_to_drop = [
+        "OL_SCHEMA_VERSION",
+        "OL_COLUMN_LINEAGE",
+        "OL_RUN_OUTPUT",
+        "OL_RUN_INPUT",
+        "OL_RUN",
+        "OL_JOB",
+        "OL_DATASET_FIELD",
+        "OL_DATASET",
+        "OL_NAMESPACE"
+    ]
 
-    # Create indexes
-    print("\n--- Creating indexes ---")
-    for idx_sql in INDEX_STATEMENTS:
-        idx_name = idx_sql.split("CREATE INDEX ")[1].split()[0]
-        print(f"  Creating {idx_name}...", end=" ")
+    # Drop and create LIN_* tables (unless --openlineage-only)
+    if not args.openlineage_only:
+        print("\n--- Dropping existing LIN_* tables ---")
+        for table in lin_tables_to_drop:
+            drop_table_if_exists(cursor, table)
+
+        print("\n--- Creating LIN_* tables ---")
+        for i, ddl in enumerate(DDL_STATEMENTS, 1):
+            table_name = ddl.split("demo_user.")[1].split()[0]
+            print(f"  Creating {table_name}...", end=" ")
+            try:
+                cursor.execute(ddl)
+                print("OK")
+            except Exception as e:
+                print(f"FAILED: {e}")
+                sys.exit(1)
+
+        print("\n--- Creating LIN_* indexes ---")
+        for idx_sql in INDEX_STATEMENTS:
+            idx_name = idx_sql.split("CREATE INDEX ")[1].split()[0]
+            print(f"  Creating {idx_name}...", end=" ")
+            try:
+                cursor.execute(idx_sql)
+                print("OK")
+            except Exception as e:
+                print(f"FAILED: {e}")
+
+    # Drop and create OL_* tables (if --openlineage or --openlineage-only)
+    if args.openlineage or args.openlineage_only:
+        print("\n--- Dropping existing OL_* tables ---")
+        for table in ol_tables_to_drop:
+            drop_table_if_exists(cursor, table)
+
+        print("\n--- Creating OL_* tables (OpenLineage-aligned) ---")
+        for i, ddl in enumerate(OL_DDL_STATEMENTS, 1):
+            table_name = ddl.split("demo_user.")[1].split()[0]
+            print(f"  Creating {table_name}...", end=" ")
+            try:
+                cursor.execute(ddl)
+                print("OK")
+            except Exception as e:
+                print(f"FAILED: {e}")
+                sys.exit(1)
+
+        print("\n--- Creating OL_* indexes ---")
+        for idx_sql in OL_INDEX_STATEMENTS:
+            idx_name = idx_sql.split("CREATE INDEX ")[1].split()[0]
+            print(f"  Creating {idx_name}...", end=" ")
+            try:
+                cursor.execute(idx_sql)
+                print("OK")
+            except Exception as e:
+                print(f"FAILED: {e}")
+
+        # Insert initial schema version record
+        print("\n--- Inserting schema version record ---")
         try:
-            cursor.execute(idx_sql)
-            print("OK")
+            cursor.execute("""
+                INSERT INTO demo_user.OL_SCHEMA_VERSION
+                (version_id, openlineage_spec_version, schema_version, applied_at, description)
+                VALUES (1, '2-0-2', '1.0.0', CURRENT_TIMESTAMP, 'Initial OpenLineage schema')
+            """)
+            print("  Schema version 1.0.0 (OpenLineage spec 2-0-2) recorded")
         except Exception as e:
-            print(f"FAILED: {e}")
+            print(f"  Warning: Could not insert schema version: {e}")
 
     # Verify tables were created
     print("\n--- Verifying table creation ---")
-    cursor.execute("""
-        SELECT TableName
-        FROM DBC.TablesV
-        WHERE DatabaseName = 'demo_user'
-          AND TableName LIKE 'LIN_%'
-        ORDER BY TableName
-    """)
-    tables = cursor.fetchall()
-    print(f"  Found {len(tables)} lineage tables:")
-    for table in tables:
-        print(f"    - {table[0]}")
+
+    if not args.openlineage_only:
+        cursor.execute("""
+            SELECT TableName
+            FROM DBC.TablesV
+            WHERE DatabaseName = 'demo_user'
+              AND TableName LIKE 'LIN_%'
+            ORDER BY TableName
+        """)
+        tables = cursor.fetchall()
+        print(f"  Found {len(tables)} LIN_* tables:")
+        for table in tables:
+            print(f"    - {table[0]}")
+
+    if args.openlineage or args.openlineage_only:
+        cursor.execute("""
+            SELECT TableName
+            FROM DBC.TablesV
+            WHERE DatabaseName = 'demo_user'
+              AND TableName LIKE 'OL_%'
+            ORDER BY TableName
+        """)
+        tables = cursor.fetchall()
+        print(f"  Found {len(tables)} OL_* tables:")
+        for table in tables:
+            print(f"    - {table[0]}")
 
     # Close connection
     cursor.close()
