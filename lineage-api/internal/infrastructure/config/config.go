@@ -88,6 +88,14 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// bindLegacyFallback binds a legacy env var as fallback if primary is not set.
+// This enables backwards compatibility with existing deployments using TD_* or PORT.
+func bindLegacyFallback(primary, legacy string) {
+	if os.Getenv(primary) == "" && os.Getenv(legacy) != "" {
+		viper.BindEnv(primary, legacy)
+	}
+}
+
 // loadDotEnv attempts to load a .env file from current directory or parent directory.
 func loadDotEnv() {
 	// Check current directory first
