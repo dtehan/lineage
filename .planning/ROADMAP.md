@@ -13,7 +13,7 @@ This roadmap hardens an existing Teradata column-level lineage application for p
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Error Handling Foundation** - Wrap database errors in generic responses, establish structured logging
-- [ ] **Phase 2: Credential Security** - Remove default credentials, fail fast on missing config
+- [x] **Phase 2: Credential Security** - Remove default credentials, fail fast on missing config
 - [ ] **Phase 3: Input Validation** - Validate maxDepth and direction parameters with bounds enforcement
 - [ ] **Phase 4: Pagination** - Implement limit/offset pagination for asset listing endpoints
 - [ ] **Phase 5: DBQL Error Handling** - Graceful extraction failures with detailed logging
@@ -49,7 +49,7 @@ Plans:
 **Plans**: 1 plan in 1 wave
 
 Plans:
-- [ ] 02-01-PLAN.md - Remove default credentials and add fail-fast validation
+- [x] 02-01-PLAN.md - Remove default credentials and add fail-fast validation
 
 ### Phase 3: Input Validation
 **Goal**: All user-supplied parameters are validated with bounds enforcement and clear error messages
@@ -117,7 +117,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Error Handling Foundation | 0/3 | Planned | - |
-| 2. Credential Security | 0/1 | Planned | - |
+| 2. Credential Security | 1/1 | ✓ Complete | 2026-01-29 |
 | 3. Input Validation | 0/2 | Planned | - |
 | 4. Pagination | 0/TBD | Not started | - |
 | 5. DBQL Error Handling | 0/TBD | Not started | - |

@@ -16,8 +16,8 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 ### Security Hardening
 
-- [ ] **SEC-01**: Remove all default credentials from source code; require TERADATA_PASSWORD environment variable
-- [ ] **SEC-02**: Application fails fast at startup if required credentials are missing (no silent fallback to defaults)
+- [x] **SEC-01**: Remove all default credentials from source code; require TERADATA_PASSWORD environment variable (Phase 2)
+- [x] **SEC-02**: Application fails fast at startup if required credentials are missing (no silent fallback to defaults) (Phase 2)
 - [ ] **SEC-03**: API wraps all database errors in generic error responses; detailed errors logged server-side only
 - [ ] **SEC-04**: Error responses never expose database schema, table names, SQL syntax, or connection details
 - [ ] **SEC-05**: Structured logging with log/slog captures error context (request ID, user context, timestamp) for debugging
@@ -42,7 +42,7 @@ Requirements for production hardening. Each maps to roadmap phases.
 
 - [ ] **TEST-01**: Unit tests verify maxDepth and direction validation with edge cases (null, negative, string values)
 - [ ] **TEST-02**: Integration tests verify error responses never expose internal details
-- [ ] **TEST-03**: Tests verify application startup fails with missing credentials (no silent fallback)
+- [x] **TEST-03**: Tests verify application startup fails with missing credentials (no silent fallback) (Phase 2)
 - [ ] **TEST-04**: Tests verify pagination bounds enforcement and metadata correctness
 - [ ] **TEST-05**: Tests verify DBQL error handling for missing access and malformed queries
 
