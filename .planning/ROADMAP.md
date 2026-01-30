@@ -91,10 +91,11 @@ Plans:
   2. Malformed queries in DBQL are logged and skipped without failing entire extraction
   3. Error logs include query ID, table name, and error type for failed extractions
   4. Extraction reports summary at completion (X succeeded, Y failed, Z skipped)
-**Plans**: TBD
+**Plans**: 2 plans in 2 waves
 
 Plans:
-- [ ] 05-01: TBD
+- [ ] 05-01-PLAN.md - Add logging infrastructure and ExtractionStats class
+- [ ] 05-02-PLAN.md - Implement continue-on-failure error handling and tests
 
 ### Phase 6: Security Documentation
 **Goal**: Deployment documentation explains authentication and rate limiting requirements
@@ -120,5 +121,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 2. Credential Security | 1/1 | ✓ Complete | 2026-01-29 |
 | 3. Input Validation | 2/2 | ✓ Complete | 2026-01-29 |
 | 4. Pagination | 0/TBD | Not started | - |
-| 5. DBQL Error Handling | 0/TBD | Not started | - |
+| 5. DBQL Error Handling | 0/2 | Planned | - |
 | 6. Security Documentation | 0/1 | Planned | - |
