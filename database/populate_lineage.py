@@ -20,7 +20,26 @@ import teradatasql
 import sys
 import hashlib
 
-from db_config import CONFIG
+from db_config import CONFIG, get_openlineage_namespace
+
+# OpenLineage transformation type mapping
+# Maps current transformation types to (OL_type, OL_subtype)
+OPENLINEAGE_TRANSFORMATION_MAPPING = {
+    "DIRECT": ("DIRECT", "IDENTITY"),
+    "CALCULATION": ("DIRECT", "TRANSFORMATION"),
+    "AGGREGATION": ("DIRECT", "AGGREGATION"),
+    "JOIN": ("INDIRECT", "JOIN"),
+    "FILTER": ("INDIRECT", "FILTER"),
+}
+
+
+def map_transformation_type(current_type: str) -> tuple:
+    """Map current transformation type to OpenLineage (type, subtype) tuple."""
+    return OPENLINEAGE_TRANSFORMATION_MAPPING.get(
+        current_type.upper(),
+        ("DIRECT", "TRANSFORMATION")  # Default for unknown types
+    )
+
 
 # Extraction queries for metadata
 EXTRACT_DATABASES = """
