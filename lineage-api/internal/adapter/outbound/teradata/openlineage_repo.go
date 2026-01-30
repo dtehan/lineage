@@ -467,3 +467,302 @@ func (r *OpenLineageRepository) ListRuns(ctx context.Context, jobID string, limi
 	}
 	return runs, rows.Err()
 }
+
+// Lineage operations
+
+// GetColumnLineage retrieves column-level lineage with recursive traversal.
+func (r *OpenLineageRepository) GetColumnLineage(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) ([]domain.OpenLineageColumnLineage, error) {
+	// Build recursive CTE based on direction
+	var query string
+	switch direction {
+	case "upstream":
+		query = r.buildUpstreamQuery(maxDepth)
+	case "downstream":
+		query = r.buildDownstreamQuery(maxDepth)
+	case "both":
+		query = r.buildBidirectionalQuery(maxDepth)
+	default:
+		query = r.buildBidirectionalQuery(maxDepth)
+	}
+
+	rows, err := r.db.QueryContext(ctx, query, datasetID, fieldName)
+	if err != nil {
+		return nil, fmt.Errorf("get column lineage: %w", err)
+	}
+	defer rows.Close()
+
+	var lineages []domain.OpenLineageColumnLineage
+	for rows.Next() {
+		var l domain.OpenLineageColumnLineage
+		var runID, transDesc sql.NullString
+		var transType, transSubtype string
+		var masking, isActive string
+		var confScore sql.NullFloat64
+		var discoveredAt sql.NullTime
+		var depth int
+
+		if err := rows.Scan(
+			&l.ID, &runID, &l.SourceNamespace, &l.SourceDataset, &l.SourceField,
+			&l.TargetNamespace, &l.TargetDataset, &l.TargetField,
+			&transType, &transSubtype, &transDesc, &masking, &confScore,
+			&discoveredAt, &isActive, &depth,
+		); err != nil {
+			return nil, fmt.Errorf("scan lineage: %w", err)
+		}
+
+		l.RunID = runID.String
+		l.TransformationType = domain.TransformationType(transType)
+		l.TransformationSubtype = domain.TransformationSubtype(transSubtype)
+		l.TransformationDescription = transDesc.String
+		l.Masking = masking == "Y"
+		l.IsActive = isActive == "Y"
+		l.Depth = depth
+		if confScore.Valid {
+			l.ConfidenceScore = confScore.Float64
+		}
+		if discoveredAt.Valid {
+			l.DiscoveredAt = discoveredAt.Time
+		}
+		lineages = append(lineages, l)
+	}
+	return lineages, rows.Err()
+}
+
+// buildUpstreamQuery builds a recursive CTE for upstream lineage traversal.
+func (r *OpenLineageRepository) buildUpstreamQuery(maxDepth int) string {
+	return fmt.Sprintf(`
+		WITH RECURSIVE lineage_path (
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth, path
+		) AS (
+			-- Base case: direct upstream of target
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				1 AS depth,
+				CAST(l.lineage_id AS VARCHAR(4000)) AS path
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			WHERE l.target_dataset = ? AND l.target_field = ? AND l.is_active = 'Y'
+
+			UNION ALL
+
+			-- Recursive case: traverse upstream
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				lp.depth + 1,
+				lp.path || ',' || l.lineage_id
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			INNER JOIN lineage_path lp
+				ON l.target_dataset = lp.source_dataset
+				AND l.target_field = lp.source_field
+			WHERE l.is_active = 'Y'
+				AND lp.depth < %d
+				AND POSITION(l.lineage_id IN lp.path) = 0
+		)
+		SELECT DISTINCT
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth
+		FROM lineage_path
+		ORDER BY depth`, maxDepth)
+}
+
+// buildDownstreamQuery builds a recursive CTE for downstream lineage traversal.
+func (r *OpenLineageRepository) buildDownstreamQuery(maxDepth int) string {
+	return fmt.Sprintf(`
+		WITH RECURSIVE lineage_path (
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth, path
+		) AS (
+			-- Base case: direct downstream of source
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				1 AS depth,
+				CAST(l.lineage_id AS VARCHAR(4000)) AS path
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			WHERE l.source_dataset = ? AND l.source_field = ? AND l.is_active = 'Y'
+
+			UNION ALL
+
+			-- Recursive case: traverse downstream
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				lp.depth + 1,
+				lp.path || ',' || l.lineage_id
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			INNER JOIN lineage_path lp
+				ON l.source_dataset = lp.target_dataset
+				AND l.source_field = lp.target_field
+			WHERE l.is_active = 'Y'
+				AND lp.depth < %d
+				AND POSITION(l.lineage_id IN lp.path) = 0
+		)
+		SELECT DISTINCT
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth
+		FROM lineage_path
+		ORDER BY depth`, maxDepth)
+}
+
+// buildBidirectionalQuery builds a recursive CTE for both upstream and downstream traversal.
+func (r *OpenLineageRepository) buildBidirectionalQuery(maxDepth int) string {
+	// For bidirectional, we combine upstream and downstream results
+	return fmt.Sprintf(`
+		WITH RECURSIVE upstream_path (
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth, path
+		) AS (
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				1 AS depth,
+				CAST(l.lineage_id AS VARCHAR(4000)) AS path
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			WHERE l.target_dataset = ? AND l.target_field = ? AND l.is_active = 'Y'
+			UNION ALL
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				up.depth + 1,
+				up.path || ',' || l.lineage_id
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			INNER JOIN upstream_path up
+				ON l.target_dataset = up.source_dataset
+				AND l.target_field = up.source_field
+			WHERE l.is_active = 'Y'
+				AND up.depth < %d
+				AND POSITION(l.lineage_id IN up.path) = 0
+		),
+		downstream_path (
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth, path
+		) AS (
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				1 AS depth,
+				CAST(l.lineage_id AS VARCHAR(4000)) AS path
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			WHERE l.source_dataset = ? AND l.source_field = ? AND l.is_active = 'Y'
+			UNION ALL
+			SELECT
+				l.lineage_id, l.run_id, l.source_namespace, l.source_dataset, l.source_field,
+				l.target_namespace, l.target_dataset, l.target_field,
+				l.transformation_type, l.transformation_subtype, l.transformation_description,
+				l.masking, l.confidence_score, l.discovered_at, l.is_active,
+				dp.depth + 1,
+				dp.path || ',' || l.lineage_id
+			FROM demo_user.OL_COLUMN_LINEAGE l
+			INNER JOIN downstream_path dp
+				ON l.source_dataset = dp.target_dataset
+				AND l.source_field = dp.target_field
+			WHERE l.is_active = 'Y'
+				AND dp.depth < %d
+				AND POSITION(l.lineage_id IN dp.path) = 0
+		)
+		SELECT DISTINCT
+			lineage_id, run_id, source_namespace, source_dataset, source_field,
+			target_namespace, target_dataset, target_field,
+			transformation_type, transformation_subtype, transformation_description,
+			masking, confidence_score, discovered_at, is_active, depth
+		FROM (
+			SELECT * FROM upstream_path
+			UNION
+			SELECT * FROM downstream_path
+		) combined
+		ORDER BY depth`, maxDepth, maxDepth)
+}
+
+// GetColumnLineageGraph builds a graph representation from lineage records.
+func (r *OpenLineageRepository) GetColumnLineageGraph(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) (*domain.OpenLineageGraph, error) {
+	lineages, err := r.GetColumnLineage(ctx, datasetID, fieldName, direction, maxDepth)
+	if err != nil {
+		return nil, err
+	}
+
+	graph := &domain.OpenLineageGraph{
+		Nodes: []domain.OpenLineageNode{},
+		Edges: []domain.OpenLineageEdge{},
+	}
+
+	nodeMap := make(map[string]bool)
+
+	// Add the seed node
+	seedNodeID := fmt.Sprintf("%s/%s", datasetID, fieldName)
+	graph.Nodes = append(graph.Nodes, domain.OpenLineageNode{
+		ID:      seedNodeID,
+		Type:    "field",
+		Dataset: datasetID,
+		Field:   fieldName,
+	})
+	nodeMap[seedNodeID] = true
+
+	// Build nodes and edges from lineage records
+	for _, l := range lineages {
+		// Source node
+		srcNodeID := fmt.Sprintf("%s/%s", l.SourceDataset, l.SourceField)
+		if !nodeMap[srcNodeID] {
+			graph.Nodes = append(graph.Nodes, domain.OpenLineageNode{
+				ID:        srcNodeID,
+				Type:      "field",
+				Namespace: l.SourceNamespace,
+				Dataset:   l.SourceDataset,
+				Field:     l.SourceField,
+			})
+			nodeMap[srcNodeID] = true
+		}
+
+		// Target node
+		tgtNodeID := fmt.Sprintf("%s/%s", l.TargetDataset, l.TargetField)
+		if !nodeMap[tgtNodeID] {
+			graph.Nodes = append(graph.Nodes, domain.OpenLineageNode{
+				ID:        tgtNodeID,
+				Type:      "field",
+				Namespace: l.TargetNamespace,
+				Dataset:   l.TargetDataset,
+				Field:     l.TargetField,
+			})
+			nodeMap[tgtNodeID] = true
+		}
+
+		// Edge
+		graph.Edges = append(graph.Edges, domain.OpenLineageEdge{
+			ID:                    l.ID,
+			Source:                srcNodeID,
+			Target:                tgtNodeID,
+			TransformationType:    l.TransformationType,
+			TransformationSubtype: l.TransformationSubtype,
+			ConfidenceScore:       l.ConfidenceScore,
+		})
+	}
+
+	return graph, nil
+}
