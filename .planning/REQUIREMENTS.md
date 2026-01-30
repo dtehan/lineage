@@ -21,7 +21,7 @@ Requirements for production hardening. Each maps to roadmap phases.
 - [ ] **SEC-03**: API wraps all database errors in generic error responses; detailed errors logged server-side only
 - [ ] **SEC-04**: Error responses never expose database schema, table names, SQL syntax, or connection details
 - [ ] **SEC-05**: Structured logging with log/slog captures error context (request ID, user context, timestamp) for debugging
-- [ ] **SEC-06**: Security documentation describes authentication/rate limiting deployment requirements and assumptions
+- [x] **SEC-06**: Security documentation describes authentication/rate limiting deployment requirements and assumptions (Phase 6)
 
 ### Pagination
 
@@ -95,7 +95,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-03 | Phase 1 | Complete |
 | SEC-04 | Phase 1 | Complete |
 | SEC-05 | Phase 1 | Complete |
-| SEC-06 | Phase 6 | Pending |
+| SEC-06 | Phase 6 | Complete |
 | PAGE-01 | Phase 4 | Pending |
 | PAGE-02 | Phase 4 | Pending |
 | PAGE-03 | Phase 4 | Pending |
