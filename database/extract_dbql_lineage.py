@@ -312,6 +312,41 @@ class DBQLLineageExtractor:
         print(f"  Found {len(queries)} queries to process")
         return queries
 
+    def validate_dbql_data(self, queries: List[Tuple]) -> bool:
+        """
+        Validate DBQL data completeness and report anomalies (DBQL-04).
+
+        Returns:
+            True if data is valid for processing (empty is valid)
+        """
+        if not queries:
+            logger.warning("No queries found in DBQL for the specified time range")
+            return True  # Empty is valid, just nothing to process
+
+        total = len(queries)
+
+        # Check for null query text
+        null_count = sum(1 for q in queries if not q[2])  # query_text is index 2
+        if null_count > 0:
+            null_pct = 100 * null_count / total
+            logger.warning(
+                "DBQL data anomaly: %d of %d queries have NULL query_text (%.1f%%)",
+                null_count, total, null_pct
+            )
+
+        # Check for very short queries (likely truncated)
+        short_count = sum(1 for q in queries if q[2] and len(q[2]) < 20)
+        if short_count > total * 0.1:  # More than 10%
+            logger.warning(
+                "DBQL data anomaly: %d queries have very short query_text (<20 chars)",
+                short_count
+            )
+
+        # Report row count for visibility
+        logger.info("DBQL data validated: %d queries to process", total)
+
+        return True
+
     def extract_lineage(self, since: Optional[datetime] = None, full: bool = False) -> bool:
         """
         Main extraction method. Extracts both table and column lineage
@@ -358,6 +393,9 @@ class DBQLLineageExtractor:
 
         # Fetch queries
         queries = self.fetch_queries(extraction_since)
+
+        # Validate DBQL data completeness (DBQL-04)
+        self.validate_dbql_data(queries)
 
         if not queries:
             print("\n  No new queries to process")
