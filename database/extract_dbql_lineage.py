@@ -26,6 +26,7 @@ Environment Variables:
 
 import argparse
 import hashlib
+import logging
 import sys
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Set, Tuple
@@ -33,6 +34,36 @@ from typing import Dict, List, Optional, Set, Tuple
 import teradatasql
 
 from db_config import CONFIG
+
+
+def configure_logging(verbose: bool = False) -> logging.Logger:
+    """Configure logging for DBQL extraction."""
+    logger = logging.getLogger('dbql_extractor')
+
+    # Set level based on verbose flag
+    level = logging.DEBUG if verbose else logging.INFO
+    logger.setLevel(level)
+
+    # Console handler with appropriate format
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
+
+    # Format: timestamp - level - message
+    formatter = logging.Formatter(
+        '%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    handler.setFormatter(formatter)
+
+    # Avoid duplicate handlers on repeated calls
+    if not logger.handlers:
+        logger.addHandler(handler)
+
+    return logger
+
+
+# Module-level logger (configured in main())
+logger = logging.getLogger('dbql_extractor')
 
 # Default lookback period for initial extraction (30 days)
 DEFAULT_LOOKBACK_DAYS = 30
@@ -499,6 +530,9 @@ Examples:
         except ValueError as e:
             print(f"ERROR: {e}")
             return 1
+
+    # Configure logging based on verbose flag
+    configure_logging(verbose=args.verbose)
 
     print("=" * 60)
     print("DBQL-Based Lineage Extraction")
