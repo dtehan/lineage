@@ -4,6 +4,7 @@ import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Netwo
 import { useDatabases, useTables, useColumns } from '../../../api/hooks/useAssets';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
+import { Pagination } from '../../common/Pagination';
 import { Tooltip } from '../../common/Tooltip';
 import type { Table } from '../../../types';
 
@@ -52,9 +53,10 @@ const getAssetTypeTooltip = (tableKind: string, tableName: string, databaseName:
 export function AssetBrowser() {
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [databasePagination, setDatabasePagination] = useState({ limit: 100, offset: 0 });
   const navigate = useNavigate();
 
-  const { data: databasesResult, isLoading } = useDatabases();
+  const { data: databasesResult, isLoading } = useDatabases(databasePagination);
   const databases = databasesResult?.data;
 
   const toggleDatabase = (dbName: string) => {
@@ -123,6 +125,16 @@ export function AssetBrowser() {
             />
           ))}
         </ul>
+        {databasesResult?.pagination && databasesResult.pagination.total_count > databasePagination.limit && (
+          <Pagination
+            totalCount={databasesResult.pagination.total_count}
+            limit={databasePagination.limit}
+            offset={databasePagination.offset}
+            onPageChange={(offset) => setDatabasePagination(prev => ({ ...prev, offset }))}
+            className="mt-2 px-2"
+            data-testid="database-pagination"
+          />
+        )}
       </div>
     </div>
   );

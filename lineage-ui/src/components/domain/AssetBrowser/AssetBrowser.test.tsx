@@ -31,9 +31,9 @@ const mockColumns = [
 ];
 
 // Helper to wrap data in PaginatedResult format
-const wrapInPaginatedResult = <T,>(data: T[] | undefined) => ({
+const wrapInPaginatedResult = <T,>(data: T[] | undefined, paginationOverride?: { total_count: number; limit: number; offset: number; has_next: boolean }) => ({
   data: data,
-  pagination: undefined,
+  pagination: paginationOverride,
 });
 
 describe('AssetBrowser Component', () => {
@@ -442,6 +442,131 @@ describe('AssetBrowser Component', () => {
 
       await waitFor(() => {
         expect(screen.getByTestId('materialized-view-icon')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // TC-COMP-PAGE: AssetBrowser Pagination
+  describe('TC-COMP-PAGE: Database Pagination', () => {
+    it('shows pagination controls when total exceeds page size', () => {
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: wrapInPaginatedResult(mockDatabases, {
+          total_count: 250,
+          limit: 100,
+          offset: 0,
+          has_next: true,
+        }),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: wrapInPaginatedResult(undefined),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      render(<AssetBrowser />);
+
+      // Pagination controls should be visible
+      expect(screen.getByTestId('pagination-info')).toBeInTheDocument();
+      expect(screen.getByText(/Showing 1-100 of 250/)).toBeInTheDocument();
+      expect(screen.getByTestId('pagination-prev')).toBeInTheDocument();
+      expect(screen.getByTestId('pagination-next')).toBeInTheDocument();
+    });
+
+    it('hides pagination controls when total is less than or equal to page size', () => {
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: wrapInPaginatedResult(mockDatabases, {
+          total_count: 50,
+          limit: 100,
+          offset: 0,
+          has_next: false,
+        }),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: wrapInPaginatedResult(undefined),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      render(<AssetBrowser />);
+
+      // Pagination controls should NOT be visible
+      expect(screen.queryByTestId('pagination-info')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pagination-prev')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('pagination-next')).not.toBeInTheDocument();
+    });
+
+    it('hides pagination controls when pagination metadata is not present', () => {
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: wrapInPaginatedResult(mockDatabases),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: wrapInPaginatedResult(undefined),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      render(<AssetBrowser />);
+
+      // Pagination controls should NOT be visible when no pagination metadata
+      expect(screen.queryByTestId('pagination-info')).not.toBeInTheDocument();
+    });
+
+    it('calls useDatabases with updated offset when clicking next', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useAssetsModule.useDatabases).mockReturnValue({
+        data: wrapInPaginatedResult(mockDatabases, {
+          total_count: 250,
+          limit: 100,
+          offset: 0,
+          has_next: true,
+        }),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useAssetsModule.useDatabases>);
+
+      vi.mocked(useAssetsModule.useTables).mockReturnValue({
+        data: wrapInPaginatedResult(undefined),
+        isLoading: false,
+        isError: false,
+        error: null,
+        isSuccess: false,
+      } as ReturnType<typeof useAssetsModule.useTables>);
+
+      render(<AssetBrowser />);
+
+      // Initial call should have offset 0
+      expect(useAssetsModule.useDatabases).toHaveBeenLastCalledWith({ limit: 100, offset: 0 });
+
+      // Click next page
+      await user.click(screen.getByTestId('pagination-next'));
+
+      // After clicking next, useDatabases should be called with offset 100
+      await waitFor(() => {
+        expect(useAssetsModule.useDatabases).toHaveBeenLastCalledWith({ limit: 100, offset: 100 });
       });
     });
   });
