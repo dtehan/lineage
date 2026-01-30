@@ -16,12 +16,29 @@ var (
 	validationDefaultMaxDepth = 5
 )
 
+// Package-level pagination configuration with safe defaults.
+// These are initialized via SetPaginationConfig from main.go at startup.
+var (
+	paginationMinLimit     = 1
+	paginationMaxLimit     = 500
+	paginationDefaultLimit = 100
+	paginationMinOffset    = 0
+)
+
 // SetValidationConfig initializes the validation bounds from configuration.
 // Must be called at startup before handling any requests.
 func SetValidationConfig(minMaxDepth, maxDepthLimit, defaultMaxDepth int) {
 	validationMinMaxDepth = minMaxDepth
 	validationMaxDepthLimit = maxDepthLimit
 	validationDefaultMaxDepth = defaultMaxDepth
+}
+
+// SetPaginationConfig initializes pagination bounds from configuration.
+// Must be called at startup before handling any requests.
+func SetPaginationConfig(minLimit, maxLimit, defaultLimit int) {
+	paginationMinLimit = minLimit
+	paginationMaxLimit = maxLimit
+	paginationDefaultLimit = defaultLimit
 }
 
 // FieldError represents a validation error for a specific field.
@@ -112,6 +129,56 @@ func parseAndValidateMaxDepth(r *http.Request, defaultDepth int) (maxDepth int, 
 	}
 
 	return maxDepth, errors
+}
+
+// parseAndValidatePaginationParams validates limit and offset parameters.
+// Returns the validated values and any field errors.
+// Empty parameters use defaults: limit=100, offset=0.
+func parseAndValidatePaginationParams(r *http.Request) (limit, offset int, errors []FieldError) {
+	errors = make([]FieldError, 0)
+
+	// Parse limit
+	limitStr := r.URL.Query().Get("limit")
+	if limitStr == "" {
+		limit = paginationDefaultLimit
+	} else {
+		var err error
+		limit, err = strconv.Atoi(limitStr)
+		if err != nil {
+			errors = append(errors, FieldError{
+				Field:   "limit",
+				Message: fmt.Sprintf("limit must be an integer (got: %q)", limitStr),
+			})
+		} else if limit < paginationMinLimit || limit > paginationMaxLimit {
+			errors = append(errors, FieldError{
+				Field:   "limit",
+				Message: fmt.Sprintf("limit must be between %d and %d (got: %d)",
+					paginationMinLimit, paginationMaxLimit, limit),
+			})
+		}
+	}
+
+	// Parse offset
+	offsetStr := r.URL.Query().Get("offset")
+	if offsetStr == "" {
+		offset = 0
+	} else {
+		var err error
+		offset, err = strconv.Atoi(offsetStr)
+		if err != nil {
+			errors = append(errors, FieldError{
+				Field:   "offset",
+				Message: fmt.Sprintf("offset must be an integer (got: %q)", offsetStr),
+			})
+		} else if offset < paginationMinOffset {
+			errors = append(errors, FieldError{
+				Field:   "offset",
+				Message: fmt.Sprintf("offset must be >= %d (got: %d)", paginationMinOffset, offset),
+			})
+		}
+	}
+
+	return limit, offset, errors
 }
 
 // respondValidationError writes a 400 Bad Request response with validation error details.
