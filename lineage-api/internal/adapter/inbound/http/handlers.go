@@ -1,11 +1,14 @@
 package http
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/lineage-api/internal/application"
+	"github.com/lineage-api/internal/infrastructure/logging"
 )
 
 type Handler struct {
@@ -35,7 +38,15 @@ func (h *Handler) ListDatabases(w http.ResponseWriter, r *http.Request) {
 
 	databases, err := h.assetService.ListDatabases(ctx)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to list databases",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -51,7 +62,16 @@ func (h *Handler) ListTables(w http.ResponseWriter, r *http.Request) {
 
 	tables, err := h.assetService.ListTables(ctx, databaseName)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to list tables",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"database_name", databaseName,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -68,7 +88,17 @@ func (h *Handler) ListColumns(w http.ResponseWriter, r *http.Request) {
 
 	columns, err := h.assetService.ListColumns(ctx, databaseName, tableName)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to list columns",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"database_name", databaseName,
+			"table_name", tableName,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -103,7 +133,16 @@ func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetLineageGraph(ctx, req)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to get lineage",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"asset_id", assetID,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -124,7 +163,16 @@ func (h *Handler) GetUpstreamLineage(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetUpstreamLineage(ctx, assetID, maxDepth)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to get upstream lineage",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"asset_id", assetID,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -145,7 +193,16 @@ func (h *Handler) GetDownstreamLineage(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetDownstreamLineage(ctx, assetID, maxDepth)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to get downstream lineage",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"asset_id", assetID,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -166,7 +223,16 @@ func (h *Handler) GetImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.lineageService.GetImpactAnalysis(ctx, assetID, maxDepth)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to get impact analysis",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"asset_id", assetID,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -195,7 +261,16 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 	response, err := h.searchService.Search(ctx, req)
 	if err != nil {
-		respondError(w, r, http.StatusInternalServerError, err.Error())
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to search",
+			"request_id", requestID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"query", query,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
