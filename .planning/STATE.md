@@ -5,23 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** All phases complete - ready for final verification
+**Current focus:** Phase 7 complete - environment variable consolidation done
 
 ## Current Position
 
-Phase: 4 of 6 (Pagination)
-Plan: 4 of 4 in current phase
-Status: Complete - Phase 4 fully complete
-Last activity: 2026-01-30 - Completed 04-04-PLAN.md (Frontend Pagination Controls)
+Phase: 7 of 8 (Environment Variable Consolidation)
+Plan: 1 of 1 in current phase
+Status: Phase 7 complete
+Last activity: 2026-01-30 - Completed 07-01-PLAN.md
+Next Phase: Phase 8: Open Lineage Standard Alignment
 
-Progress: [##########] 100% (all 13 plans complete across all 6 phases)
+Progress: v1.0 complete (6 phases, 13 plans) | v2.0 Phase 7 complete (1 plan)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13
+- Total plans completed: 14
 - Average duration: 4 min
-- Total execution time: 49 min
+- Total execution time: 51 min
 
 **By Phase:**
 
@@ -33,9 +34,10 @@ Progress: [##########] 100% (all 13 plans complete across all 6 phases)
 | 04-pagination | 4 | 14 min | 3.5 min |
 | 05-dbql-error-handling | 2 | 5 min | 2.5 min |
 | 06-security-documentation | 1 | 2 min | 2 min |
+| 07-environment-variable-consolidation | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 05-01 (2 min), 05-02 (3 min), 04-04 (3 min)
+- Last 5 plans: 05-02 (3 min), 04-04 (3 min), 06-01 (2 min), 07-01 (2 min)
 - Trend: Excellent velocity
 
 *Updated after each plan completion*
@@ -90,10 +92,18 @@ Recent decisions affecting current work:
 - [04-04]: Show pagination only when total_count > limit (avoid UI clutter)
 - [04-04]: Use data-testid attributes for pagination controls (enables reliable testing)
 - [04-04]: Default page size of 100 matches backend default
+- [07-01]: get_env() variadic helper for priority-order env var lookup
+- [07-01]: TERADATA_* primary, TD_* legacy fallback ordering for database config
+- [07-01]: API_PORT primary, PORT legacy fallback for Python server port
 
 ### Pending Todos
 
 None yet.
+
+### Roadmap Evolution
+
+- Phase 7 added: Consolidate environment variables so that there is one set of variable for the Teradata connection for both the python scripts and the Go/Python server. The Go server PORT should be called the API_PORT
+- Phase 8 added: The database LIN_ tables should align to the Open Lineage standard, as defined in openlineage.io web site, this will require changes to the database and scripts that populate the database, the API layer, and the GUI.
 
 ### Blockers/Concerns
 
@@ -102,5 +112,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Completed 04-04-PLAN.md, all phases complete
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
