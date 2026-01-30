@@ -627,6 +627,10 @@ Examples:
 
   # Skip metadata refresh (only update lineage)
   python populate_lineage.py --dbql --skip-metadata
+
+  # Also populate OpenLineage OL_* tables
+  python populate_lineage.py --openlineage
+  python populate_lineage.py --manual --openlineage
         """
     )
     mode_group = parser.add_mutually_exclusive_group()
@@ -665,6 +669,11 @@ Examples:
         action="store_true",
         help="Skip metadata extraction (databases, tables, columns)"
     )
+    parser.add_argument(
+        "--openlineage", "-o",
+        action="store_true",
+        help="Also populate OpenLineage OL_* tables"
+    )
 
     args = parser.parse_args()
 
@@ -679,6 +688,9 @@ Examples:
         print("\nMode: DBQL-based extraction")
     else:
         print("\nMode: Manual/hardcoded mappings")
+
+    if args.openlineage:
+        print("  (with OpenLineage table population)")
 
     # Connect
     print(f"\nConnecting to {CONFIG['host']}...")
@@ -709,6 +721,27 @@ Examples:
         else:
             print("\n[DRY RUN] Would insert {} column lineage records".format(len(COLUMN_LINEAGE_MAPPINGS)))
             print("[DRY RUN] Would insert {} table lineage records".format(len(TABLE_LINEAGE_MAPPINGS)))
+
+    # Populate OpenLineage tables if flag is set
+    if args.openlineage:
+        namespace_uri = get_openlineage_namespace()
+        print(f"\n--- Populating OpenLineage tables ---")
+        print(f"  Namespace: {namespace_uri}")
+
+        namespace_id = populate_openlineage_namespace(cursor, namespace_uri)
+        populate_openlineage_datasets(cursor, namespace_id)
+        populate_openlineage_fields(cursor, namespace_id)
+        populate_openlineage_lineage(cursor, namespace_id, namespace_uri)
+
+        # Verify OL_* data
+        print("\n--- Verifying OpenLineage data ---")
+        for table in ["OL_NAMESPACE", "OL_DATASET", "OL_DATASET_FIELD", "OL_COLUMN_LINEAGE"]:
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM demo_user.{table}")
+                count = cursor.fetchone()[0]
+                print(f"  {table}: {count} rows")
+            except Exception as e:
+                print(f"  {table}: ERROR - {e}")
 
     # Verify data
     if not args.dry_run:
