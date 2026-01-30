@@ -582,14 +582,27 @@ class DBQLLineageExtractor:
         return True
 
     def print_summary(self):
-        """Print extraction summary."""
+        """Print extraction summary with success/failure/skip breakdown."""
         print("\n" + "=" * 60)
         print("EXTRACTION SUMMARY")
         print("=" * 60)
-        print(f"  Queries processed:        {self.stats['queries_processed']}")
-        print(f"  Queries with lineage:     {self.stats['queries_with_lineage']}")
-        print(f"  Table lineage inserted:   {self.stats['table_lineage_inserted']}")
-        print(f"  Column lineage inserted:  {self.stats['column_lineage_inserted']}")
+        print(f"  Queries processed:     {self.extraction_stats.processed}")
+        print(f"  Succeeded:             {self.extraction_stats.succeeded}")
+        print(f"  Failed:                {self.extraction_stats.failed}")
+        print(f"  Skipped:               {self.extraction_stats.skipped}")
+        print(f"  Table lineage records: {self.table_lineage_count}")
+        print(f"  Column lineage records:{self.column_lineage_count}")
+
+        # Log summary for programmatic access
+        logger.info("Extraction completed: %s", self.extraction_stats.summary())
+
+        # Show failed query details in verbose mode
+        if self.verbose and self.extraction_stats.errors:
+            print("\n  Failed Query Details:")
+            for i, err in enumerate(self.extraction_stats.errors[:10]):
+                print(f"    {i+1}. Query {err['query_id']}: {err['error_type']} on {err['table_name']}")
+            if len(self.extraction_stats.errors) > 10:
+                print(f"    ... and {len(self.extraction_stats.errors) - 10} more")
 
         # Get totals from database
         if self.cursor:
@@ -600,8 +613,8 @@ class DBQLLineageExtractor:
                 total_column = self.cursor.fetchone()[0]
                 print(f"\n  Total in LIN_TABLE_LINEAGE:  {total_table}")
                 print(f"  Total in LIN_COLUMN_LINEAGE: {total_column}")
-            except:
-                pass
+            except Exception:
+                pass  # Ignore database errors in summary
 
 
 def parse_datetime(s: str) -> datetime:
