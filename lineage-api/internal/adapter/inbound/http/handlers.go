@@ -112,17 +112,11 @@ func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
-	direction := r.URL.Query().Get("direction")
-	if direction == "" {
-		direction = "both"
-	}
-
-	maxDepthStr := r.URL.Query().Get("maxDepth")
-	maxDepth := 5
-	if maxDepthStr != "" {
-		if d, err := strconv.Atoi(maxDepthStr); err == nil {
-			maxDepth = d
-		}
+	// Validate parameters - returns 400 if invalid
+	direction, maxDepth, validationErrors := parseAndValidateLineageParams(r)
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
 	}
 
 	req := application.GetLineageRequest{
@@ -153,12 +147,11 @@ func (h *Handler) GetUpstreamLineage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
-	maxDepthStr := r.URL.Query().Get("maxDepth")
-	maxDepth := 10
-	if maxDepthStr != "" {
-		if d, err := strconv.Atoi(maxDepthStr); err == nil {
-			maxDepth = d
-		}
+	// Validate maxDepth - returns 400 if invalid
+	maxDepth, validationErrors := parseAndValidateMaxDepth(r, 10) // Default 10 for upstream
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
 	}
 
 	response, err := h.lineageService.GetUpstreamLineage(ctx, assetID, maxDepth)
@@ -183,12 +176,11 @@ func (h *Handler) GetDownstreamLineage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
-	maxDepthStr := r.URL.Query().Get("maxDepth")
-	maxDepth := 10
-	if maxDepthStr != "" {
-		if d, err := strconv.Atoi(maxDepthStr); err == nil {
-			maxDepth = d
-		}
+	// Validate maxDepth - returns 400 if invalid
+	maxDepth, validationErrors := parseAndValidateMaxDepth(r, 10) // Default 10 for downstream
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
 	}
 
 	response, err := h.lineageService.GetDownstreamLineage(ctx, assetID, maxDepth)
@@ -213,12 +205,11 @@ func (h *Handler) GetImpactAnalysis(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	assetID := chi.URLParam(r, "assetId")
 
-	maxDepthStr := r.URL.Query().Get("maxDepth")
-	maxDepth := 10
-	if maxDepthStr != "" {
-		if d, err := strconv.Atoi(maxDepthStr); err == nil {
-			maxDepth = d
-		}
+	// Validate maxDepth - returns 400 if invalid
+	maxDepth, validationErrors := parseAndValidateMaxDepth(r, 10) // Default 10 for impact
+	if len(validationErrors) > 0 {
+		respondValidationError(w, r, validationErrors)
+		return
 	}
 
 	response, err := h.lineageService.GetImpactAnalysis(ctx, assetID, maxDepth)
