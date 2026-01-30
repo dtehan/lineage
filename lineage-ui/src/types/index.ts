@@ -129,3 +129,6 @@ export interface AllDatabasesLineageResponse {
     databases: string[] | 'all';
   };
 }
+
+// OpenLineage types
+export * from './openlineage';
