@@ -80,6 +80,10 @@ python run_tests.py              # Run 73 database tests
 python populate_lineage.py       # Manual lineage mappings (default)
 python populate_lineage.py --dbql  # DBQL-based extraction
 python extract_dbql_lineage.py   # Direct DBQL extraction
+
+# Database with OpenLineage tables
+python setup_lineage_schema.py --openlineage  # Create both LIN_* and OL_* tables
+python populate_lineage.py --openlineage      # Populate OL_* tables
 ```
 
 ## Architecture
@@ -150,7 +154,9 @@ database/
 └── run_tests.py              # 73 database tests
 ```
 
-## Key Teradata Tables (in `lineage` database)
+## Key Teradata Tables
+
+### Legacy Schema (LIN_* tables)
 
 - `LIN_DATABASE`, `LIN_TABLE`, `LIN_COLUMN` - Asset registries extracted from DBC views
 - `LIN_COLUMN_LINEAGE` - Column-to-column relationships (core lineage data)
@@ -159,7 +165,22 @@ database/
 - `LIN_QUERY` - Query registry from DBQL
 - `LIN_WATERMARK` - Incremental extraction tracking
 
+### OpenLineage Schema (OL_* tables)
+
+Aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-model):
+
+- `OL_NAMESPACE` - Data source namespaces (teradata://host:port)
+- `OL_DATASET` - Dataset registry (tables/views)
+- `OL_DATASET_FIELD` - Field definitions (columns)
+- `OL_JOB` - Job definitions (ETL processes)
+- `OL_RUN` - Job execution runs
+- `OL_RUN_INPUT`, `OL_RUN_OUTPUT` - Run input/output datasets
+- `OL_COLUMN_LINEAGE` - Column-level lineage with OpenLineage transformation types
+- `OL_SCHEMA_VERSION` - Schema version tracking
+
 ## API Endpoints
+
+### v1 API (Legacy)
 
 - `GET /api/v1/assets/databases` - List databases
 - `GET /api/v1/assets/databases/{db}/tables` - List tables
@@ -169,6 +190,15 @@ database/
 - `GET /api/v1/lineage/{assetId}/downstream` - Get downstream lineage
 - `GET /api/v1/lineage/{assetId}/impact` - Get impact analysis
 - `GET /api/v1/search?q=query` - Search assets
+
+### v2 API (OpenLineage-aligned)
+
+- `GET /api/v2/openlineage/namespaces` - List namespaces
+- `GET /api/v2/openlineage/namespaces/{namespaceId}` - Get namespace
+- `GET /api/v2/openlineage/namespaces/{namespaceId}/datasets` - List datasets
+- `GET /api/v2/openlineage/datasets/{datasetId}` - Get dataset with fields
+- `GET /api/v2/openlineage/datasets/search?q=query` - Search datasets
+- `GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}` - Get lineage graph
 
 ## Lineage Traversal
 
