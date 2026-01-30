@@ -110,6 +110,10 @@ Recent decisions affecting current work:
 - [08-03]: TransformationSubtype has 9 values covering common SQL transformations
 - [08-03]: OpenLineageRepository interface separate from existing LineageRepository for backward compatibility
 - [08-03]: Namespace URI format: teradata://host:port for Teradata sources
+- [08-02]: get_openlineage_namespace() added to db_config.py for namespace URI generation
+- [08-02]: OPENLINEAGE_TRANSFORMATION_MAPPING maps 5 types to OpenLineage type/subtype pairs
+- [08-02]: Hierarchical ID format namespace_id/db.table/field_name for OpenLineage datasets
+- [08-02]: populate_lineage.py --openlineage flag for OL_* table population
 
 ### Pending Todos
 
