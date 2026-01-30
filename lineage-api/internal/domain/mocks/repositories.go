@@ -14,10 +14,15 @@ var ErrNotFound = errors.New("not found")
 
 // MockAssetRepository is a mock implementation of domain.AssetRepository.
 type MockAssetRepository struct {
-	mu         sync.RWMutex
-	Databases  []domain.Database
-	Tables     []domain.Table
-	Columns    []domain.Column
+	mu        sync.RWMutex
+	Databases []domain.Database
+	Tables    []domain.Table
+	Columns   []domain.Column
+
+	// Pagination support - allows setting total count independently of slice length
+	DatabaseCount int
+	TableCount    int
+	ColumnCount   int
 
 	// Error injection
 	ListDatabasesErr error
@@ -129,12 +134,109 @@ func (m *MockAssetRepository) GetColumn(ctx context.Context, databaseName, table
 
 	for i := range m.Columns {
 		if m.Columns[i].DatabaseName == databaseName &&
-		   m.Columns[i].TableName == tableName &&
-		   m.Columns[i].ColumnName == columnName {
+			m.Columns[i].TableName == tableName &&
+			m.Columns[i].ColumnName == columnName {
 			return &m.Columns[i], nil
 		}
 	}
 	return nil, ErrNotFound
+}
+
+// ListDatabasesPaginated returns paginated databases.
+func (m *MockAssetRepository) ListDatabasesPaginated(ctx context.Context, limit, offset int) ([]domain.Database, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.ListDatabasesErr != nil {
+		return nil, 0, m.ListDatabasesErr
+	}
+
+	total := m.DatabaseCount
+	if total == 0 {
+		total = len(m.Databases)
+	}
+
+	// Apply pagination
+	start := offset
+	if start > len(m.Databases) {
+		return []domain.Database{}, total, nil
+	}
+	end := start + limit
+	if end > len(m.Databases) {
+		end = len(m.Databases)
+	}
+
+	return m.Databases[start:end], total, nil
+}
+
+// ListTablesPaginated returns paginated tables for a database.
+func (m *MockAssetRepository) ListTablesPaginated(ctx context.Context, databaseName string, limit, offset int) ([]domain.Table, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.ListTablesErr != nil {
+		return nil, 0, m.ListTablesErr
+	}
+
+	// Filter by database
+	var filtered []domain.Table
+	for _, t := range m.Tables {
+		if t.DatabaseName == databaseName {
+			filtered = append(filtered, t)
+		}
+	}
+
+	total := m.TableCount
+	if total == 0 {
+		total = len(filtered)
+	}
+
+	// Apply pagination
+	start := offset
+	if start > len(filtered) {
+		return []domain.Table{}, total, nil
+	}
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	return filtered[start:end], total, nil
+}
+
+// ListColumnsPaginated returns paginated columns for a table.
+func (m *MockAssetRepository) ListColumnsPaginated(ctx context.Context, databaseName, tableName string, limit, offset int) ([]domain.Column, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.ListColumnsErr != nil {
+		return nil, 0, m.ListColumnsErr
+	}
+
+	// Filter by database and table
+	var filtered []domain.Column
+	for _, c := range m.Columns {
+		if c.DatabaseName == databaseName && c.TableName == tableName {
+			filtered = append(filtered, c)
+		}
+	}
+
+	total := m.ColumnCount
+	if total == 0 {
+		total = len(filtered)
+	}
+
+	// Apply pagination
+	start := offset
+	if start > len(filtered) {
+		return []domain.Column{}, total, nil
+	}
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	return filtered[start:end], total, nil
 }
 
 // MockLineageRepository is a mock implementation of domain.LineageRepository.

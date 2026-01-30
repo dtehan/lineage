@@ -330,6 +330,201 @@ func (r *AssetRepository) GetColumn(ctx context.Context, databaseName, tableName
 	return &c, nil
 }
 
+// ListDatabasesPaginated returns paginated databases with total count.
+func (r *AssetRepository) ListDatabasesPaginated(ctx context.Context, limit, offset int) ([]domain.Database, int, error) {
+	// Get total count
+	countQuery := `SELECT COUNT(*) FROM demo_user.LIN_DATABASE WHERE is_active = 'Y'`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count databases: %w", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT
+			database_id,
+			database_name,
+			owner_name,
+			create_timestamp,
+			comment_string
+		FROM demo_user.LIN_DATABASE
+		WHERE is_active = 'Y'
+		ORDER BY database_name
+		OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, offset, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query databases: %w", err)
+	}
+	defer rows.Close()
+
+	var databases []domain.Database
+	for rows.Next() {
+		var d domain.Database
+		var ownerName, commentString sql.NullString
+		var createTimestamp sql.NullTime
+
+		err := rows.Scan(
+			&d.ID,
+			&d.Name,
+			&ownerName,
+			&createTimestamp,
+			&commentString,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan database row: %w", err)
+		}
+
+		if ownerName.Valid {
+			d.OwnerName = ownerName.String
+		}
+		if createTimestamp.Valid {
+			d.CreateTimestamp = createTimestamp.Time
+		}
+		if commentString.Valid {
+			d.CommentString = commentString.String
+		}
+
+		databases = append(databases, d)
+	}
+
+	return databases, total, rows.Err()
+}
+
+// ListTablesPaginated returns paginated tables for a database with total count.
+func (r *AssetRepository) ListTablesPaginated(ctx context.Context, databaseName string, limit, offset int) ([]domain.Table, int, error) {
+	// Get total count
+	countQuery := `SELECT COUNT(*) FROM demo_user.LIN_TABLE WHERE database_name = ? AND is_active = 'Y'`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, databaseName).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count tables: %w", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT
+			table_id,
+			database_name,
+			table_name,
+			table_kind,
+			create_timestamp,
+			comment_string
+		FROM demo_user.LIN_TABLE
+		WHERE database_name = ?
+		  AND is_active = 'Y'
+		ORDER BY table_name
+		OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, databaseName, offset, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query tables: %w", err)
+	}
+	defer rows.Close()
+
+	var tables []domain.Table
+	for rows.Next() {
+		var t domain.Table
+		var commentString sql.NullString
+		var createTimestamp sql.NullTime
+
+		err := rows.Scan(
+			&t.ID,
+			&t.DatabaseName,
+			&t.TableName,
+			&t.TableKind,
+			&createTimestamp,
+			&commentString,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan table row: %w", err)
+		}
+
+		if createTimestamp.Valid {
+			t.CreateTimestamp = createTimestamp.Time
+		}
+		if commentString.Valid {
+			t.CommentString = commentString.String
+		}
+
+		tables = append(tables, t)
+	}
+
+	return tables, total, rows.Err()
+}
+
+// ListColumnsPaginated returns paginated columns for a table with total count.
+func (r *AssetRepository) ListColumnsPaginated(ctx context.Context, databaseName, tableName string, limit, offset int) ([]domain.Column, int, error) {
+	// Get total count
+	countQuery := `SELECT COUNT(*) FROM demo_user.LIN_COLUMN WHERE database_name = ? AND table_name = ? AND is_active = 'Y'`
+	var total int
+	if err := r.db.QueryRowContext(ctx, countQuery, databaseName, tableName).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("failed to count columns: %w", err)
+	}
+
+	// Get paginated results
+	query := `
+		SELECT
+			column_id,
+			database_name,
+			table_name,
+			column_name,
+			column_type,
+			column_length,
+			nullable,
+			comment_string,
+			column_position
+		FROM demo_user.LIN_COLUMN
+		WHERE database_name = ?
+		  AND table_name = ?
+		  AND is_active = 'Y'
+		ORDER BY column_position
+		OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+	`
+
+	rows, err := r.db.QueryContext(ctx, query, databaseName, tableName, offset, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to query columns: %w", err)
+	}
+	defer rows.Close()
+
+	var columns []domain.Column
+	for rows.Next() {
+		var c domain.Column
+		var commentString sql.NullString
+		var columnLength sql.NullInt64
+		var nullable string
+
+		err := rows.Scan(
+			&c.ID,
+			&c.DatabaseName,
+			&c.TableName,
+			&c.ColumnName,
+			&c.ColumnType,
+			&columnLength,
+			&nullable,
+			&commentString,
+			&c.ColumnPosition,
+		)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to scan column row: %w", err)
+		}
+
+		if columnLength.Valid {
+			c.ColumnLength = int(columnLength.Int64)
+		}
+		c.Nullable = nullable == "Y"
+		if commentString.Valid {
+			c.CommentString = commentString.String
+		}
+
+		columns = append(columns, c)
+	}
+
+	return columns, total, rows.Err()
+}
+
 // Search searches for assets matching the query.
 func (r *AssetRepository) Search(ctx context.Context, query string, assetTypes []domain.AssetType, limit int) ([]domain.SearchResult, error) {
 	// Build the search query with LIKE

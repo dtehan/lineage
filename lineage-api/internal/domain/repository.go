@@ -3,12 +3,18 @@ package domain
 import "context"
 
 type AssetRepository interface {
+	// Existing non-paginated methods
 	ListDatabases(ctx context.Context) ([]Database, error)
 	GetDatabase(ctx context.Context, name string) (*Database, error)
 	ListTables(ctx context.Context, databaseName string) ([]Table, error)
 	GetTable(ctx context.Context, databaseName, tableName string) (*Table, error)
 	ListColumns(ctx context.Context, databaseName, tableName string) ([]Column, error)
 	GetColumn(ctx context.Context, databaseName, tableName, columnName string) (*Column, error)
+
+	// Paginated methods - return items, total count, and error
+	ListDatabasesPaginated(ctx context.Context, limit, offset int) ([]Database, int, error)
+	ListTablesPaginated(ctx context.Context, databaseName string, limit, offset int) ([]Table, int, error)
+	ListColumnsPaginated(ctx context.Context, databaseName, tableName string, limit, offset int) ([]Column, int, error)
 }
 
 type LineageRepository interface {
