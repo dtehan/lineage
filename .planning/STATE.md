@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-29)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** Phase 4 - Pagination complete, Phase 5 - DBQL Error Handling remaining
+**Current focus:** Phase 5 - DBQL Error Handling (1 of 3 plans complete)
 
 ## Current Position
 
-Phase: 4 of 6 (Pagination)
-Plan: 3 of 3 in current phase
-Status: Complete - Phase 4 fully complete
-Last activity: 2026-01-30 - Completed 04-03-PLAN.md (Frontend Pagination Hooks)
+Phase: 5 of 6 (DBQL Error Handling)
+Plan: 1 of 3 in current phase
+Status: In progress - Plan 05-01 complete
+Last activity: 2026-01-30 - Completed 05-01-PLAN.md (Logging Infrastructure)
 
-Progress: [#########-] 90% (phases 1-4, 6 complete; phase 5 remaining)
+Progress: [#########-] 92% (phases 1-4, 6 complete; phase 5 plan 1/3 complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 4 min
-- Total execution time: 41 min
+- Total execution time: 43 min
 
 **By Phase:**
 
@@ -31,10 +31,11 @@ Progress: [#########-] 90% (phases 1-4, 6 complete; phase 5 remaining)
 | 02-credential-security | 1 | 12 min | 12 min |
 | 03-input-validation | 2 | 7 min | 3.5 min |
 | 04-pagination | 3 | 11 min | 3.7 min |
+| 05-dbql-error-handling | 1 | 2 min | 2 min |
 | 06-security-documentation | 1 | 2 min | 2 min |
 
 **Recent Trend:**
-- Last 5 plans: 04-01 (3 min), 04-02 (3 min), 04-03 (5 min)
+- Last 5 plans: 04-02 (3 min), 04-03 (5 min), 05-01 (2 min)
 - Trend: Excellent velocity
 
 *Updated after each plan completion*
@@ -78,6 +79,10 @@ Recent decisions affecting current work:
 - [04-03]: Return PaginatedResult<T> with data/pagination properties from hooks
 - [04-03]: Use keepPreviousData from TanStack Query v5 for smooth transitions
 - [04-03]: Provide Simple hook variants for backward compatibility
+- [05-01]: Use Python stdlib logging with named logger 'dbql_extractor'
+- [05-01]: Limit stored errors to 1000 entries, truncate messages to 200 chars
+- [05-01]: Return Tuple[bool, str] from check_dbql_access for actionable errors
+- [05-01]: Include fallback guidance to populate_lineage.py --manual
 
 ### Pending Todos
 
@@ -90,5 +95,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-30
-Stopped at: Phase 4 complete (all 3 plans), ready for Phase 5 (DBQL Error Handling)
+Stopped at: Completed 05-01-PLAN.md, ready for 05-02-PLAN.md
 Resume file: None
