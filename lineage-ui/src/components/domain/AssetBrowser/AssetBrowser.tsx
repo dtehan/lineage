@@ -1,9 +1,8 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe } from 'lucide-react';
 import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
-import { Pagination } from '../../common/Pagination';
 import { Tooltip } from '../../common/Tooltip';
 import type { OpenLineageDataset } from '../../../types/openlineage';
 
@@ -57,8 +56,6 @@ const parseTableFromDatasetName = (datasetName: string): string => {
 export function AssetBrowser() {
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
-  const [dbOffset, setDbOffset] = useState(0);
-  const DB_LIMIT = 100;
 
   const { data: namespacesData, isLoading: isLoadingNamespaces } = useOpenLineageNamespaces();
   const namespaces = namespacesData?.namespaces || [];
@@ -87,10 +84,6 @@ export function AssetBrowser() {
   }, [datasets]);
 
   const databaseNames = Object.keys(datasetsByDatabase).sort();
-
-  // Paginate database list (client-side - databases are derived from grouped datasets)
-  const totalDatabases = databaseNames.length;
-  const paginatedDatabaseNames = databaseNames.slice(dbOffset, dbOffset + DB_LIMIT);
 
   const toggleDatabase = (dbName: string) => {
     setExpandedDatabases((prev) => {
@@ -149,7 +142,7 @@ export function AssetBrowser() {
 
         <h2 className="px-2 py-1 text-sm font-semibold text-slate-700">Databases</h2>
         <ul className="space-y-1">
-          {paginatedDatabaseNames.map((dbName) => (
+          {databaseNames.map((dbName) => (
             <DatabaseItem
               key={dbName}
               databaseName={dbName}
@@ -161,17 +154,6 @@ export function AssetBrowser() {
             />
           ))}
         </ul>
-        {/* Database pagination - always visible per CONTEXT.md */}
-        <div className="mt-4 flex justify-center px-2">
-          <Pagination
-            totalCount={totalDatabases}
-            limit={DB_LIMIT}
-            offset={dbOffset}
-            onPageChange={setDbOffset}
-            showFirstLast={true}
-            showPageInfo={true}
-          />
-        </div>
       </div>
     </div>
   );
@@ -188,39 +170,6 @@ interface DatabaseItemProps {
 
 function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDatasets, onToggleDataset }: DatabaseItemProps) {
   const navigate = useNavigate();
-  const [tableOffset, setTableOffset] = useState(0);
-  const TABLE_LIMIT = 100;
-  const databaseHeaderRef = useRef<HTMLDivElement>(null);
-  const isInitialTableMount = useRef(true);
-
-  // Paginate the datasets (tables) for this database (client-side slicing)
-  const totalTables = datasets.length;
-  const paginatedDatasets = datasets.slice(tableOffset, tableOffset + TABLE_LIMIT);
-
-  // Reset pagination if database name changes (shouldn't happen but defensive)
-  useEffect(() => {
-    setTableOffset(0);
-  }, [databaseName]);
-
-  // Scroll database header into view when expanded or when table pagination changes
-  useEffect(() => {
-    // Always scroll to header when database is expanded (even on first expansion)
-    // to counteract browser scrolling to pagination at bottom
-    if (isExpanded && databaseHeaderRef.current) {
-      databaseHeaderRef.current.scrollIntoView({ block: 'start', behavior: 'instant' });
-    }
-  }, [isExpanded]);
-
-  // Scroll database header into view when table pagination changes
-  useEffect(() => {
-    if (isInitialTableMount.current) {
-      isInitialTableMount.current = false;
-      return;
-    }
-    if (databaseHeaderRef.current) {
-      databaseHeaderRef.current.scrollIntoView({ block: 'start', behavior: 'instant' });
-    }
-  }, [tableOffset]);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
   const handleChevronClick = (e: React.MouseEvent) => {
@@ -235,7 +184,7 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
 
   return (
     <li>
-      <div ref={databaseHeaderRef} className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
+      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
           onClick={handleChevronClick}
           className="p-0.5 hover:bg-slate-200 rounded"
@@ -259,29 +208,16 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
         </button>
       </div>
       {isExpanded && (
-        <>
-          <ul className="ml-4 mt-1 space-y-1">
-            {paginatedDatasets.map((dataset) => (
-              <DatasetItem
-                key={dataset.id}
-                dataset={dataset}
-                isExpanded={expandedDatasets.has(dataset.id)}
-                onToggle={() => onToggleDataset(dataset.id)}
-              />
-            ))}
-          </ul>
-          {/* Table pagination - always visible per CONTEXT.md */}
-          <div className="ml-4 mt-2 flex justify-center">
-            <Pagination
-              totalCount={totalTables}
-              limit={TABLE_LIMIT}
-              offset={tableOffset}
-              onPageChange={setTableOffset}
-              showFirstLast={true}
-              showPageInfo={true}
+        <ul className="ml-4 mt-1 space-y-1">
+          {datasets.map((dataset) => (
+            <DatasetItem
+              key={dataset.id}
+              dataset={dataset}
+              isExpanded={expandedDatasets.has(dataset.id)}
+              onToggle={() => onToggleDataset(dataset.id)}
             />
-          </div>
-        </>
+          ))}
+        </ul>
       )}
     </li>
   );
@@ -294,36 +230,11 @@ interface DatasetItemProps {
 }
 
 function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
-  const [fieldOffset, setFieldOffset] = useState(0);
-  const FIELD_LIMIT = 100;
-  const datasetRef = useRef<HTMLLIElement>(null);
-  const isInitialFieldMount = useRef(true);
-
   // Fetch dataset with fields when expanded
   const { data: datasetWithFields } = useOpenLineageDataset(isExpanded ? dataset.id : '', {
     enabled: isExpanded,
   });
   const allFields = datasetWithFields?.fields || [];
-
-  // Paginate fields (client-side)
-  const totalFields = allFields.length;
-  const paginatedFields = allFields.slice(fieldOffset, fieldOffset + FIELD_LIMIT);
-
-  // Reset field pagination when dataset changes
-  useEffect(() => {
-    setFieldOffset(0);
-  }, [dataset.id]);
-
-  // Scroll dataset header into view when field pagination changes
-  useEffect(() => {
-    if (isInitialFieldMount.current) {
-      isInitialFieldMount.current = false;
-      return;
-    }
-    if (datasetRef.current) {
-      datasetRef.current.scrollIntoView({ block: 'start', behavior: 'instant' });
-    }
-  }, [fieldOffset]);
 
   const navigate = useNavigate();
 
@@ -347,7 +258,7 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
   };
 
   return (
-    <li ref={datasetRef}>
+    <li>
       <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
           onClick={handleChevronClick}
@@ -369,45 +280,32 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
         </button>
       </div>
       {isExpanded && (
-        <>
-          <ul className="ml-4 mt-1 space-y-1">
-            {paginatedFields.length === 0 ? (
-              <li className="px-2 py-1 text-xs text-slate-400 italic">No fields found</li>
-            ) : (
-              paginatedFields
-                .sort((a, b) => a.ordinalPosition - b.ordinalPosition)
-                .map((field) => (
-                  <li key={field.id}>
-                    <Tooltip content={`View lineage for field ${field.name}`} position="right">
-                      <button
-                        onClick={() => handleFieldClick(field.name)}
-                        className="flex items-center w-full px-2 py-1 text-left rounded hover:bg-blue-50"
-                      >
-                        <Columns className="w-4 h-4 mr-2 text-purple-500" />
-                        <span className="text-sm text-slate-700">{field.name}</span>
-                        {field.type && (
-                          <Tooltip content={`Data type: ${field.type}`} position="top">
-                            <span className="ml-2 text-xs text-slate-400 cursor-help">{field.type}</span>
-                          </Tooltip>
-                        )}
-                      </button>
-                    </Tooltip>
-                  </li>
-                ))
-            )}
-          </ul>
-          {/* Field pagination - always visible per CONTEXT.md */}
-          <div className="ml-4 mt-2 flex justify-center">
-            <Pagination
-              totalCount={totalFields}
-              limit={FIELD_LIMIT}
-              offset={fieldOffset}
-              onPageChange={setFieldOffset}
-              showFirstLast={true}
-              showPageInfo={true}
-            />
-          </div>
-        </>
+        <ul className="ml-4 mt-1 space-y-1">
+          {allFields.length === 0 ? (
+            <li className="px-2 py-1 text-xs text-slate-400 italic">No fields found</li>
+          ) : (
+            allFields
+              .sort((a, b) => a.ordinalPosition - b.ordinalPosition)
+              .map((field) => (
+                <li key={field.id}>
+                  <Tooltip content={`View lineage for field ${field.name}`} position="right">
+                    <button
+                      onClick={() => handleFieldClick(field.name)}
+                      className="flex items-center w-full px-2 py-1 text-left rounded hover:bg-blue-50"
+                    >
+                      <Columns className="w-4 h-4 mr-2 text-purple-500" />
+                      <span className="text-sm text-slate-700">{field.name}</span>
+                      {field.type && (
+                        <Tooltip content={`Data type: ${field.type}`} position="top">
+                          <span className="ml-2 text-xs text-slate-400 cursor-help">{field.type}</span>
+                        </Tooltip>
+                      )}
+                    </button>
+                  </Tooltip>
+                </li>
+              ))
+          )}
+        </ul>
       )}
     </li>
   );
