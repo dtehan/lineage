@@ -27,7 +27,7 @@ See MILESTONES.md for details. 2 phases, 11 plans, 48 files modified.
 **Milestone Goal:** Complete pagination feature by adding frontend controls across all user-facing views.
 
 - [x] **Phase 9: Pagination Component** - Build reusable pagination UI component
-- [ ] **Phase 10: Asset Browser Integration** - Integrate pagination into database/table/column views
+- [x] **Phase 10: Asset Browser Integration** - Integrate pagination into database/table/column views
 - [ ] **Phase 11: Search & Graph Integration** - Integrate pagination into search results and lineage views
 - [ ] **Phase 12: Testing** - Comprehensive unit, integration, and E2E test coverage
 
@@ -65,7 +65,7 @@ Plans:
 - [x] 10-01-PLAN.md - Database and table list pagination integration
 - [x] 10-02-PLAN.md - Column list pagination and test mock updates
 - [x] 10-03-PLAN.md - Pagination test coverage
-- [ ] 10-04-PLAN.md - Gap closure: scroll-into-view on pagination changes
+- [x] 10-04-PLAN.md - Gap closure: scroll-into-view on pagination changes
 
 ### Phase 11: Search & Graph Integration
 **Goal**: Users can navigate paginated search results and lineage views
@@ -106,7 +106,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 9. Pagination Component | v2.1 | 1/1 | ✓ Complete | 2026-01-31 |
-| 10. Asset Browser Integration | v2.1 | 3/4 | Gap closure | - |
+| 10. Asset Browser Integration | v2.1 | 4/4 | ✓ Complete | 2026-01-31 |
 | 11. Search & Graph Integration | v2.1 | 0/2 | Not started | - |
 | 12. Testing | v2.1 | 0/2 | Not started | - |
 
