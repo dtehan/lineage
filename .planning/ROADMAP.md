@@ -34,9 +34,9 @@ See MILESTONES.md for details. 2 phases, 5 plans.
 
 **Milestone Goal:** Enhance lineage graph usability, validate correctness for production use, and optimize performance for large graphs.
 
-- [ ] **Phase 13: Graph Loading Experience** - Progress indicator during graph loading stages
-- [ ] **Phase 14: Viewport & Space Optimization** - Improved initial positioning and node spacing
-- [ ] **Phase 15: Correctness Test Data** - Create test fixtures for cycles, diamonds, and fan patterns
+- [x] **Phase 13: Graph Loading Experience** - Progress indicator during graph loading stages
+- [x] **Phase 14: Viewport & Space Optimization** - Improved initial positioning and node spacing
+- [x] **Phase 15: Correctness Test Data** - Create test fixtures for cycles, diamonds, and fan patterns
 - [ ] **Phase 16: Correctness Validation** - Verify graph algorithms handle complex patterns correctly
 - [ ] **Phase 17: CTE Performance Optimization** - Benchmark and optimize recursive CTE for deep graphs
 - [ ] **Phase 18: Frontend Rendering Performance** - Benchmark and optimize ELK.js and React Flow for large graphs
@@ -99,10 +99,11 @@ Plans:
   3. Fan-out patterns include all target nodes in the graph
   4. Fan-in patterns include all source nodes in the graph
   5. Node and edge counts match expected values for each test pattern
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 16-01: TBD
+- [ ] 16-01-PLAN.md - Database CTE correctness tests (cycles, diamonds, fans)
+- [ ] 16-02-PLAN.md - Frontend integration tests with mock data
 
 ### Phase 17: CTE Performance Optimization
 **Goal**: Recursive CTE queries perform acceptably at depth 10+ with documented benchmarks
@@ -145,10 +146,10 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 13. Graph Loading Experience | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 14. Viewport & Space Optimization | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 15. Correctness Test Data | v3.0 | 1/1 | Complete | 2026-01-31 |
-| 16. Correctness Validation | v3.0 | 0/TBD | Not started | - |
+| 16. Correctness Validation | v3.0 | 0/2 | Planned | - |
 | 17. CTE Performance Optimization | v3.0 | 0/TBD | Not started | - |
 | 18. Frontend Rendering Performance | v3.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-01-31 (Phases 13-15 completed)*
+*Last updated: 2026-01-31 (Phase 16 planned)*
