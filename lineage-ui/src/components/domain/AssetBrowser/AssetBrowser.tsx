@@ -207,17 +207,19 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
     // Always scroll to header when database is expanded (even on first expansion)
     // to counteract browser scrolling to pagination at bottom
     if (isExpanded) {
-      // Small delay to ensure content is rendered
+      // Wait for content to be fully rendered
       requestAnimationFrame(() => {
-        if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
-          databaseHeaderRef.current.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
-          // Then scroll it to the top of the container
-          const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
-          if (scrollContainer && databaseHeaderRef.current) {
-            const headerTop = databaseHeaderRef.current.offsetTop;
-            scrollContainer.scrollTop = headerTop - 8; // 8px padding
+        requestAnimationFrame(() => {
+          if (databaseHeaderRef.current) {
+            const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
+            if (scrollContainer) {
+              const containerRect = scrollContainer.getBoundingClientRect();
+              const headerRect = databaseHeaderRef.current.getBoundingClientRect();
+              const relativeTop = headerRect.top - containerRect.top + scrollContainer.scrollTop;
+              scrollContainer.scrollTop = relativeTop - 8; // 8px padding
+            }
           }
-        }
+        });
       });
     }
   }, [isExpanded]);
@@ -230,12 +232,13 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
     }
     // Use requestAnimationFrame to ensure this happens after any browser scroll
     requestAnimationFrame(() => {
-      if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
-        // Find the scroll container and scroll to the header position
+      if (databaseHeaderRef.current) {
         const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
-        if (scrollContainer && databaseHeaderRef.current) {
-          const headerTop = databaseHeaderRef.current.offsetTop;
-          scrollContainer.scrollTop = headerTop - 8; // 8px padding from top
+        if (scrollContainer) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const headerRect = databaseHeaderRef.current.getBoundingClientRect();
+          const relativeTop = headerRect.top - containerRect.top + scrollContainer.scrollTop;
+          scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
         }
       }
     });
@@ -341,12 +344,13 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
     }
     // Use requestAnimationFrame to ensure this happens after any browser scroll
     requestAnimationFrame(() => {
-      if (datasetRef.current && typeof datasetRef.current.scrollIntoView === 'function') {
-        // Find the scroll container and scroll to the dataset position
+      if (datasetRef.current) {
         const scrollContainer = datasetRef.current.closest('.overflow-auto');
-        if (scrollContainer && datasetRef.current) {
-          const datasetTop = datasetRef.current.offsetTop;
-          scrollContainer.scrollTop = datasetTop - 8; // 8px padding from top
+        if (scrollContainer) {
+          const containerRect = scrollContainer.getBoundingClientRect();
+          const datasetRect = datasetRef.current.getBoundingClientRect();
+          const relativeTop = datasetRect.top - containerRect.top + scrollContainer.scrollTop;
+          scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
         }
       }
     });
