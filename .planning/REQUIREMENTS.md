@@ -89,35 +89,35 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| UI-01 | TBD | Pending |
-| UI-02 | TBD | Pending |
-| UI-03 | TBD | Pending |
-| UI-04 | TBD | Pending |
-| UI-05 | TBD | Pending |
-| ASSET-01 | TBD | Pending |
-| ASSET-02 | TBD | Pending |
-| ASSET-03 | TBD | Pending |
-| ASSET-04 | TBD | Pending |
-| ASSET-05 | TBD | Pending |
-| ASSET-06 | TBD | Pending |
-| ASSET-07 | TBD | Pending |
-| SEARCH-01 | TBD | Pending |
-| SEARCH-02 | TBD | Pending |
-| SEARCH-03 | TBD | Pending |
-| GRAPH-01 | TBD | Pending |
-| GRAPH-02 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| TEST-04 | TBD | Pending |
-| TEST-05 | TBD | Pending |
-| TEST-06 | TBD | Pending |
+| UI-01 | Phase 9 | Pending |
+| UI-02 | Phase 9 | Pending |
+| UI-03 | Phase 9 | Pending |
+| UI-04 | Phase 9 | Pending |
+| UI-05 | Phase 9 | Pending |
+| ASSET-01 | Phase 10 | Pending |
+| ASSET-02 | Phase 10 | Pending |
+| ASSET-03 | Phase 10 | Pending |
+| ASSET-04 | Phase 10 | Pending |
+| ASSET-05 | Phase 10 | Pending |
+| ASSET-06 | Phase 10 | Pending |
+| ASSET-07 | Phase 10 | Pending |
+| SEARCH-01 | Phase 11 | Pending |
+| SEARCH-02 | Phase 11 | Pending |
+| SEARCH-03 | Phase 11 | Pending |
+| GRAPH-01 | Phase 11 | Pending |
+| GRAPH-02 | Phase 11 | Pending |
+| TEST-01 | Phase 12 | Pending |
+| TEST-02 | Phase 12 | Pending |
+| TEST-03 | Phase 12 | Pending |
+| TEST-04 | Phase 12 | Pending |
+| TEST-05 | Phase 12 | Pending |
+| TEST-06 | Phase 12 | Pending |
 
 **Coverage:**
-- v2.1 requirements: 18 total
-- Mapped to phases: 0
-- Unmapped: 18 ⚠️
+- v2.1 requirements: 23 total
+- Mapped to phases: 23
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-31*
-*Last updated: 2026-01-31 after initial definition*
+*Last updated: 2026-01-31 after roadmap creation*
