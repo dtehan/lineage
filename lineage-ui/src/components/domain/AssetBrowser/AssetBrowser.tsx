@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe } from 'lucide-react';
 import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
@@ -190,6 +190,8 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
   const navigate = useNavigate();
   const [tableOffset, setTableOffset] = useState(0);
   const TABLE_LIMIT = 100;
+  const databaseRef = useRef<HTMLLIElement>(null);
+  const isInitialTableMount = useRef(true);
 
   // Paginate the datasets (tables) for this database (client-side slicing)
   const totalTables = datasets.length;
@@ -199,6 +201,18 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
   useEffect(() => {
     setTableOffset(0);
   }, [databaseName]);
+
+  // Scroll database header into view when table pagination changes
+  useEffect(() => {
+    if (isInitialTableMount.current) {
+      isInitialTableMount.current = false;
+      return;
+    }
+    // scrollIntoView may not exist in test environments (JSDOM)
+    if (databaseRef.current && typeof databaseRef.current.scrollIntoView === 'function') {
+      databaseRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [tableOffset]);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
   const handleChevronClick = (e: React.MouseEvent) => {
@@ -212,7 +226,7 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
   };
 
   return (
-    <li>
+    <li ref={databaseRef}>
       <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
           onClick={handleChevronClick}
@@ -274,6 +288,8 @@ interface DatasetItemProps {
 function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
   const [fieldOffset, setFieldOffset] = useState(0);
   const FIELD_LIMIT = 100;
+  const datasetRef = useRef<HTMLLIElement>(null);
+  const isInitialFieldMount = useRef(true);
 
   // Fetch dataset with fields when expanded
   const { data: datasetWithFields } = useOpenLineageDataset(isExpanded ? dataset.id : '', {
@@ -289,6 +305,18 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
   useEffect(() => {
     setFieldOffset(0);
   }, [dataset.id]);
+
+  // Scroll dataset header into view when field pagination changes
+  useEffect(() => {
+    if (isInitialFieldMount.current) {
+      isInitialFieldMount.current = false;
+      return;
+    }
+    // scrollIntoView may not exist in test environments (JSDOM)
+    if (datasetRef.current && typeof datasetRef.current.scrollIntoView === 'function') {
+      datasetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [fieldOffset]);
 
   const navigate = useNavigate();
 
@@ -312,7 +340,7 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
   };
 
   return (
-    <li>
+    <li ref={datasetRef}>
       <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
           onClick={handleChevronClick}
