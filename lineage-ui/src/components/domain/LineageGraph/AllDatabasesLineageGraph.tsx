@@ -24,7 +24,8 @@ import { LineageEdge } from './LineageEdge';
 import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
-import { LoadingSpinner } from '../../common/LoadingSpinner';
+import { LoadingProgress } from '../../common/LoadingProgress';
+import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown, Network, Loader2, Filter, X } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
@@ -145,6 +146,9 @@ function AllDatabasesLineageGraphInner() {
   // Use smart viewport hook for size-aware positioning
   const { applySmartViewport } = useSmartViewport();
 
+  // Use loading progress hook for stage tracking
+  const { stage, progress, message, setStage, setProgress, reset } = useLoadingProgress();
+
   // Create database clusters from nodes
   const clusters = useDatabaseClustersFromNodes(nodes);
 
@@ -156,6 +160,18 @@ function AllDatabasesLineageGraphInner() {
     }
   }, [data?.pages, setPagination]);
 
+  // Track fetching stage
+  useEffect(() => {
+    if (isLoading) {
+      setStage('fetching');
+    }
+  }, [isLoading, setStage]);
+
+  // Reset loading state when filters change
+  useEffect(() => {
+    reset();
+  }, [databaseFilter, reset]);
+
   // Update loading more state
   useEffect(() => {
     setIsLoadingMore(isFetchingNextPage);
@@ -164,15 +180,26 @@ function AllDatabasesLineageGraphInner() {
   // Update nodes/edges when merged data changes
   useEffect(() => {
     if (mergedData.nodes.length > 0) {
-      layoutGraph(mergedData.nodes, mergedData.edges).then(
+      setStage('layout');
+
+      layoutGraph(mergedData.nodes, mergedData.edges, {
+        onProgress: (layoutProgress) => setProgress(layoutProgress),
+      }).then(
         ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+          setStage('rendering');
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
           setGraph(mergedData.nodes, mergedData.edges);
+          // Use requestAnimationFrame to detect render complete
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setStage('complete');
+            });
+          });
         }
       );
     }
-  }, [mergedData, setNodes, setEdges, setGraph]);
+  }, [mergedData, setNodes, setEdges, setGraph, setStage, setProgress]);
 
   // Apply smart viewport after layout completes
   useEffect(() => {
@@ -323,10 +350,13 @@ function AllDatabasesLineageGraphInner() {
     [setSelectedEdge, openPanel, setViewMode]
   );
 
-  if (isLoading) {
+  // Show progress during any loading stage (fetching, layout, or rendering)
+  const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
+
+  if (showProgress) {
     return (
       <div className="flex items-center justify-center h-full">
-        <LoadingSpinner size="lg" />
+        <LoadingProgress progress={progress} message={message} size="lg" />
       </div>
     );
   }
