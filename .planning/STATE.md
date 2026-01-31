@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-31)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v3.0 Graph Improvements - Phases 13-15 COMPLETE
+**Current focus:** v3.0 Graph Improvements - Phase 16 in progress
 
 ## Current Position
 
-Phase: 15 of 18 (Correctness Test Data)
-Plan: Complete (all 5 plans from phases 13-15)
-Status: Phases 13-15 complete, ready for Phase 16
-Last activity: 2026-01-31 - Completed phases 13, 14, 15 in parallel
+Phase: 16 of 18 (Correctness Validation)
+Plan: 1 of 2 (Database CTE Correctness Tests)
+Status: Phase 16-01 complete, ready for 16-02
+Last activity: 2026-01-31 - Completed 16-01-PLAN.md
 
-Progress: [██████░░░░] 83% (15 phases complete)
+Progress: [███████░░░] 89% (16 phases in progress)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 34 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 5)
+- Total plans completed: 35 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 6)
 - Average duration: ~3 min
-- Total execution time: ~117 min
+- Total execution time: ~122 min
 
 **By Milestone:**
 
@@ -30,11 +30,11 @@ Progress: [██████░░░░] 83% (15 phases complete)
 | v1.0 | 6 | 13 | 8 days |
 | v2.0 | 2 | 11 | ~2 hours |
 | v2.1 | 2 | 5 | 1 day |
-| v3.0 | 6 | 5 | In progress |
+| v3.0 | 6 | 6 | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 15-01 (3 min), 14-01 (3 min), 13-01 (3 min), 14-02 (5 min), 13-02 (8 min)
-- Trend: Excellent velocity - phases 13-15 completed in parallel
+- Last 5 plans: 16-01 (5 min), 15-01 (3 min), 14-01 (3 min), 13-01 (3 min), 14-02 (5 min)
+- Trend: Excellent velocity - database correctness tests complete
 
 *Updated after each plan completion*
 
@@ -54,6 +54,7 @@ Recent decisions affecting current work:
 - [v3.0]: Size-aware zoom: small (<=20 nodes) = 1.0, large (>=50 nodes) = 0.5, interpolated between
 - [v3.0]: Top-left viewport positioning shows root/source nodes first
 - [v3.0]: onProgress callback pattern for ELK layout progress (35%, 45%, 55%, 70%)
+- [v3.0]: Use unidirectional CTE queries for cycle tests (ClearScape 20.0 dual recursive CTE limitation)
 
 ### Pending Todos
 
@@ -67,5 +68,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-01-31
-Stopped at: Completed phases 13-15 (all 5 plans)
-Resume file: None - Phases 13-15 complete, ready for Phase 16 (Correctness Validation)
+Stopped at: Completed 16-01-PLAN.md (Database CTE Correctness Tests)
+Resume file: None - Ready for Phase 16-02 (API Correctness Tests)
