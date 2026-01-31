@@ -219,8 +219,8 @@ export async function layoutGraph(
 ): Promise<{ nodes: Node[]; edges: Edge[] }> {
   const {
     direction = 'RIGHT',
-    nodeSpacing = 60,
-    layerSpacing = 150,
+    nodeSpacing = 40,
+    layerSpacing = 100,
   } = options;
 
   // Group columns by table
@@ -532,8 +532,8 @@ async function layoutSimpleNodes(
 ): Promise<{ nodes: Node[]; edges: Edge[] }> {
   const {
     direction = 'RIGHT',
-    nodeSpacing = 50,
-    layerSpacing = 150,
+    nodeSpacing = 40,
+    layerSpacing = 100,
   } = options;
 
   const elkNodes: ElkNode[] = nodes.map((node) => ({
