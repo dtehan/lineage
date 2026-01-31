@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-01-31)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v3.0 Graph Improvements - Phase 16 in progress
+**Current focus:** v3.0 Graph Improvements - Phase 17 in progress
 
 ## Current Position
 
-Phase: 16 of 18 (Correctness Validation)
-Plan: Complete (2/2 plans)
-Status: Phase 16 complete and verified, ready for Phase 17
-Last activity: 2026-01-31 - Completed Phase 16 (all plans executed and verified)
+Phase: 17 of 18 (CTE Performance Optimization)
+Plan: 1 of 2 complete
+Status: Phase 17 in progress, Plan 01 complete
+Last activity: 2026-01-31 - Completed 17-01-PLAN.md (CTE Performance Baseline)
 
-Progress: [███████░░░] 89% (16 phases complete)
+Progress: [████████░░] 93% (17 plans complete out of ~38)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 36 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 7)
+- Total plans completed: 37 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 8)
 - Average duration: ~3 min
-- Total execution time: ~124 min
+- Total execution time: ~129 min
 
 **By Milestone:**
 
@@ -30,11 +30,11 @@ Progress: [███████░░░] 89% (16 phases complete)
 | v1.0 | 6 | 13 | 8 days |
 | v2.0 | 2 | 11 | ~2 hours |
 | v2.1 | 2 | 5 | 1 day |
-| v3.0 | 6 | 7 | In progress |
+| v3.0 | 7 | 8 | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 16-02 (2 min), 16-01 (5 min), 15-01 (3 min), 14-01 (3 min), 13-01 (3 min)
-- Trend: Excellent velocity - frontend correctness tests complete
+- Last 5 plans: 17-01 (5 min), 16-02 (2 min), 16-01 (5 min), 15-01 (3 min), 14-01 (3 min)
+- Trend: Excellent velocity - CTE benchmark baseline established
 
 *Updated after each plan completion*
 
@@ -56,6 +56,7 @@ Recent decisions affecting current work:
 - [v3.0]: onProgress callback pattern for ELK layout progress (35%, 45%, 55%, 70%)
 - [v3.0]: Use unidirectional CTE queries for cycle tests (ClearScape 20.0 dual recursive CTE limitation)
 - [v3.0]: Integration test directory at src/__tests__/integration/ for correctness validation
+- [v3.0]: CTE benchmark: 3 iterations per test, VARCHAR(4000) path matches Go implementation
 
 ### Pending Todos
 
@@ -65,9 +66,10 @@ None yet.
 
 - Pre-existing test failures in LineageGraph.test.tsx (unrelated to current work)
 - Pre-existing TypeScript errors in DatabaseLineageGraph.tsx (unrelated to current work)
+- CTE Performance: All-rows scans identified as primary bottleneck (no indexes on dataset/field)
 
 ## Session Continuity
 
 Last session: 2026-01-31
-Stopped at: Completed Phase 16 (Correctness Validation - 2 plans, verified)
-Resume file: None - Phase 16 complete, ready for Phase 17 (CTE Performance Optimization)
+Stopped at: Completed 17-01-PLAN.md (CTE Performance Baseline)
+Resume file: None - Ready for 17-02-PLAN.md (CTE Query Optimization)
