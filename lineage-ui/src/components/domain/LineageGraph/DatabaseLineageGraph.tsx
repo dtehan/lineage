@@ -24,7 +24,8 @@ import { LineageEdge } from './LineageEdge';
 import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
-import { LoadingSpinner } from '../../common/LoadingSpinner';
+import { LoadingProgress } from '../../common/LoadingProgress';
+import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown, Database } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
@@ -105,6 +106,9 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   // Use smart viewport hook for size-aware positioning
   const { applySmartViewport } = useSmartViewport();
 
+  // Use loading progress hook for stage tracking
+  const { stage, progress, message, setStage, setProgress, reset } = useLoadingProgress();
+
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
     // Get the set of node IDs that match the asset type filter
@@ -132,22 +136,45 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   // Create database clusters from filtered nodes
   const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
 
+  // Track fetching stage
+  useEffect(() => {
+    if (isLoading) {
+      setStage('fetching');
+    }
+  }, [isLoading, setStage]);
+
+  // Reset loading state when database changes
+  useEffect(() => {
+    reset();
+  }, [databaseName, reset]);
+
   // Update nodes/edges when data changes
   useEffect(() => {
     if (!data?.graph?.nodes) return;
+
+    setStage('layout');
 
     // Convert OpenLineage graph to React Flow format
     const converted = convertOpenLineageGraph(data.graph.nodes, data.graph.edges);
 
     // Layout the graph
-    layoutGraph(converted.nodes, converted.edges).then(
+    layoutGraph(converted.nodes, converted.edges, {
+      onProgress: (layoutProgress) => setProgress(layoutProgress),
+    }).then(
       ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+        setStage('rendering');
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
         setGraph(converted.nodes, converted.edges);
+        // Use requestAnimationFrame to detect render complete
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setStage('complete');
+          });
+        });
       }
     );
-  }, [data, setNodes, setEdges, setGraph]);
+  }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
 
   // Apply smart viewport after layout completes
   useEffect(() => {
@@ -277,10 +304,13 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     [setSelectedEdge, openPanel, setViewMode]
   );
 
-  if (isLoading) {
+  // Show progress during any loading stage (fetching, layout, or rendering)
+  const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
+
+  if (showProgress) {
     return (
       <div className="flex items-center justify-center h-full">
-        <LoadingSpinner size="lg" />
+        <LoadingProgress progress={progress} message={message} size="lg" />
       </div>
     );
   }
