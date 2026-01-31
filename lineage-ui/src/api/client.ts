@@ -3,9 +3,11 @@ import type {
   OpenLineageNamespace,
   OpenLineageDataset,
   OpenLineageLineageResponse,
+  DatabaseLineageResponse,
   NamespacesResponse,
   DatasetsResponse,
   DatasetSearchResponse,
+  UnifiedSearchResponse,
   OpenLineagePaginationParams,
   LineageQueryParams,
 } from '../types/openlineage';
@@ -66,6 +68,13 @@ export const openLineageApi = {
     return response.data;
   },
 
+  async unifiedSearch(query: string, limit?: number): Promise<UnifiedSearchResponse> {
+    const response = await apiClientV2.get<UnifiedSearchResponse>('/api/v2/openlineage/search', {
+      params: { q: query, limit },
+    });
+    return response.data;
+  },
+
   // Lineage
   async getLineageGraph(
     datasetId: string,
@@ -86,6 +95,18 @@ export const openLineageApi = {
   ): Promise<OpenLineageLineageResponse> {
     const response = await apiClientV2.get<OpenLineageLineageResponse>(
       `/api/v2/openlineage/lineage/table/${encodeURIComponent(datasetId)}`,
+      { params }
+    );
+    return response.data;
+  },
+
+  // Database-level lineage (all tables and their relationships)
+  async getDatabaseLineageGraph(
+    databaseName: string,
+    params?: LineageQueryParams
+  ): Promise<DatabaseLineageResponse> {
+    const response = await apiClientV2.get<DatabaseLineageResponse>(
+      `/api/v2/openlineage/lineage/database/${encodeURIComponent(databaseName)}`,
       { params }
     );
     return response.data;

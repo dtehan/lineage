@@ -49,9 +49,10 @@ export type TransformationSubtype =
 export interface OpenLineageNode {
   id: string;
   type: 'dataset' | 'field';
+  name?: string; // Field name (for field nodes)
   namespace?: string;
-  dataset: string;
-  field?: string;
+  dataset: string | { name: string; namespace: string; sourceType?: string }; // Can be string or object
+  field?: string; // Alternative field name property
   metadata?: Record<string, unknown>;
 }
 
@@ -60,7 +61,7 @@ export interface OpenLineageEdge {
   source: string;
   target: string;
   transformationType: 'DIRECT' | 'INDIRECT';
-  transformationSubtype: TransformationSubtype;
+  transformationSubtype?: TransformationSubtype; // Optional since API doesn't always return it
   confidenceScore?: number;
 }
 
@@ -72,6 +73,13 @@ export interface OpenLineageGraph {
 export interface OpenLineageLineageResponse {
   datasetId: string;
   fieldName: string;
+  direction: 'upstream' | 'downstream' | 'both';
+  maxDepth: number;
+  graph: OpenLineageGraph;
+}
+
+export interface DatabaseLineageResponse {
+  databaseName: string;
   direction: 'upstream' | 'downstream' | 'both';
   maxDepth: number;
   graph: OpenLineageGraph;
@@ -98,6 +106,21 @@ export interface DatasetSearchResponse {
   datasets: OpenLineageDataset[];
   query: string;
   count: number;
+}
+
+export interface DatabaseInfo {
+  name: string;
+  namespace: string;
+  tableCount: number;
+}
+
+export interface UnifiedSearchResponse {
+  databases: DatabaseInfo[];
+  datasets: OpenLineageDataset[];
+  query: string;
+  totalCount: number;
+  databaseCount: number;
+  datasetCount: number;
 }
 
 // Direction type for lineage queries

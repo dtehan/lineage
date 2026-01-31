@@ -15,13 +15,18 @@ export function LineagePage() {
   const decodedDatasetId = decodeURIComponent(datasetId);
   const decodedFieldName = decodeURIComponent(fieldName);
 
+  // Check if this is a table-level lineage view
+  const isTableView = decodedFieldName === '_all';
+  const displayName = isTableView ? decodedDatasetId : `${decodedDatasetId}.${decodedFieldName}`;
+
   return (
     <div className="flex flex-col h-full">
       <header className="flex items-center justify-between px-4 py-2 bg-white border-b">
         <div className="flex items-center gap-4">
           <BackButton />
           <h1 className="text-lg font-semibold">
-            Lineage: <span className="font-mono text-sm">{decodedDatasetId}.{decodedFieldName}</span>
+            Lineage: <span className="font-mono text-sm">{displayName}</span>
+            {isTableView && <span className="text-xs text-slate-500 ml-2">(all columns)</span>}
           </h1>
         </div>
         <div className="flex items-center gap-4">

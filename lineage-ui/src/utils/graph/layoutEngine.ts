@@ -31,15 +31,24 @@ const MIN_NODE_WIDTH = 280;
 const MAX_NODE_WIDTH = 400;
 
 /**
- * Maps tableKind values from Teradata to AssetType
- * T = Table, V = View, M = Materialized View
+ * Maps tableKind/sourceType values from Teradata to AssetType
+ * Handles both single-letter codes (T, V, M) and full words (TABLE, VIEW, MATERIALIZED_VIEW)
  */
 function mapTableKindToAssetType(tableKind: string | undefined): AssetType {
-  switch (tableKind) {
+  if (!tableKind) return 'table';
+
+  const normalized = tableKind.toUpperCase();
+
+  switch (normalized) {
     case 'V':
+    case 'VIEW':
       return 'view';
     case 'M':
+    case 'MATERIALIZED VIEW':
+    case 'MATERIALIZED_VIEW':
       return 'materialized_view';
+    case 'T':
+    case 'TABLE':
     default:
       return 'table';
   }
@@ -168,7 +177,9 @@ function transformToTableNodes(
       tableName: firstColumn.tableName || 'unknown',
       columns,
       isExpanded: true,
-      assetType: mapTableKindToAssetType(firstColumn.metadata?.tableKind as string | undefined),
+      assetType: mapTableKindToAssetType(
+        (firstColumn.metadata?.sourceType || firstColumn.metadata?.tableKind) as string | undefined
+      ),
     });
   });
 
@@ -294,18 +305,20 @@ export async function layoutGraph(
 
     
     // Transform to React Flow nodes
-    const layoutedNodes: Node[] = (layoutedGraph.children || []).map((elkNode) => {
-      const tableNode = tableNodeData.find((n) => n.id === elkNode.id);
-      if (tableNode) {
-        return {
-          id: elkNode.id,
-          type: 'tableNode',
-          position: { x: elkNode.x || 0, y: elkNode.y || 0 },
-          data: tableNode,
-        };
-      }
-      return null;
-    }).filter((n): n is Node => n !== null);
+    const layoutedNodes: Node[] = (layoutedGraph.children || [])
+      .map((elkNode) => {
+        const tableNode = tableNodeData.find((n) => n.id === elkNode.id);
+        if (tableNode) {
+          return {
+            id: elkNode.id,
+            type: 'tableNode',
+            position: { x: elkNode.x || 0, y: elkNode.y || 0 },
+            data: tableNode,
+          } as Node;
+        }
+        return null;
+      })
+      .filter((n): n is Node => n !== null);
 
     // Transform to React Flow edges
     const layoutedEdges: Edge[] = rawEdges
@@ -554,6 +567,26 @@ async function layoutSimpleNodes(
 
   const layoutedNodes: Node[] = (layoutedGraph.children || []).map((elkNode) => {
     const originalNode = nodes.find((n) => n.id === elkNode.id)!;
+
+    // For table nodes, create proper TableNodeData structure
+    if (originalNode.type === 'table') {
+      const assetType = mapTableKindToAssetType(originalNode.metadata?.sourceType as string);
+      return {
+        id: elkNode.id,
+        type: 'tableNode',
+        position: { x: elkNode.x || 0, y: elkNode.y || 0 },
+        data: {
+          id: originalNode.id,
+          databaseName: originalNode.databaseName,
+          tableName: originalNode.tableName,
+          columns: [], // No columns for database-level view
+          isExpanded: false,
+          assetType: assetType,
+        } as TableNodeData,
+      };
+    }
+
+    // For other node types (column, database)
     return {
       id: elkNode.id,
       type: getReactFlowNodeType(originalNode),

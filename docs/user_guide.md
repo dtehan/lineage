@@ -87,24 +87,27 @@ export TERADATA_DATABASE="demo_user"
 
 **Note:** Environment variables take precedence over `.env` file values. Legacy `TD_*` variables are supported as fallbacks.
 
-Create the lineage schema:
+Create the OpenLineage schema:
 
 ```bash
 cd database/
-python3 setup_lineage_schema.py
+python3 setup_lineage_schema.py --openlineage
 ```
 
-This creates the following tables in your `demo_user` database:
-- `LIN_DATABASE` - Database registry
-- `LIN_TABLE` - Table registry
-- `LIN_COLUMN` - Column registry with metadata
-- `LIN_COLUMN_LINEAGE` - Column-to-column relationships
-- `LIN_TABLE_LINEAGE` - Table-level lineage
-- `LIN_TRANSFORMATION` - Transformation metadata
-- `LIN_QUERY` - Query registry
-- `LIN_WATERMARK` - Extraction tracking
+This creates the following OpenLineage tables in your `demo_user` database:
+- `OL_NAMESPACE` - Data source namespaces (URI format)
+- `OL_DATASET` - Dataset registry (tables/views)
+- `OL_DATASET_FIELD` - Field definitions (columns)
+- `OL_JOB` - Job definitions (ETL processes)
+- `OL_RUN` - Job execution runs
+- `OL_RUN_INPUT` - Run input datasets
+- `OL_RUN_OUTPUT` - Run output datasets
+- `OL_COLUMN_LINEAGE` - Column-level lineage with transformation types
+- `OL_SCHEMA_VERSION` - Schema version tracking
 
-Plus 13 performance indexes for efficient lineage traversal.
+Plus performance indexes for efficient lineage traversal.
+
+**Note:** The legacy LIN_* tables are deprecated. Use `--openlineage` flag to create OpenLineage-compliant tables.
 
 ### Step 2: Load Test Data
 
@@ -125,83 +128,29 @@ This creates a realistic data pipeline with 4 layers:
 
 ### Step 3: Populate Lineage Metadata
 
-Extract metadata from Teradata system views and populate lineage relationships.
-
-**Choose your approach based on your environment:**
-
-| Environment | Approach | Command |
-|-------------|----------|---------|
-| **Test/Demo** | Manual mappings | `python3 populate_lineage.py --manual` |
-| **Production** | DBQL extraction | `python3 populate_lineage.py --dbql` |
-
----
-
-#### Option A: Manual Mappings (Test/Demo Only)
-
-Use this for testing, demos, or environments without DBQL access (e.g., ClearScape Analytics free tier):
+Extract metadata from Teradata system views and populate OpenLineage tables.
 
 ```bash
+# Standard population (manual mappings)
 python3 populate_lineage.py
-# or explicitly:
-python3 populate_lineage.py --manual
+
+# Preview what would be populated
+python3 populate_lineage.py --dry-run
+
+# Append mode (don't clear existing data)
+python3 populate_lineage.py --skip-clear
 ```
 
-This extracts databases, tables, and columns from DBC views and creates 93 predefined column-level lineage relationships with transformation types (DIRECT, CALCULATION, AGGREGATION, JOIN).
+This populates OpenLineage tables with:
+- Databases and tables from `DBC.TablesV`
+- Columns and their types from `DBC.ColumnsV`
+- 93 predefined column-level lineage relationships with OpenLineage transformation types (DIRECT/IDENTITY, DIRECT/TRANSFORMATION, DIRECT/AGGREGATION, INDIRECT/JOIN, INDIRECT/FILTER)
 
-**When to use:**
+**Use for:**
 - Initial setup and testing
 - Demo environments
-- ClearScape Analytics (DBQL limited)
+- ClearScape Analytics environments
 - Development and debugging
-
----
-
-#### Option B: DBQL-Based Extraction (Production)
-
-For production environments with DBQL (Database Query Log) enabled. This approach:
-- Automatically discovers lineage from actual query history
-- Supports incremental extraction (only processes new queries)
-- Uses watermarks to track extraction progress
-
-**Initial Setup (First Run):**
-
-```bash
-# Full extraction - processes all DBQL history
-python3 populate_lineage.py --dbql --full
-
-# Or use the dedicated script
-python3 extract_dbql_lineage.py --full
-```
-
-**Incremental Updates (Subsequent Runs):**
-
-```bash
-# Incremental - only processes queries since last run
-python3 populate_lineage.py --dbql
-
-# Or use the dedicated script
-python3 extract_dbql_lineage.py
-```
-
-**Additional Options:**
-
-```bash
-# Extract from a specific date (ignores watermark)
-python3 extract_dbql_lineage.py --since "2024-01-01"
-
-# Dry run (preview without changes)
-python3 extract_dbql_lineage.py --dry-run
-
-# Verbose output for debugging
-python3 extract_dbql_lineage.py -v
-
-# Skip metadata refresh (only update lineage)
-python3 populate_lineage.py --dbql --skip-metadata
-```
-
-**When to use:**
-- Production environments with DBQL enabled
-- Continuous lineage discovery
 - Scheduled/automated extraction jobs
 
 See [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction) for detailed documentation.
@@ -1027,8 +976,8 @@ Searches for assets by name.
 **Problem:** Lineage graph shows no relationships
 
 **Solutions:**
-1. Verify lineage data exists: Check `LIN_COLUMN_LINEAGE` table
-2. Run `populate_lineage.py` to extract from DBQL
+1. Verify lineage data exists: Check `OL_COLUMN_LINEAGE` table
+2. Run `populate_lineage.py` to populate lineage data
 3. Ensure the asset ID format is correct: `database.table.column`
 
 ### Slow Performance
@@ -1495,7 +1444,7 @@ pip install teradatasql flask flask-cors requests
 
 # 2. Setup database schema and load test data
 cd database/
-python setup_lineage_schema.py
+python setup_lineage_schema.py --openlineage
 python setup_test_data.py
 python populate_lineage.py
 python insert_cte_test_data.py
@@ -1551,12 +1500,12 @@ The OpenLineage-aligned schema provides:
 ### Setting Up OpenLineage Tables
 
 ```bash
-# Create OpenLineage tables alongside legacy tables
+# Create OpenLineage tables
 cd database
 python setup_lineage_schema.py --openlineage
 
-# Populate OpenLineage tables
-python populate_lineage.py --openlineage
+# Populate OpenLineage tables (now default behavior)
+python populate_lineage.py
 ```
 
 ### v2 API Endpoints
@@ -1590,17 +1539,6 @@ OpenLineage defines two primary transformation types:
 | DIRECT | IDENTITY, TRANSFORMATION, AGGREGATION | Value directly derived from source |
 | INDIRECT | JOIN, FILTER, GROUP_BY, SORT, WINDOW, CONDITIONAL | Value influenced by source but not directly derived |
 
-### Migration from v1 to v2 API
-
-The v1 API (`/api/v1/*`) remains fully functional for backward compatibility. Key differences:
-
-| Aspect | v1 API | v2 API |
-|--------|--------|--------|
-| Asset identification | `database.table.column` format | Namespace + dataset + field |
-| Transformation types | Single type (DIRECT, CALCULATION, etc.) | Type + subtype (DIRECT/IDENTITY, etc.) |
-| Schema alignment | Custom LIN_* tables | OpenLineage OL_* tables |
-| Namespace | Implicit | Explicit URI format |
-
 ### Example: Fetching Lineage
 
 ```bash
@@ -1633,257 +1571,15 @@ Response includes OpenLineage-structured graph with transformation type/subtype:
 
 ---
 
-## DBQL-Based Lineage Extraction
+## Future Lineage Extraction Options
 
-This section covers automated lineage extraction from Teradata's DBQL (Database Query Log) tables, which provides production-grade lineage discovery.
+Currently, lineage is populated using manual mappings. Future options for automated lineage discovery:
 
-### Overview
-
-DBQL-based extraction automatically discovers data lineage by parsing SQL statements from query history. The extraction uses SQLGlot to parse INSERT, MERGE, CREATE TABLE AS SELECT, and UPDATE statements.
-
-**Key Features:**
-- **SQL Parsing**: Extracts lineage by parsing actual SQL text from DBQL
-- **Incremental Updates**: Uses watermarks to process only new queries
-- **Duplicate Handling**: Updates `last_seen_at` for existing lineage records
-- **ClearScape Compatible**: Works even when `DBQLObjTbl.TypeOfUse` values are limited
-
-### Test vs Production Workflow
-
-| Step | Test/Demo | Production |
-|------|-----------|------------|
-| **Initial Setup** | `--manual` | `--dbql --full` |
-| **Ongoing Updates** | Re-run `--manual` | `--dbql` (incremental) |
-| **Data Source** | Hardcoded mappings | DBQL query history |
-| **Automation** | Manual | Can be scheduled |
-
-#### Test/Demo Workflow
-
-```bash
-# One-time setup with predefined lineage mappings
-cd database/
-python3 populate_lineage.py --manual
-```
-
-This creates 93 predefined lineage relationships for the test medallion architecture (SRC → STG → DIM → FACT → RPT).
-
-#### Production Workflow
-
-```bash
-cd database/
-
-# Step 1: Initial full extraction (first time only)
-python3 extract_dbql_lineage.py --full
-
-# Step 2: Schedule incremental runs (daily/hourly)
-python3 extract_dbql_lineage.py
-```
-
-### Prerequisites
-
-1. **DBQL Logging Enabled**: Your Teradata system must have DBQL logging enabled
-2. **SELECT Privileges**: Your user needs SELECT access to:
-   - `DBC.DBQLogTbl` - Query log
-   - `DBC.DBQLSQLTbl` - Query SQL text
-3. **SQLGlot Library**: Required for SQL parsing:
-   ```bash
-   pip install sqlglot>=25.0.0
-   ```
-
-### Commands Reference
-
-#### extract_dbql_lineage.py (Recommended)
-
-```bash
-# Incremental run (default) - processes queries since last watermark
-python3 extract_dbql_lineage.py
-
-# Full extraction - clears existing lineage, processes all history
-python3 extract_dbql_lineage.py --full
-
-# Extract from specific date (overrides watermark)
-python3 extract_dbql_lineage.py --since "2024-01-01"
-
-# Dry run - preview without making changes
-python3 extract_dbql_lineage.py --dry-run
-
-# Verbose output
-python3 extract_dbql_lineage.py -v
-```
-
-#### populate_lineage.py (Alternative)
-
-```bash
-# DBQL extraction with metadata refresh
-python3 populate_lineage.py --dbql
-
-# Full DBQL extraction
-python3 populate_lineage.py --dbql --full
-
-# Skip metadata refresh (only update lineage)
-python3 populate_lineage.py --dbql --skip-metadata
-
-# Dry run
-python3 populate_lineage.py --dbql --dry-run
-```
-
-### How It Works
-
-The extraction process:
-
-1. **Fetch Queries**: Retrieves INSERT/MERGE/CTAS/UPDATE statements from `DBC.DBQLSQLTbl`
-2. **Parse SQL**: Uses SQLGlot with Teradata dialect to parse each query
-3. **Extract Lineage**: Identifies source tables/columns and target tables/columns
-4. **Store Results**: Inserts into `LIN_TABLE_LINEAGE` and `LIN_COLUMN_LINEAGE`
-5. **Update Watermark**: Records the latest processed query timestamp
-
-```
-DBQL Tables                    Lineage Tables
-┌─────────────────┐           ┌─────────────────────┐
-│ DBC.DBQLogTbl   │──────────►│ LIN_TABLE_LINEAGE   │
-│ DBC.DBQLSQLTbl  │  Parse    │ LIN_COLUMN_LINEAGE  │
-└─────────────────┘  SQL      └─────────────────────┘
-                       │
-                       ▼
-                 ┌───────────┐
-                 │ SQLGlot   │
-                 │ Parser    │
-                 └───────────┘
-```
-
-### Incremental Extraction with Watermarks
-
-The system tracks extraction progress using the `LIN_WATERMARK` table:
-
-```sql
--- Check current watermark
-SELECT source_name, last_extracted_at, row_count, status
-FROM demo_user.LIN_WATERMARK
-WHERE source_name = 'DBQL_LINEAGE_EXTRACTION';
-```
-
-**Watermark Behavior:**
-
-| Run Type | Watermark Action |
-|----------|------------------|
-| `--full` | Clears lineage, processes all history, sets new watermark |
-| Incremental (default) | Processes queries since watermark, updates watermark |
-| `--since DATE` | Processes queries since DATE, updates watermark |
-
-**Example incremental output:**
-```
-Mode: INCREMENTAL (since watermark: 2024-01-15 10:30:00)
-Fetching queries since: 2024-01-15 10:30:00
-  Found 150 queries to process
-...
-Watermark updated to: 2024-01-16 09:45:30
-```
-
-### Confidence Scores
-
-Column lineage records include confidence scores based on parsing accuracy:
-
-| Method | Confidence | Description |
-|--------|------------|-------------|
-| Direct column reference | 0.95 | `SELECT col FROM t` |
-| Column in expression | 0.85 | `SELECT col + 1 AS x` |
-| SELECT * expansion | 0.70 | Requires schema to expand |
-| Pattern-based fallback | 0.60 | Regex extraction |
-
-### Transformation Types
-
-Discovered lineage includes transformation types:
-
-| Type | Description |
-|------|-------------|
-| `DIRECT` | Direct column copy |
-| `CALCULATION` | Column used in expression |
-| `INSERT_SELECT` | INSERT...SELECT statement |
-| `MERGE` | MERGE statement |
-| `CTAS` | CREATE TABLE AS SELECT |
-| `UPDATE` | UPDATE statement |
-| `UNKNOWN` | Could not determine |
-
-### Scheduling Incremental Runs
-
-For production, schedule incremental extraction using cron or your scheduler:
-
-```bash
-# Example cron job - run every hour
-0 * * * * cd /path/to/lineage/database && python3 extract_dbql_lineage.py >> /var/log/lineage.log 2>&1
-
-# Example cron job - run daily at 2 AM
-0 2 * * * cd /path/to/lineage/database && python3 extract_dbql_lineage.py >> /var/log/lineage.log 2>&1
-```
-
-### Limitations
-
-| Limitation | Impact | Mitigation |
-|------------|--------|------------|
-| DBQL not enabled | No query history available | Use `--manual` mode |
-| SELECT * | Column mapping uncertain | Confidence score 0.70 |
-| Dynamic SQL | Actual SQL not visible | Table-level lineage only |
-| Large queries (>32KB) | SQL text truncated | First chunk parsed |
-| Complex Teradata syntax | Some may not parse | Pattern fallback |
-| TypeOfUse not logged | Can't use DBQLObjTbl directly | SQL parsing approach |
-
-### ClearScape Analytics Note
-
-ClearScape Analytics environments may have limited DBQL functionality:
-- `DBQLObjTbl.TypeOfUse` values may not include write operations (3/4)
-- The extraction script uses SQL parsing to work around this limitation
-- DBQL access is available, but some features may be restricted
-
-```bash
-# ClearScape: Use DBQL extraction (SQL parsing works)
-python3 extract_dbql_lineage.py --full
-
-# If DBQL is completely unavailable, fall back to manual
-python3 populate_lineage.py --manual
-```
-
-### Troubleshooting
-
-**No queries found:**
-```
-Fetching queries since: 2024-01-15 10:30:00
-  Found 0 queries to process
-```
-- Check if DBQL logging is enabled
-- Verify your user has SELECT on DBC.DBQLogTbl
-- Try `--full` to process all history
-
-**Low lineage counts:**
-```
-Queries processed: 5000
-Queries with lineage: 50
-```
-- Many queries may be simple INSERTs without SELECT
-- Complex SQL may not parse correctly
-- Use `-v` for verbose parsing errors
-
-**Watermark issues:**
-```bash
-# Reset watermark by using --full
-python3 extract_dbql_lineage.py --full
-
-# Or extract from specific date
-python3 extract_dbql_lineage.py --since "2024-01-01"
-```
-
-### Non-DBQL Environments
-
-For environments completely without DBQL access:
-
-```bash
-# Use manual/hardcoded mappings
-python3 populate_lineage.py --manual
-```
-
-**Future options for non-DBQL customers:**
-1. **SQL File Ingestion**: Parse ETL script files directly
-2. **DDL-Based Lineage**: Extract from view definitions
-3. **API Registration**: Applications register lineage at runtime
-4. **Metadata Import**: Import from dbt, DataHub, etc.
+1. **DBQL Integration**: Extract lineage from Teradata Query Log
+2. **SQL File Ingestion**: Parse ETL script files directly
+3. **DDL-Based Lineage**: Extract from view definitions
+4. **API Registration**: Applications register lineage at runtime
+5. **Metadata Import**: Import from dbt, DataHub, etc.
 
 ---
 

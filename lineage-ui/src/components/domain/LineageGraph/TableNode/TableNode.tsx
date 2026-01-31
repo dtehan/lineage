@@ -51,6 +51,18 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
     }
   };
 
+  // Get background color based on asset type
+  const getBackgroundColor = () => {
+    switch (data.assetType) {
+      case 'view':
+        return 'bg-orange-50';
+      case 'materialized_view':
+        return 'bg-violet-50';
+      default:
+        return 'bg-white';
+    }
+  };
+
   // Get border color based on state
   const getBorderColor = () => {
     if (data.columns.some((col) => col.id === selectedAssetId)) {
@@ -77,7 +89,7 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
     <div
       className={`
         min-w-[280px] max-w-[400px]
-        bg-white rounded-lg border-2 shadow-md
+        ${getBackgroundColor()} rounded-lg border-2 shadow-md
         transition-all duration-200
         ${getBorderColor()}
       `}
@@ -116,15 +128,22 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
         </div>
       )}
 
-      {!isExpanded && (
+      {!isExpanded && data.columns.length > 0 && (
         <div className="py-2 px-3 text-xs text-slate-400 italic">
           {data.columns.length} column{data.columns.length !== 1 ? 's' : ''} hidden
         </div>
       )}
 
+      {/* Database-level view: Show table-level message when no columns */}
+      {!isExpanded && data.columns.length === 0 && (
+        <div className="py-2 px-3 text-xs text-slate-400 italic">
+          Table-level lineage view
+        </div>
+      )}
+
       {/* Handles for all columns - rendered regardless of expansion state when collapsed */}
       {/* This ensures edges remain visible even when table is collapsed */}
-      {!isExpanded && data.columns.map((column) => (
+      {!isExpanded && data.columns.length > 0 && data.columns.map((column) => (
         <div key={column.id}>
           {/* Target handle (left side - incoming edges) */}
           <Handle
@@ -144,6 +163,26 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
           />
         </div>
       ))}
+
+      {/* Table-level handles for database-level lineage (when no columns) */}
+      {data.columns.length === 0 && (
+        <>
+          <Handle
+            type="target"
+            position={Position.Left}
+            id={`${id}-target`}
+            className="!w-2 !h-2 !bg-blue-400 !border-2 !border-white"
+            style={{ top: '50%' }}
+          />
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={`${id}-source`}
+            className="!w-2 !h-2 !bg-blue-400 !border-2 !border-white"
+            style={{ top: '50%' }}
+          />
+        </>
+      )}
     </div>
   );
 });

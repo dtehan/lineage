@@ -1,23 +1,23 @@
 import { AssetBrowser } from '../components/domain/AssetBrowser/AssetBrowser';
-import { LineageGraph } from '../components/domain/LineageGraph/LineageGraph';
-import { useLineageStore } from '../stores/useLineageStore';
+import { Network } from 'lucide-react';
 
 export function ExplorePage() {
-  const { selectedAssetId } = useLineageStore();
-
   return (
     <div className="flex h-full">
       <aside className="w-80 border-r border-slate-200 bg-white">
         <AssetBrowser />
       </aside>
       <main className="flex-1 bg-slate-50">
-        {selectedAssetId ? (
-          <LineageGraph assetId={selectedAssetId} />
-        ) : (
-          <div className="flex items-center justify-center h-full text-slate-500">
-            Select a column to view its lineage
-          </div>
-        )}
+        <div className="flex flex-col items-center justify-center h-full text-slate-500">
+          <Network className="w-16 h-16 mb-4 text-slate-300" />
+          <h2 className="text-xl font-semibold text-slate-700 mb-2">
+            Browse Data Assets
+          </h2>
+          <p className="text-sm text-slate-500 max-w-md text-center">
+            Expand databases and datasets in the browser to explore available fields.
+            Click on any field to view its lineage graph.
+          </p>
+        </div>
       </main>
     </div>
   );

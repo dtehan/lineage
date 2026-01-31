@@ -169,18 +169,37 @@ interface DatabaseItemProps {
 }
 
 function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDatasets, onToggleDataset }: DatabaseItemProps) {
+  const navigate = useNavigate();
+
+  // Toggle expand/collapse (prevent navigation when clicking chevron)
+  const handleChevronClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggle();
+  };
+
+  // Navigate to database-level lineage when clicking the database name
+  const handleDatabaseClick = () => {
+    navigate(`/lineage/database/${encodeURIComponent(databaseName)}`);
+  };
+
   return (
     <li>
-      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100 group">
+      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
-          onClick={onToggle}
-          className="flex items-center flex-1 text-left"
+          onClick={handleChevronClick}
+          className="p-0.5 hover:bg-slate-200 rounded"
+          aria-label={isExpanded ? 'Collapse database' : 'Expand database'}
         >
           {isExpanded ? (
-            <ChevronDown className="w-4 h-4 mr-1 text-slate-500" />
+            <ChevronDown className="w-4 h-4 text-slate-500" />
           ) : (
-            <ChevronRight className="w-4 h-4 mr-1 text-slate-500" />
+            <ChevronRight className="w-4 h-4 text-slate-500" />
           )}
+        </button>
+        <button
+          onClick={handleDatabaseClick}
+          className="flex items-center flex-1 ml-1 hover:bg-slate-200 rounded px-1 py-0.5 -mx-1 -my-0.5"
+        >
           <Tooltip content="Database" position="right">
             <Database className="w-4 h-4 mr-2 text-blue-500" />
           </Tooltip>
@@ -232,6 +251,11 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
     navigate(`/lineage/${encodeURIComponent(dataset.id)}/${encodeURIComponent(fieldName)}`);
   };
 
+  // Navigate to table-level lineage when clicking the table name
+  const handleTableClick = () => {
+    navigate(`/lineage/${encodeURIComponent(dataset.id)}/_all`);
+  };
+
   return (
     <li>
       <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
@@ -246,10 +270,13 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
             <ChevronRight className="w-4 h-4 text-slate-500" />
           )}
         </button>
-        <div className="flex items-center flex-1 ml-1">
+        <button
+          onClick={handleTableClick}
+          className="flex items-center flex-1 ml-1 hover:bg-slate-200 rounded px-1 py-0.5 -mx-1 -my-0.5"
+        >
           <AssetTypeIcon sourceType={dataset.sourceType} />
           <span className="text-sm text-slate-700">{tableName}</span>
-        </div>
+        </button>
       </div>
       {isExpanded && (
         <ul className="ml-4 mt-1 space-y-1">

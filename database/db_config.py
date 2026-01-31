@@ -68,13 +68,24 @@ def get_env(*names: str, required: bool = False, default: str = None) -> str:
 
 
 def get_config():
-    """Get database configuration from environment variables."""
+    """Get database configuration from environment variables.
+
+    Note: The Teradata Python driver (teradatasql) doesn't use 'port' or 'dbs_port'.
+    For non-default ports, include port in host as 'hostname:port' format.
+    For default port 1025, just use the hostname.
+    """
+    host = get_env("TERADATA_HOST", "TD_HOST", default="test-sad3sstx4u4llczi.env.clearscape.teradata.com")
+    port = get_env("TERADATA_PORT", "TD_PORT", default="1025")
+
+    # Only append port to host if it's not the default (1025) and not already present
+    if port != "1025" and ":" not in host:
+        host = f"{host}:{port}"
+
     return {
-        "host": get_env("TERADATA_HOST", "TD_HOST", default="test-sad3sstx4u4llczi.env.clearscape.teradata.com"),
+        "host": host,
         "user": get_env("TERADATA_USER", "TD_USER", default="demo_user"),
         "password": get_env("TERADATA_PASSWORD", "TD_PASSWORD", required=True),
-        "database": get_env("TERADATA_DATABASE", "TD_DATABASE", default="demo_user"),
-        "port": int(get_env("TERADATA_PORT", "TD_PORT", default="1025"))
+        "database": get_env("TERADATA_DATABASE", "TD_DATABASE", default="demo_user")
     }
 
 
@@ -87,7 +98,9 @@ def get_openlineage_namespace():
     Format: teradata://{host}:{port}
     Example: teradata://demo.teradata.com:1025
     """
-    host = CONFIG.get('host', 'localhost')
-    # Default Teradata port is 1025
-    port = CONFIG.get('port', 1025)
-    return f"teradata://{host}:{port}"
+    host = CONFIG.get('host', 'localhost:1025')
+    # host parameter already includes port (host:port format)
+    # If no port specified, add default
+    if ":" not in host:
+        host = f"{host}:1025"
+    return f"teradata://{host}"

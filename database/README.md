@@ -2,24 +2,9 @@
 
 This directory contains scripts for managing the Teradata lineage database schema.
 
-## Schema Versions
+## OpenLineage Schema
 
-### Legacy Schema (LIN_* tables)
-
-The original lineage schema uses `LIN_` prefixed tables:
-
-- **LIN_DATABASE** - Database registry
-- **LIN_TABLE** - Table registry
-- **LIN_COLUMN** - Column registry
-- **LIN_COLUMN_LINEAGE** - Column-to-column lineage relationships
-- **LIN_TABLE_LINEAGE** - Table-level lineage summary
-- **LIN_TRANSFORMATION** - Transformation definitions
-- **LIN_QUERY** - Query registry (from DBQL)
-- **LIN_WATERMARK** - Extraction watermarks
-
-### OpenLineage Schema (OL_* tables)
-
-The OpenLineage-aligned schema follows [spec v2-0-2](https://openlineage.io/):
+The schema is aligned with [OpenLineage spec v2-0-2](https://openlineage.io/):
 
 - **OL_NAMESPACE** - Data source namespaces (URI format)
 - **OL_DATASET** - Dataset registry (maps to tables)
@@ -28,40 +13,34 @@ The OpenLineage-aligned schema follows [spec v2-0-2](https://openlineage.io/):
 - **OL_RUN** - Job execution runs
 - **OL_RUN_INPUT** - Run input datasets
 - **OL_RUN_OUTPUT** - Run output datasets
-- **OL_COLUMN_LINEAGE** - Column lineage with OL transformation types
+- **OL_COLUMN_LINEAGE** - Column lineage with transformation types
 - **OL_SCHEMA_VERSION** - Schema version tracking
+
+The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views.
 
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `setup_lineage_schema.py` | Create database tables |
-| `populate_lineage.py` | Extract metadata and populate lineage |
-| `extract_dbql_lineage.py` | Extract lineage from DBQL |
+| `setup_lineage_schema.py` | Create OpenLineage tables (OL_*) |
+| `populate_lineage.py` | Populate OpenLineage tables from DBC views |
 | `setup_test_data.py` | Create test data tables |
 | `run_tests.py` | Run database tests |
 
 ## Usage
 
-### Setup Legacy Schema Only
-
 ```bash
-python setup_lineage_schema.py
-python populate_lineage.py
-```
-
-### Setup OpenLineage Schema
-
-```bash
+# Create OpenLineage tables
 python setup_lineage_schema.py --openlineage
-python populate_lineage.py --openlineage
-```
 
-### OpenLineage-Only Setup
+# Populate with manual mappings
+python populate_lineage.py
 
-```bash
-python setup_lineage_schema.py --openlineage-only
-python populate_lineage.py --openlineage
+# Preview what would be populated
+python populate_lineage.py --dry-run
+
+# Append mode (don't clear existing data)
+python populate_lineage.py --skip-clear
 ```
 
 ## Configuration

@@ -4,9 +4,11 @@ import type {
   OpenLineageNamespace,
   OpenLineageDataset,
   OpenLineageLineageResponse,
+  DatabaseLineageResponse,
   NamespacesResponse,
   DatasetsResponse,
   DatasetSearchResponse,
+  UnifiedSearchResponse,
   OpenLineagePaginationParams,
   LineageDirection,
 } from '../../types/openlineage';
@@ -21,8 +23,11 @@ export const openLineageKeys = {
     [...openLineageKeys.datasets(namespaceId), params] as const,
   dataset: (id: string) => [...openLineageKeys.all, 'dataset', id] as const,
   datasetsSearch: (query: string) => [...openLineageKeys.all, 'datasets', 'search', query] as const,
+  unifiedSearch: (query: string) => [...openLineageKeys.all, 'search', query] as const,
   lineage: (datasetId: string, fieldName: string, direction: LineageDirection, maxDepth: number) =>
     [...openLineageKeys.all, 'lineage', datasetId, fieldName, direction, maxDepth] as const,
+  databaseLineage: (databaseName: string, direction: LineageDirection, maxDepth: number) =>
+    [...openLineageKeys.all, 'database-lineage', databaseName, direction, maxDepth] as const,
 };
 
 // Namespace hooks
@@ -89,6 +94,19 @@ export function useOpenLineageDatasetSearch(
   });
 }
 
+export function useOpenLineageUnifiedSearch(
+  query: string,
+  limit?: number,
+  options?: Omit<UseQueryOptions<UnifiedSearchResponse, Error>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: openLineageKeys.unifiedSearch(query),
+    queryFn: () => openLineageApi.unifiedSearch(query, limit),
+    enabled: query.length > 0,
+    ...options,
+  });
+}
+
 // Lineage hooks
 
 export function useOpenLineageGraph(
@@ -119,6 +137,22 @@ export function useOpenLineageTableLineage(
     queryFn: () =>
       openLineageApi.getTableLineageGraph(datasetId, { direction, maxDepth }),
     enabled: !!datasetId,
+    ...options,
+  });
+}
+
+// Database-level lineage hook (all tables in a database)
+export function useOpenLineageDatabaseLineage(
+  databaseName: string,
+  direction: LineageDirection = 'both',
+  maxDepth: number = 3,
+  options?: Omit<UseQueryOptions<DatabaseLineageResponse, Error>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: openLineageKeys.databaseLineage(databaseName, direction, maxDepth),
+    queryFn: () =>
+      openLineageApi.getDatabaseLineageGraph(databaseName, { direction, maxDepth }),
+    enabled: !!databaseName,
     ...options,
   });
 }

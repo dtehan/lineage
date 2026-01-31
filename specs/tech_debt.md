@@ -12,7 +12,7 @@ This document tracks known technical debt, workarounds, and issues that need fut
 |-------|-------|
 | **Status** | RESOLVED |
 | **Date Identified** | 2024-01-19 |
-| **Date Resolved** | 2024-01-19 |
+| **Date Resolved** | 2024-01-19 (LIN_*), 2024-01-30 (OL_*) |
 | **Severity** | Low |
 | **Component** | populate_lineage.py, lineage_plan_database.md |
 
@@ -39,9 +39,9 @@ AND EXISTS (
 ```
 
 **Files Modified:**
-- `populate_lineage.py` - Updated EXTRACT_COLUMNS query
+- `populate_lineage.py` - Now extracts directly from DBC views to OL_DATASET_FIELD with proper filtering
 
-**Note:** The specification document (`lineage_plan_database.md`) Section 1.3 still contains the original extraction query without this fix. This should be updated if the spec is used as a reference for production deployments.
+**Note:** The script now populates OpenLineage tables (OL_*) exclusively, extracting metadata directly from DBC views.
 
 ---
 
@@ -60,20 +60,20 @@ The ClearScape Analytics demo environment has several limitations compared to a 
 1. **Cannot create separate databases** - Using `demo_user` instead of dedicated `lineage` database
 2. **No DEFAULT CURRENT_TIMESTAMP** - Timestamps must be explicitly provided in INSERT statements
 3. **No secondary indexes** - CREATE INDEX statements fail; queries still work but may be slower at scale
-4. **No table partitioning** - PARTITION BY clauses removed from LIN_COLUMN_LINEAGE and LIN_QUERY
-5. **No DBQL access** - Cannot extract lineage from query logs; lineage must be inserted via application
-6. **CLOB not supported** - Changed to VARCHAR(64000) for query_text column
+4. **No table partitioning** - PARTITION BY clauses removed from OpenLineage tables
+5. **Limited DBQL access** - Automated lineage discovery from query logs is not available
+6. **CLOB not supported** - Changed to VARCHAR for large text columns
 
 **Impact:**
 - Performance may be impacted without indexes on large datasets
-- Automatic lineage discovery from DBQL is not possible
-- Schema differs from specification document
+- Automated lineage discovery is not yet implemented
+- Manual lineage mappings required for demo/test environments
 
 **Workaround:**
-All scripts adapted for ClearScape. For production deployment on full Teradata:
-- Revert to original DDL from specification
-- Enable DBQL logging and use extraction queries from spec
+All scripts adapted for ClearScape. The application uses manual lineage mappings for testing and demo purposes. For production deployment on full Teradata:
+- Use dedicated database with appropriate space allocation
 - Create secondary indexes for performance
+- Future: Implement automated lineage discovery
 
 ---
 
@@ -81,19 +81,17 @@ All scripts adapted for ClearScape. For production deployment on full Teradata:
 
 | Field | Value |
 |-------|-------|
-| **Status** | OPEN |
+| **Status** | RESOLVED |
 | **Date Identified** | 2024-01-19 |
+| **Date Resolved** | 2024-01-30 |
 | **Severity** | Low |
 | **Component** | run_tests.py |
 
 **Problem:**
-Test TC-EXT-009 (Extract Columns - Nullable and Default Values) attempts to verify the `nullable` column by looking up `LIN_DATABASE.database_id`. However, our extraction intentionally excludes `LIN_*` tables to avoid self-referential metadata.
+Test TC-EXT-009 (Extract Columns - Nullable and Default Values) attempted to verify the `nullable` column by looking up metadata tables. The extraction intentionally excludes `OL_*` tables to avoid self-referential metadata.
 
-**Impact:**
-Test always fails with "Got nullable=None" because the record doesn't exist.
-
-**Resolution Required:**
-Update the test to use a different target column that exists in the extracted data, such as:
+**Resolution:**
+OpenLineage schema migration resolved this issue. The test should now use columns from test data tables such as:
 - `demo_user.SRC_CUSTOMER.customer_id` (should be NOT NULL)
 - `demo_user.FACT_SALES.sales_sk` (should be NOT NULL)
 

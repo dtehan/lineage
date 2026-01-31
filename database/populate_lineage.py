@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
 """
-Populate Lineage Tables
+Populate OpenLineage Tables
 
-Extracts metadata from DBC views and populates lineage data.
-
-Modes:
-  --manual   Use hardcoded lineage mappings (default, for testing/demo)
-  --dbql     Extract lineage from DBQL tables (requires DBQL access)
+Extracts metadata from DBC views and populates OpenLineage-compliant lineage data.
 
 Usage:
   python populate_lineage.py              # Use manual mappings (default)
   python populate_lineage.py --manual     # Explicitly use manual mappings
-  python populate_lineage.py --dbql       # Extract from DBQL tables
-  python populate_lineage.py --dbql --since "2024-01-01"  # DBQL since date
+  python populate_lineage.py --dbql       # Extract from DBQL tables (future)
 """
 
 import argparse
@@ -41,108 +36,64 @@ def map_transformation_type(current_type: str) -> tuple:
     )
 
 
-# Extraction queries for metadata
-EXTRACT_DATABASES = """
-INSERT INTO demo_user.LIN_DATABASE (database_id, database_name, owner_name, create_timestamp, last_alter_timestamp, comment_string, extracted_at, is_active)
-SELECT
-    TRIM(DatabaseName) AS database_id,
-    TRIM(DatabaseName) AS database_name,
-    TRIM(OwnerName) AS owner_name,
-    CreateTimeStamp,
-    LastAlterTimeStamp,
-    CAST(CommentString AS VARCHAR(2000)),
-    TIMESTAMP '2024-01-15 10:00:00',
-    'Y'
-FROM DBC.DatabasesV
-"""
+# Helper function for type conversion used in dataset/field population
+def convert_teradata_type(column_type, length, decimal_total, decimal_fractional):
+    """Convert Teradata column type codes to readable type strings."""
+    # Handle NULL column types
+    if column_type is None:
+        return 'UNKNOWN'
 
-EXTRACT_TABLES = """
-INSERT INTO demo_user.LIN_TABLE (table_id, database_name, table_name, table_kind, create_timestamp, last_alter_timestamp, comment_string, extracted_at, is_active)
-SELECT
-    TRIM(DatabaseName) || '.' || TRIM(TableName) AS table_id,
-    TRIM(DatabaseName) AS database_name,
-    TRIM(TableName) AS table_name,
-    TableKind,
-    CreateTimeStamp,
-    LastAlterTimeStamp,
-    CAST(CommentString AS VARCHAR(2000)),
-    TIMESTAMP '2024-01-15 10:00:00',
-    'Y'
-FROM DBC.TablesV
-WHERE TableKind IN ('T', 'V', 'O')
-  AND TableName NOT LIKE 'LIN_%'
-"""
+    type_map = {
+        'I': 'INTEGER',
+        'I1': 'BYTEINT',
+        'I2': 'SMALLINT',
+        'I8': 'BIGINT',
+        'F': 'FLOAT',
+        'DA': 'DATE',
+        'TZ': 'TIME WITH TIME ZONE',
+        'SZ': 'TIMESTAMP WITH TIME ZONE',
+        'CO': 'CLOB',
+        'BO': 'BLOB',
+        'N': 'NUMBER',
+        'AN': 'ARRAY',
+        'JN': 'JSON',
+        'DY': 'INTERVAL DAY',
+        'DH': 'INTERVAL DAY TO HOUR',
+        'DM': 'INTERVAL DAY TO MINUTE',
+        'DS': 'INTERVAL DAY TO SECOND',
+        'HR': 'INTERVAL HOUR',
+        'HM': 'INTERVAL HOUR TO MINUTE',
+        'HS': 'INTERVAL HOUR TO SECOND',
+        'MI': 'INTERVAL MINUTE',
+        'MS': 'INTERVAL MINUTE TO SECOND',
+        'SC': 'INTERVAL SECOND',
+        'MO': 'INTERVAL MONTH',
+        'YR': 'INTERVAL YEAR',
+        'YM': 'INTERVAL YEAR TO MONTH',
+        'PD': 'PERIOD(DATE)',
+        'PT': 'PERIOD(TIME)',
+        'PS': 'PERIOD(TIMESTAMP)',
+        'PM': 'PERIOD(TIMESTAMP WITH TIME ZONE)'
+    }
 
-EXTRACT_COLUMNS = """
-INSERT INTO demo_user.LIN_COLUMN (column_id, database_name, table_name, column_name, column_type, column_length, decimal_total_digits, decimal_fractional_digits, nullable, default_value, comment_string, column_position, extracted_at, is_active)
-SELECT
-    TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '.' || TRIM(c.ColumnName) AS column_id,
-    TRIM(c.DatabaseName) AS database_name,
-    TRIM(c.TableName) AS table_name,
-    TRIM(c.ColumnName) AS column_name,
-    CASE TRIM(c.ColumnType)
-        WHEN 'I' THEN 'INTEGER'
-        WHEN 'I1' THEN 'BYTEINT'
-        WHEN 'I2' THEN 'SMALLINT'
-        WHEN 'I8' THEN 'BIGINT'
-        WHEN 'F' THEN 'FLOAT'
-        WHEN 'D' THEN 'DECIMAL(' || TRIM(c.DecimalTotalDigits) || ',' || TRIM(c.DecimalFractionalDigits) || ')'
-        WHEN 'DA' THEN 'DATE'
-        WHEN 'TS' THEN 'TIMESTAMP(' || COALESCE(TRIM(c.DecimalFractionalDigits), '0') || ')'
-        WHEN 'TZ' THEN 'TIME WITH TIME ZONE'
-        WHEN 'SZ' THEN 'TIMESTAMP WITH TIME ZONE'
-        WHEN 'AT' THEN 'TIME(' || COALESCE(TRIM(c.DecimalFractionalDigits), '0') || ')'
-        WHEN 'CF' THEN 'CHAR(' || TRIM(c.ColumnLength) || ')'
-        WHEN 'CV' THEN 'VARCHAR(' || TRIM(c.ColumnLength) || ')'
-        WHEN 'CO' THEN 'CLOB'
-        WHEN 'BF' THEN 'BYTE(' || TRIM(c.ColumnLength) || ')'
-        WHEN 'BV' THEN 'VARBYTE(' || TRIM(c.ColumnLength) || ')'
-        WHEN 'BO' THEN 'BLOB'
-        WHEN 'N' THEN 'NUMBER'
-        WHEN 'AN' THEN 'ARRAY'
-        WHEN 'JN' THEN 'JSON'
-        WHEN 'DY' THEN 'INTERVAL DAY'
-        WHEN 'DH' THEN 'INTERVAL DAY TO HOUR'
-        WHEN 'DM' THEN 'INTERVAL DAY TO MINUTE'
-        WHEN 'DS' THEN 'INTERVAL DAY TO SECOND'
-        WHEN 'HR' THEN 'INTERVAL HOUR'
-        WHEN 'HM' THEN 'INTERVAL HOUR TO MINUTE'
-        WHEN 'HS' THEN 'INTERVAL HOUR TO SECOND'
-        WHEN 'MI' THEN 'INTERVAL MINUTE'
-        WHEN 'MS' THEN 'INTERVAL MINUTE TO SECOND'
-        WHEN 'SC' THEN 'INTERVAL SECOND'
-        WHEN 'MO' THEN 'INTERVAL MONTH'
-        WHEN 'YR' THEN 'INTERVAL YEAR'
-        WHEN 'YM' THEN 'INTERVAL YEAR TO MONTH'
-        WHEN 'PD' THEN 'PERIOD(DATE)'
-        WHEN 'PT' THEN 'PERIOD(TIME)'
-        WHEN 'PS' THEN 'PERIOD(TIMESTAMP)'
-        WHEN 'PM' THEN 'PERIOD(TIMESTAMP WITH TIME ZONE)'
-        ELSE TRIM(c.ColumnType)
-    END AS column_type,
-    c.ColumnLength,
-    c.DecimalTotalDigits,
-    c.DecimalFractionalDigits,
-    c.Nullable,
-    CAST(c.DefaultValue AS VARCHAR(1024)),
-    CAST(c.CommentString AS VARCHAR(2000)),
-    c.ColumnId AS column_position,
-    TIMESTAMP '2024-01-15 10:00:00',
-    'Y'
-FROM DBC.ColumnsV c
-WHERE c.TableName NOT LIKE 'LIN_%'
-  AND EXISTS (
-      SELECT 1 FROM DBC.TablesV t
-      WHERE t.DatabaseName = c.DatabaseName
-        AND t.TableName = c.TableName
-        AND t.TableKind IN ('T', 'V', 'O')
-  )
-"""
+    col_type = column_type.strip()
 
-def generate_lineage_id(source, target):
-    """Generate a unique lineage ID."""
-    combined = f"{source}->{target}"
-    return hashlib.md5(combined.encode()).hexdigest()[:16]
+    if col_type in type_map:
+        return type_map[col_type]
+    elif col_type == 'D':
+        return f'DECIMAL({decimal_total},{decimal_fractional})'
+    elif col_type in ('TS', 'AT'):
+        precision = decimal_fractional or 0
+        prefix = 'TIMESTAMP' if col_type == 'TS' else 'TIME'
+        return f'{prefix}({precision})'
+    elif col_type in ('CF', 'BF'):
+        prefix = 'CHAR' if col_type == 'CF' else 'BYTE'
+        return f'{prefix}({length})'
+    elif col_type in ('CV', 'BV'):
+        prefix = 'VARCHAR' if col_type == 'CV' else 'VARBYTE'
+        return f'{prefix}({length})'
+    else:
+        return col_type
 
 
 def generate_namespace_id(namespace_uri: str) -> str:
@@ -167,90 +118,141 @@ def generate_field_id(dataset_id: str, field_name: str) -> str:
 
 
 def populate_openlineage_namespace(cursor, namespace_uri: str):
-    """Create or get the namespace entry."""
+    """Create or get the namespace entry using INSERT...SELECT."""
     namespace_id = generate_namespace_id(namespace_uri)
 
-    # Check if exists
+    # Use INSERT...SELECT with NOT EXISTS to avoid fetch
     cursor.execute("""
-        SELECT namespace_id FROM demo_user.OL_NAMESPACE
-        WHERE namespace_id = ?
-    """, (namespace_id,))
+        INSERT INTO demo_user.OL_NAMESPACE
+        (namespace_id, namespace_uri, description, spec_version, created_at)
+        SELECT ?, ?, ?, '2-0-2', CURRENT_TIMESTAMP(0)
+        WHERE NOT EXISTS (
+            SELECT 1 FROM demo_user.OL_NAMESPACE
+            WHERE namespace_id = ?
+        )
+    """, (namespace_id, namespace_uri, f"Teradata instance at {namespace_uri}", namespace_id))
 
-    if not cursor.fetchone():
-        cursor.execute("""
-            INSERT INTO demo_user.OL_NAMESPACE
-            (namespace_id, namespace_uri, description, spec_version, created_at)
-            VALUES (?, ?, ?, '2-0-2', CURRENT_TIMESTAMP)
-        """, (namespace_id, namespace_uri, f"Teradata instance at {namespace_uri}"))
+    if cursor.rowcount > 0:
         print(f"  Created namespace: {namespace_uri}")
+    else:
+        print(f"  Namespace already exists: {namespace_uri}")
 
     return namespace_id
 
 
 def populate_openlineage_datasets(cursor, namespace_id: str):
-    """Populate OL_DATASET from LIN_TABLE."""
-    print("\n--- Populating OL_DATASET from tables ---")
+    """Populate OL_DATASET from DBC.TablesV using INSERT...SELECT."""
+    print("\n--- Populating OL_DATASET from DBC.TablesV ---")
 
-    # Get distinct databases and tables from LIN_TABLE
+    # Use INSERT...SELECT to keep data in database
     cursor.execute("""
-        SELECT database_name, table_name, table_kind, comment_string, extracted_at
-        FROM demo_user.LIN_TABLE
-        WHERE is_active = 'Y'
-    """)
+        INSERT INTO demo_user.OL_DATASET
+        (dataset_id, namespace_id, name, description, source_type, created_at, updated_at, is_active)
+        SELECT
+            ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName) AS dataset_id,
+            ? AS namespace_id,
+            TRIM(DatabaseName) || '.' || TRIM(TableName) AS name,
+            CAST(CommentString AS VARCHAR(2000)) AS description,
+            CASE WHEN TableKind = 'V' THEN 'VIEW' ELSE 'TABLE' END AS source_type,
+            CAST(CreateTimeStamp AS TIMESTAMP(0)) AS created_at,
+            CURRENT_TIMESTAMP(0) AS updated_at,
+            'Y' AS is_active
+        FROM DBC.TablesV
+        WHERE TableKind IN ('T', 'V', 'O')
+          AND TableName NOT LIKE 'LIN_%'
+          AND TableName NOT LIKE 'OL_%'
+          AND NOT EXISTS (
+              SELECT 1 FROM demo_user.OL_DATASET od
+              WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
+          )
+    """, (namespace_id, namespace_id, namespace_id))
 
-    rows = cursor.fetchall()
-    count = 0
-    for row in rows:
-        db_name, tbl_name, tbl_kind, comment, extracted_at = row
-        dataset_name = f"{db_name}.{tbl_name}"
-        dataset_id = generate_dataset_id(namespace_id, db_name, tbl_name)
-        source_type = 'VIEW' if tbl_kind == 'V' else 'TABLE'
-
-        try:
-            cursor.execute("""
-                INSERT INTO demo_user.OL_DATASET
-                (dataset_id, namespace_id, name, description, source_type, created_at, updated_at, is_active)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'Y')
-            """, (dataset_id, namespace_id, dataset_name, comment, source_type, extracted_at))
-            count += 1
-        except Exception as e:
-            if "duplicate" not in str(e).lower():
-                print(f"  Warning: {dataset_name}: {e}")
-
+    count = cursor.rowcount
     print(f"  Created {count} datasets")
     return count
 
 
 def populate_openlineage_fields(cursor, namespace_id: str):
-    """Populate OL_DATASET_FIELD from LIN_COLUMN."""
-    print("\n--- Populating OL_DATASET_FIELD from columns ---")
+    """Populate OL_DATASET_FIELD from DBC.ColumnsV using INSERT...SELECT."""
+    print("\n--- Populating OL_DATASET_FIELD from DBC.ColumnsV ---")
 
+    # Use INSERT...SELECT with SQL-based type conversion
     cursor.execute("""
-        SELECT database_name, table_name, column_name, column_type,
-               nullable, comment_string, column_position, extracted_at
-        FROM demo_user.LIN_COLUMN
-        WHERE is_active = 'Y'
-    """)
+        INSERT INTO demo_user.OL_DATASET_FIELD
+        (field_id, dataset_id, field_name, field_type, field_description,
+         ordinal_position, nullable, created_at)
+        SELECT
+            ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName) AS field_id,
+            ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) AS dataset_id,
+            TRIM(c.ColumnName) AS field_name,
+            CASE
+                -- Simple type mappings
+                WHEN TRIM(c.ColumnType) = 'I' THEN 'INTEGER'
+                WHEN TRIM(c.ColumnType) = 'I1' THEN 'BYTEINT'
+                WHEN TRIM(c.ColumnType) = 'I2' THEN 'SMALLINT'
+                WHEN TRIM(c.ColumnType) = 'I8' THEN 'BIGINT'
+                WHEN TRIM(c.ColumnType) = 'F' THEN 'FLOAT'
+                WHEN TRIM(c.ColumnType) = 'DA' THEN 'DATE'
+                WHEN TRIM(c.ColumnType) = 'TZ' THEN 'TIME WITH TIME ZONE'
+                WHEN TRIM(c.ColumnType) = 'SZ' THEN 'TIMESTAMP WITH TIME ZONE'
+                WHEN TRIM(c.ColumnType) = 'CO' THEN 'CLOB'
+                WHEN TRIM(c.ColumnType) = 'BO' THEN 'BLOB'
+                WHEN TRIM(c.ColumnType) = 'N' THEN 'NUMBER'
+                WHEN TRIM(c.ColumnType) = 'AN' THEN 'ARRAY'
+                WHEN TRIM(c.ColumnType) = 'JN' THEN 'JSON'
+                -- Interval types
+                WHEN TRIM(c.ColumnType) = 'DY' THEN 'INTERVAL DAY'
+                WHEN TRIM(c.ColumnType) = 'DH' THEN 'INTERVAL DAY TO HOUR'
+                WHEN TRIM(c.ColumnType) = 'DM' THEN 'INTERVAL DAY TO MINUTE'
+                WHEN TRIM(c.ColumnType) = 'DS' THEN 'INTERVAL DAY TO SECOND'
+                WHEN TRIM(c.ColumnType) = 'HR' THEN 'INTERVAL HOUR'
+                WHEN TRIM(c.ColumnType) = 'HM' THEN 'INTERVAL HOUR TO MINUTE'
+                WHEN TRIM(c.ColumnType) = 'HS' THEN 'INTERVAL HOUR TO SECOND'
+                WHEN TRIM(c.ColumnType) = 'MI' THEN 'INTERVAL MINUTE'
+                WHEN TRIM(c.ColumnType) = 'MS' THEN 'INTERVAL MINUTE TO SECOND'
+                WHEN TRIM(c.ColumnType) = 'SC' THEN 'INTERVAL SECOND'
+                WHEN TRIM(c.ColumnType) = 'MO' THEN 'INTERVAL MONTH'
+                WHEN TRIM(c.ColumnType) = 'YR' THEN 'INTERVAL YEAR'
+                WHEN TRIM(c.ColumnType) = 'YM' THEN 'INTERVAL YEAR TO MONTH'
+                -- Period types
+                WHEN TRIM(c.ColumnType) = 'PD' THEN 'PERIOD(DATE)'
+                WHEN TRIM(c.ColumnType) = 'PT' THEN 'PERIOD(TIME)'
+                WHEN TRIM(c.ColumnType) = 'PS' THEN 'PERIOD(TIMESTAMP)'
+                WHEN TRIM(c.ColumnType) = 'PM' THEN 'PERIOD(TIMESTAMP WITH TIME ZONE)'
+                -- Decimal with precision
+                WHEN TRIM(c.ColumnType) = 'D' THEN 'DECIMAL(' || COALESCE(c.DecimalTotalDigits, 0) || ',' || COALESCE(c.DecimalFractionalDigits, 0) || ')'
+                -- Timestamp/Time with precision
+                WHEN TRIM(c.ColumnType) IN ('TS', 'AT') THEN
+                    CASE WHEN TRIM(c.ColumnType) = 'TS' THEN 'TIMESTAMP' ELSE 'TIME' END || '(' || COALESCE(c.DecimalFractionalDigits, 0) || ')'
+                -- Fixed-length character/byte
+                WHEN TRIM(c.ColumnType) IN ('CF', 'BF') THEN
+                    CASE WHEN TRIM(c.ColumnType) = 'CF' THEN 'CHAR' ELSE 'BYTE' END || '(' || COALESCE(c.ColumnLength, 0) || ')'
+                -- Variable-length character/byte
+                WHEN TRIM(c.ColumnType) IN ('CV', 'BV') THEN
+                    CASE WHEN TRIM(c.ColumnType) = 'CV' THEN 'VARCHAR' ELSE 'VARBYTE' END || '(' || COALESCE(c.ColumnLength, 0) || ')'
+                -- Unknown/NULL types
+                ELSE COALESCE(TRIM(c.ColumnType), 'UNKNOWN')
+            END AS field_type,
+            CAST(c.CommentString AS VARCHAR(2000)) AS field_description,
+            c.ColumnId AS ordinal_position,
+            c.Nullable AS nullable,
+            CURRENT_TIMESTAMP(0) AS created_at
+        FROM DBC.ColumnsV c
+        WHERE c.TableName NOT LIKE 'LIN_%'
+          AND c.TableName NOT LIKE 'OL_%'
+          AND EXISTS (
+              SELECT 1 FROM DBC.TablesV t
+              WHERE t.DatabaseName = c.DatabaseName
+                AND t.TableName = c.TableName
+                AND t.TableKind IN ('T', 'V', 'O')
+          )
+          AND NOT EXISTS (
+              SELECT 1 FROM demo_user.OL_DATASET_FIELD odf
+              WHERE odf.field_id = ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName)
+          )
+    """, (namespace_id, namespace_id, namespace_id))
 
-    rows = cursor.fetchall()
-    count = 0
-    for row in rows:
-        db_name, tbl_name, col_name, col_type, nullable, comment, position, extracted_at = row
-        dataset_id = generate_dataset_id(namespace_id, db_name, tbl_name)
-        field_id = generate_field_id(dataset_id, col_name)
-
-        try:
-            cursor.execute("""
-                INSERT INTO demo_user.OL_DATASET_FIELD
-                (field_id, dataset_id, field_name, field_type, field_description,
-                 ordinal_position, nullable, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (field_id, dataset_id, col_name, col_type, comment, position, nullable, extracted_at))
-            count += 1
-        except Exception as e:
-            if "duplicate" not in str(e).lower():
-                pass  # Skip duplicate errors silently for fields
-
+    count = cursor.rowcount
     print(f"  Created {count} fields")
     return count
 
@@ -265,7 +267,7 @@ def populate_openlineage_lineage(cursor, namespace_id: str, namespace_uri: str):
          target_namespace, target_dataset, target_field,
          transformation_type, transformation_subtype, transformation_description,
          confidence_score, discovered_at, is_active)
-        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 'Y')
+        VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP(0), 'Y')
     """
 
     count = 0
@@ -400,200 +402,22 @@ COLUMN_LINEAGE_MAPPINGS = [
     ("demo_user.FACT_SALES_DAILY.transaction_count", "demo_user.RPT_MONTHLY_SALES.avg_transaction_value", "CALCULATION", 1.00),
 ]
 
-# Table lineage mappings
-# Format: (source_table_id, target_table_id, relationship_type)
-TABLE_LINEAGE_MAPPINGS = [
-    ("demo_user.SRC_CUSTOMER", "demo_user.STG_CUSTOMER", "INSERT_SELECT"),
-    ("demo_user.SRC_PRODUCT", "demo_user.STG_PRODUCT", "INSERT_SELECT"),
-    ("demo_user.SRC_SALES", "demo_user.STG_SALES", "INSERT_SELECT"),
-    ("demo_user.STG_CUSTOMER", "demo_user.DIM_CUSTOMER", "INSERT_SELECT"),
-    ("demo_user.STG_PRODUCT", "demo_user.DIM_PRODUCT", "INSERT_SELECT"),
-    ("demo_user.SRC_STORE", "demo_user.DIM_STORE", "INSERT_SELECT"),
-    ("demo_user.STG_SALES", "demo_user.FACT_SALES", "INSERT_SELECT"),
-    ("demo_user.DIM_CUSTOMER", "demo_user.FACT_SALES", "INSERT_SELECT"),
-    ("demo_user.DIM_PRODUCT", "demo_user.FACT_SALES", "INSERT_SELECT"),
-    ("demo_user.DIM_STORE", "demo_user.FACT_SALES", "INSERT_SELECT"),
-    ("demo_user.DIM_DATE", "demo_user.FACT_SALES", "INSERT_SELECT"),
-    ("demo_user.FACT_SALES", "demo_user.FACT_SALES_DAILY", "INSERT_SELECT"),
-    ("demo_user.FACT_SALES_DAILY", "demo_user.RPT_MONTHLY_SALES", "INSERT_SELECT"),
-    ("demo_user.DIM_STORE", "demo_user.RPT_MONTHLY_SALES", "INSERT_SELECT"),
-    ("demo_user.DIM_DATE", "demo_user.RPT_MONTHLY_SALES", "INSERT_SELECT"),
-]
 
-
-def extract_metadata(cursor):
-    """Extract database, table, and column metadata from DBC views."""
-    # Clear existing metadata
-    print("\n--- Clearing existing metadata ---")
-    for table in ["LIN_COLUMN_LINEAGE", "LIN_TABLE_LINEAGE", "LIN_COLUMN", "LIN_TABLE", "LIN_DATABASE"]:
+def clear_openlineage_data(cursor):
+    """Clear existing OpenLineage data."""
+    print("\n--- Clearing existing OpenLineage data ---")
+    for table in ["OL_COLUMN_LINEAGE", "OL_DATASET_FIELD", "OL_DATASET"]:
         try:
             cursor.execute(f"DELETE FROM demo_user.{table}")
             print(f"  Cleared {table}")
         except Exception as e:
             print(f"  Warning clearing {table}: {e}")
 
-    # Extract databases
-    print("\n--- Extracting databases ---")
-    try:
-        cursor.execute(EXTRACT_DATABASES)
-        cursor.execute("SELECT COUNT(*) FROM demo_user.LIN_DATABASE")
-        count = cursor.fetchone()[0]
-        print(f"  Extracted {count} databases")
-    except Exception as e:
-        print(f"  FAILED: {e}")
 
-    # Extract tables
-    print("\n--- Extracting tables ---")
-    try:
-        cursor.execute(EXTRACT_TABLES)
-        cursor.execute("SELECT COUNT(*) FROM demo_user.LIN_TABLE")
-        count = cursor.fetchone()[0]
-        print(f"  Extracted {count} tables")
-    except Exception as e:
-        print(f"  FAILED: {e}")
-
-    # Extract columns
-    print("\n--- Extracting columns ---")
-    try:
-        cursor.execute(EXTRACT_COLUMNS)
-        cursor.execute("SELECT COUNT(*) FROM demo_user.LIN_COLUMN")
-        count = cursor.fetchone()[0]
-        print(f"  Extracted {count} columns")
-    except Exception as e:
-        print(f"  FAILED: {e}")
-
-
-def populate_manual_lineage(cursor):
-    """Populate lineage using hardcoded manual mappings."""
-    # Insert column lineage
-    print("\n--- Inserting column lineage records ---")
-    insert_col_lineage = """
-        INSERT INTO demo_user.LIN_COLUMN_LINEAGE (
-            lineage_id, source_column_id, source_database, source_table, source_column,
-            target_column_id, target_database, target_table, target_column,
-            transformation_type, confidence_score, discovered_at, last_seen_at, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
-    """
-
-    success_count = 0
-    for src, tgt, trans_type, confidence in COLUMN_LINEAGE_MAPPINGS:
-        src_parts = src.split(".")
-        tgt_parts = tgt.split(".")
-        lineage_id = generate_lineage_id(src, tgt)
-
-        try:
-            cursor.execute(insert_col_lineage, (
-                lineage_id,
-                src,
-                src_parts[0],  # source_database
-                src_parts[1],  # source_table
-                src_parts[2],  # source_column
-                tgt,
-                tgt_parts[0],  # target_database
-                tgt_parts[1],  # target_table
-                tgt_parts[2],  # target_column
-                trans_type,
-                confidence
-            ))
-            success_count += 1
-        except Exception as e:
-            print(f"  Warning inserting {src}->{tgt}: {e}")
-
-    print(f"  Inserted {success_count} column lineage records")
-
-    # Insert table lineage
-    print("\n--- Inserting table lineage records ---")
-    insert_tbl_lineage = """
-        INSERT INTO demo_user.LIN_TABLE_LINEAGE (
-            lineage_id, source_table_id, source_database, source_table,
-            target_table_id, target_database, target_table,
-            relationship_type, query_count, first_seen_at, last_seen_at, is_active
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
-    """
-
-    success_count = 0
-    for src, tgt, rel_type in TABLE_LINEAGE_MAPPINGS:
-        src_parts = src.split(".")
-        tgt_parts = tgt.split(".")
-        lineage_id = generate_lineage_id(src, tgt)
-
-        try:
-            cursor.execute(insert_tbl_lineage, (
-                lineage_id,
-                src,
-                src_parts[0],  # source_database
-                src_parts[1],  # source_table
-                tgt,
-                tgt_parts[0],  # target_database
-                tgt_parts[1],  # target_table
-                rel_type
-            ))
-            success_count += 1
-        except Exception as e:
-            print(f"  Warning inserting {src}->{tgt}: {e}")
-
-    print(f"  Inserted {success_count} table lineage records")
-
-
-def populate_dbql_lineage(args):
-    """Populate lineage from DBQL tables using extract_dbql_lineage module."""
-    print("\n--- Running DBQL-based lineage extraction ---")
-
-    try:
-        from extract_dbql_lineage import DBQLLineageExtractor, parse_datetime
-    except ImportError as e:
-        print(f"  ERROR: Could not import extract_dbql_lineage: {e}")
-        return False
-
-    # Parse since datetime
-    since = None
-    if hasattr(args, 'since') and args.since:
-        try:
-            since = parse_datetime(args.since)
-        except ValueError as e:
-            print(f"  ERROR: Invalid date format: {e}")
-            return False
-
-    # Determine if full extraction
-    full = getattr(args, 'full', False)
-
-    # Create extractor
-    extractor = DBQLLineageExtractor(
-        dry_run=getattr(args, 'dry_run', False),
-        verbose=getattr(args, 'verbose', False)
-    )
-
-    # Connect
-    if not extractor.connect():
-        return False
-
-    try:
-        # Check DBQL access
-        if not extractor.check_dbql_access():
-            print("\n  DBQL is not accessible. Falling back to manual mappings.")
-            print("  To use manual mappings explicitly, run: python populate_lineage.py --manual")
-            return False
-
-        # Run extraction (uses watermark for incremental by default)
-        success = extractor.extract_lineage(since=since, full=full)
-
-        if success:
-            extractor.print_summary()
-
-        return success
-
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        return False
-
-    finally:
-        extractor.close()
-
-
-def verify_lineage(cursor):
-    """Verify lineage data after population."""
-    print("\n--- Verifying lineage data ---")
-    for table in ["LIN_DATABASE", "LIN_TABLE", "LIN_COLUMN", "LIN_COLUMN_LINEAGE", "LIN_TABLE_LINEAGE"]:
+def verify_openlineage_data(cursor):
+    """Verify OpenLineage data after population."""
+    print("\n--- Verifying OpenLineage data ---")
+    for table in ["OL_NAMESPACE", "OL_DATASET", "OL_DATASET_FIELD", "OL_COLUMN_LINEAGE"]:
         try:
             cursor.execute(f"SELECT COUNT(*) FROM demo_user.{table}")
             count = cursor.fetchone()[0]
@@ -605,7 +429,7 @@ def verify_lineage(cursor):
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(
-        description="Populate lineage tables from DBC views and DBQL",
+        description="Populate OpenLineage tables from DBC views",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -613,24 +437,14 @@ Examples:
   python populate_lineage.py
   python populate_lineage.py --manual
 
-  # Extract lineage from DBQL (incremental - only new queries since last run)
+  # Extract lineage from DBQL (future)
   python populate_lineage.py --dbql
 
-  # DBQL full extraction (all history, clears existing lineage)
-  python populate_lineage.py --dbql --full
-
-  # DBQL extraction with specific start date
-  python populate_lineage.py --dbql --since "2024-01-01"
-
   # Dry run (show what would be extracted)
-  python populate_lineage.py --dbql --dry-run
+  python populate_lineage.py --dry-run
 
-  # Skip metadata refresh (only update lineage)
-  python populate_lineage.py --dbql --skip-metadata
-
-  # Also populate OpenLineage OL_* tables
-  python populate_lineage.py --openlineage
-  python populate_lineage.py --manual --openlineage
+  # Skip clearing existing data (append mode)
+  python populate_lineage.py --skip-clear
         """
     )
     mode_group = parser.add_mutually_exclusive_group()
@@ -642,17 +456,7 @@ Examples:
     mode_group.add_argument(
         "--dbql", "-d",
         action="store_true",
-        help="Extract lineage from DBQL tables (incremental by default)"
-    )
-    parser.add_argument(
-        "--full", "-f",
-        action="store_true",
-        help="For DBQL mode: full extraction (ignore watermark, clear existing lineage)"
-    )
-    parser.add_argument(
-        "--since", "-s",
-        type=str,
-        help="For DBQL mode: extract records since this date (YYYY-MM-DD)"
+        help="Extract lineage from DBQL tables (not yet implemented)"
     )
     parser.add_argument(
         "--dry-run", "-n",
@@ -665,32 +469,27 @@ Examples:
         help="Verbose output"
     )
     parser.add_argument(
-        "--skip-metadata",
+        "--skip-clear",
         action="store_true",
-        help="Skip metadata extraction (databases, tables, columns)"
-    )
-    parser.add_argument(
-        "--openlineage", "-o",
-        action="store_true",
-        help="Also populate OpenLineage OL_* tables"
+        help="Skip clearing existing data (append mode)"
     )
 
     args = parser.parse_args()
 
     print("=" * 60)
-    print("Populate Lineage Tables")
+    print("Populate OpenLineage Tables")
     print("=" * 60)
 
     # Determine mode
     use_dbql = args.dbql
 
     if use_dbql:
-        print("\nMode: DBQL-based extraction")
+        print("\nMode: DBQL-based extraction (not yet implemented)")
+        print("ERROR: DBQL mode is not yet implemented for OpenLineage tables.")
+        print("Please use --manual mode (default).")
+        sys.exit(1)
     else:
         print("\nMode: Manual/hardcoded mappings")
-
-    if args.openlineage:
-        print("  (with OpenLineage table population)")
 
     # Connect
     print(f"\nConnecting to {CONFIG['host']}...")
@@ -702,56 +501,35 @@ Examples:
         print(f"ERROR: Failed to connect: {e}")
         sys.exit(1)
 
-    # Extract metadata (unless skipped or dry-run)
-    if not args.skip_metadata and not args.dry_run:
-        extract_metadata(cursor)
+    # Get namespace
+    namespace_uri = get_openlineage_namespace()
+    print(f"\nNamespace: {namespace_uri}")
 
-    # Populate lineage based on mode
-    if use_dbql:
-        # DBQL-based extraction
-        success = populate_dbql_lineage(args)
-        if not success:
-            print("\nDBQL extraction failed or unavailable.")
-            if not args.manual:
-                print("Tip: Use --manual flag to use hardcoded mappings instead.")
+    if args.dry_run:
+        print("\n[DRY RUN] Would populate:")
+        print(f"  - 1 namespace")
+        print(f"  - ~N datasets from DBC.TablesV")
+        print(f"  - ~N fields from DBC.ColumnsV")
+        print(f"  - {len(COLUMN_LINEAGE_MAPPINGS)} column lineage records")
     else:
-        # Manual mappings
-        if not args.dry_run:
-            populate_manual_lineage(cursor)
-        else:
-            print("\n[DRY RUN] Would insert {} column lineage records".format(len(COLUMN_LINEAGE_MAPPINGS)))
-            print("[DRY RUN] Would insert {} table lineage records".format(len(TABLE_LINEAGE_MAPPINGS)))
+        # Clear existing data (unless skipped)
+        if not args.skip_clear:
+            clear_openlineage_data(cursor)
 
-    # Populate OpenLineage tables if flag is set
-    if args.openlineage:
-        namespace_uri = get_openlineage_namespace()
-        print(f"\n--- Populating OpenLineage tables ---")
-        print(f"  Namespace: {namespace_uri}")
-
+        # Populate OpenLineage tables
         namespace_id = populate_openlineage_namespace(cursor, namespace_uri)
         populate_openlineage_datasets(cursor, namespace_id)
         populate_openlineage_fields(cursor, namespace_id)
         populate_openlineage_lineage(cursor, namespace_id, namespace_uri)
 
-        # Verify OL_* data
-        print("\n--- Verifying OpenLineage data ---")
-        for table in ["OL_NAMESPACE", "OL_DATASET", "OL_DATASET_FIELD", "OL_COLUMN_LINEAGE"]:
-            try:
-                cursor.execute(f"SELECT COUNT(*) FROM demo_user.{table}")
-                count = cursor.fetchone()[0]
-                print(f"  {table}: {count} rows")
-            except Exception as e:
-                print(f"  {table}: ERROR - {e}")
-
-    # Verify data
-    if not args.dry_run:
-        verify_lineage(cursor)
+        # Verify data
+        verify_openlineage_data(cursor)
 
     cursor.close()
     conn.close()
 
     print("\n" + "=" * 60)
-    print("Lineage population completed!")
+    print("OpenLineage population completed!")
     print("=" * 60)
 
     return 0

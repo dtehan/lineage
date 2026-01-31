@@ -153,6 +153,24 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     }
   }, [data, setNodes, setEdges, setGraph]);
 
+  // Auto-highlight the specified field when component mounts (if not '_all')
+  useEffect(() => {
+    if (fieldName !== '_all' && nodes.length > 0 && storeNodes.length > 0) {
+      // Find the column in the legacy node format (stored in storeNodes)
+      // by matching the column name with the fieldName parameter
+      const matchingColumn = storeNodes.find((node) => {
+        if (node.type === 'column') {
+          return node.columnName === fieldName;
+        }
+        return false;
+      });
+
+      if (matchingColumn) {
+        setSelectedAssetId(matchingColumn.id);
+      }
+    }
+  }, [fieldName, nodes, storeNodes, setSelectedAssetId]);
+
   // Handle column selection from TableNode/ColumnRow
   // This is called when a column row is clicked inside a table node
   useEffect(() => {
@@ -383,12 +401,14 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
             {showMinimap && (
               <MiniMap
                 nodeColor={(node) => {
-                  // Highlight the focused field
-                  const fieldId = `${datasetId}.${fieldName}`;
-                  if (filteredNodesAndEdges.filteredNodes.some((n) => n.type === 'tableNode' && n.data)) {
-                    const tableData = node.data as { columns?: Array<{ id: string }> } | undefined;
-                    if (tableData?.columns?.some((col) => col.id === fieldId)) {
-                      return '#3b82f6';
+                  // Highlight the focused field (skip if fieldName is '_all')
+                  if (fieldName !== '_all') {
+                    const fieldId = `${datasetId}.${fieldName}`;
+                    if (filteredNodesAndEdges.filteredNodes.some((n) => n.type === 'tableNode' && n.data)) {
+                      const tableData = node.data as { columns?: Array<{ id: string }> } | undefined;
+                      if (tableData?.columns?.some((col) => col.id === fieldId)) {
+                        return '#3b82f6';
+                      }
                     }
                   }
                   return '#94a3b8';

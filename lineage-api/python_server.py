@@ -1749,6 +1749,86 @@ def search_datasets():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/v2/openlineage/search", methods=["GET"])
+def unified_search():
+    """Unified search for both databases (extracted from dataset names) and datasets."""
+    query = request.args.get("q", "")
+    limit = int(request.args.get("limit", "50"))
+
+    if not query or len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+
+    try:
+        search_pattern = f"%{query}%"
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Search datasets
+                cur.execute(f"""
+                    SELECT TOP {limit}
+                        d.dataset_id,
+                        d."name",
+                        d.namespace_id,
+                        n.namespace_uri,
+                        d.description,
+                        d.source_type,
+                        d.created_at,
+                        d.updated_at
+                    FROM OL_DATASET d
+                    JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                    WHERE d."name" LIKE ?
+                       OR d.description LIKE ?
+                    ORDER BY d."name"
+                """, [search_pattern, search_pattern])
+
+                dataset_rows = cur.fetchall()
+                datasets = [
+                    {
+                        "id": row[0].strip() if row[0] else "",
+                        "name": row[1].strip() if row[1] else "",
+                        "namespace": row[3].strip() if row[3] else "",
+                        "description": row[4].strip() if row[4] else "",
+                        "sourceType": row[5].strip() if row[5] else None,
+                        "createdAt": row[6].isoformat() if row[6] else None,
+                        "updatedAt": row[7].isoformat() if row[7] else None
+                    }
+                    for row in dataset_rows
+                ]
+
+                # Extract unique databases from dataset names and filter by query
+                databases_dict = {}
+                for dataset in datasets:
+                    # Parse database name from dataset name (e.g., "demo_user.customer" -> "demo_user")
+                    parts = dataset["name"].split(".")
+                    if len(parts) > 1:
+                        db_name = parts[0]
+                        # Only include if database name matches query
+                        if query.lower() in db_name.lower():
+                            if db_name not in databases_dict:
+                                databases_dict[db_name] = {
+                                    "name": db_name,
+                                    "namespace": dataset["namespace"],
+                                    "tableCount": 0
+                                }
+                            databases_dict[db_name]["tableCount"] += 1
+
+                databases = list(databases_dict.values())
+                databases.sort(key=lambda x: x["name"])
+
+        return jsonify({
+            "databases": databases,
+            "datasets": datasets,
+            "query": query,
+            "totalCount": len(databases) + len(datasets),
+            "databaseCount": len(databases),
+            "datasetCount": len(datasets)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/v2/openlineage/lineage/<path:dataset_id>/<field_name>", methods=["GET"])
 def get_openlineage_lineage(dataset_id, field_name):
     """Get lineage graph for a dataset field using OpenLineage tables."""
@@ -2224,6 +2304,284 @@ def get_openlineage_table_lineage(dataset_id):
 
         return jsonify({
             "datasetId": dataset_id,
+            "graph": {
+                "nodes": list(nodes.values()),
+                "edges": edges
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/lineage/database/<database_name>", methods=["GET"])
+def get_openlineage_database_lineage(database_name):
+    """Get column-level lineage graph for all tables/views in a database."""
+    direction = request.args.get("direction", "both")
+    max_depth = int(request.args.get("maxDepth", "3"))  # Default to 3 for database-level
+
+    try:
+        nodes = {}  # column_key -> node info
+        edges = []  # list of edges
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get all datasets (tables/views) in this database
+                search_pattern = f"{database_name}.%"
+
+                cur.execute("""
+                    SELECT
+                        d.dataset_id,
+                        d."name",
+                        d.source_type,
+                        n.namespace_uri,
+                        d.description
+                    FROM OL_DATASET d
+                    JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                    WHERE d."name" LIKE ?
+                    ORDER BY d."name"
+                """, [search_pattern])
+
+                datasets = []
+                dataset_names = set()
+                for row in cur.fetchall():
+                    dataset = {
+                        "id": row[0].strip() if row[0] else "",
+                        "name": row[1].strip() if row[1] else "",
+                        "sourceType": row[2].strip() if row[2] else "TABLE",
+                        "namespace": row[3].strip() if row[3] else "",
+                        "description": row[4].strip() if row[4] else ""
+                    }
+                    datasets.append(dataset)
+                    dataset_names.add(dataset["name"])
+
+                if not datasets:
+                    return jsonify({"error": f"No tables found in database '{database_name}'"}), 404
+
+                # Create a mapping of dataset name to metadata for quick lookup
+                dataset_metadata = {
+                    ds["name"]: {
+                        "namespace": ds["namespace"],
+                        "sourceType": ds["sourceType"]
+                    }
+                    for ds in datasets
+                }
+
+                # First, add ALL fields from ALL tables in the database as nodes
+                for dataset in datasets:
+                    cur.execute("""
+                        SELECT field_name, field_type, nullable
+                        FROM OL_DATASET_FIELD
+                        WHERE dataset_id = ?
+                        ORDER BY ordinal_position
+                    """, [dataset["id"]])
+
+                    for field_row in cur.fetchall():
+                        field_name = field_row[0].strip() if field_row[0] else ""
+                        field_type = field_row[1].strip() if field_row[1] else None
+                        nullable = field_row[2].strip() if field_row[2] else None
+                        field_key = f"{dataset['name']}.{field_name}"
+
+                        if field_key not in nodes:
+                            nodes[field_key] = {
+                                "id": field_key,
+                                "type": "field",
+                                "name": field_name,
+                                "dataset": {
+                                    "name": dataset["name"],
+                                    "namespace": dataset["namespace"],
+                                    "sourceType": dataset["sourceType"]
+                                },
+                                "metadata": {
+                                    "columnType": field_type,
+                                    "nullable": nullable == 'Y'
+                                }
+                            }
+
+                # Now get all column lineage where source OR target is in this database
+                # This captures both internal database lineage and cross-database lineage
+                placeholders = ",".join("?" * len(dataset_names))
+                dataset_list = list(dataset_names)
+
+                lineage_query = f"""
+                    WITH RECURSIVE lineage_cte AS (
+                        -- Base case: direct lineage involving database tables
+                        SELECT
+                            cl.source_namespace,
+                            cl.source_dataset,
+                            cl.source_field,
+                            cl.target_namespace,
+                            cl.target_dataset,
+                            cl.target_field,
+                            cl.transformation_type,
+                            1 as depth,
+                            CAST(cl.source_dataset || '.' || cl.source_field || '->' ||
+                                 cl.target_dataset || '.' || cl.target_field AS VARCHAR(10000)) as path
+                        FROM OL_COLUMN_LINEAGE cl
+                        WHERE cl.is_active = 'Y'
+                          AND (cl.source_dataset IN ({placeholders})
+                               OR cl.target_dataset IN ({placeholders}))
+
+                        UNION ALL
+
+                        -- Recursive case: traverse lineage up to max_depth
+                        SELECT
+                            cl.source_namespace,
+                            cl.source_dataset,
+                            cl.source_field,
+                            cl.target_namespace,
+                            cl.target_dataset,
+                            cl.target_field,
+                            cl.transformation_type,
+                            lc.depth + 1,
+                            lc.path || '->' || cl.target_dataset || '.' || cl.target_field
+                        FROM OL_COLUMN_LINEAGE cl
+                        INNER JOIN lineage_cte lc
+                            ON (cl.source_dataset = lc.target_dataset AND cl.source_field = lc.target_field)
+                               OR (cl.target_dataset = lc.source_dataset AND cl.target_field = lc.source_field)
+                        WHERE cl.is_active = 'Y'
+                          AND lc.depth < ?
+                          AND POSITION(cl.source_dataset || '.' || cl.source_field IN lc.path) = 0
+                          AND POSITION(cl.target_dataset || '.' || cl.target_field IN lc.path) = 0
+                    )
+                    SELECT DISTINCT
+                        source_namespace,
+                        source_dataset,
+                        source_field,
+                        target_namespace,
+                        target_dataset,
+                        target_field,
+                        transformation_type
+                    FROM lineage_cte
+                """
+
+                # Execute with dataset names repeated for placeholders
+                params = dataset_list + dataset_list + [max_depth]
+                cur.execute(lineage_query, params)
+
+                # Process lineage results - add any nodes that weren't already added
+                # and create edges
+                for row in cur.fetchall():
+                    source_namespace = row[0].strip() if row[0] else ""
+                    source_dataset = row[1].strip() if row[1] else ""
+                    source_field = row[2].strip() if row[2] else ""
+                    target_namespace = row[3].strip() if row[3] else ""
+                    target_dataset = row[4].strip() if row[4] else ""
+                    target_field = row[5].strip() if row[5] else ""
+                    transformation_type = row[6].strip() if row[6] else "DIRECT"
+
+                    source_key = f"{source_dataset}.{source_field}"
+                    target_key = f"{target_dataset}.{target_field}"
+
+                    # Add source node (if it's from an external dataset)
+                    if source_key not in nodes:
+                        # Look up sourceType from our metadata, or fetch it if external
+                        source_meta = dataset_metadata.get(source_dataset)
+                        if not source_meta:
+                            # External dataset - try to fetch sourceType
+                            cur.execute("""
+                                SELECT d.source_type, n.namespace_uri
+                                FROM OL_DATASET d
+                                JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                                WHERE d."name" = ?
+                            """, [source_dataset])
+                            ext_row = cur.fetchone()
+                            if ext_row:
+                                source_meta = {
+                                    "namespace": ext_row[1].strip() if ext_row[1] else source_namespace,
+                                    "sourceType": ext_row[0].strip() if ext_row[0] else "TABLE"
+                                }
+                            else:
+                                source_meta = {"namespace": source_namespace, "sourceType": "TABLE"}
+
+                        # Fetch field metadata
+                        cur.execute("""
+                            SELECT f.field_type, f.nullable
+                            FROM OL_DATASET_FIELD f
+                            JOIN OL_DATASET d ON f.dataset_id = d.dataset_id
+                            WHERE d."name" = ? AND UPPER(f.field_name) = UPPER(?)
+                        """, [source_dataset, source_field])
+                        field_row = cur.fetchone()
+                        field_type = field_row[0].strip() if field_row and field_row[0] else None
+                        nullable = field_row[1].strip() if field_row and field_row[1] else None
+
+                        nodes[source_key] = {
+                            "id": source_key,
+                            "type": "field",
+                            "name": source_field,
+                            "dataset": {
+                                "name": source_dataset,
+                                "namespace": source_meta["namespace"],
+                                "sourceType": source_meta["sourceType"]
+                            },
+                            "metadata": {
+                                "columnType": field_type,
+                                "nullable": nullable == 'Y'
+                            }
+                        }
+
+                    # Add target node (if it's from an external dataset)
+                    if target_key not in nodes:
+                        # Look up sourceType from our metadata, or fetch it if external
+                        target_meta = dataset_metadata.get(target_dataset)
+                        if not target_meta:
+                            # External dataset - try to fetch sourceType
+                            cur.execute("""
+                                SELECT d.source_type, n.namespace_uri
+                                FROM OL_DATASET d
+                                JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                                WHERE d."name" = ?
+                            """, [target_dataset])
+                            ext_row = cur.fetchone()
+                            if ext_row:
+                                target_meta = {
+                                    "namespace": ext_row[1].strip() if ext_row[1] else target_namespace,
+                                    "sourceType": ext_row[0].strip() if ext_row[0] else "TABLE"
+                                }
+                            else:
+                                target_meta = {"namespace": target_namespace, "sourceType": "TABLE"}
+
+                        # Fetch field metadata
+                        cur.execute("""
+                            SELECT f.field_type, f.nullable
+                            FROM OL_DATASET_FIELD f
+                            JOIN OL_DATASET d ON f.dataset_id = d.dataset_id
+                            WHERE d."name" = ? AND UPPER(f.field_name) = UPPER(?)
+                        """, [target_dataset, target_field])
+                        field_row = cur.fetchone()
+                        field_type = field_row[0].strip() if field_row and field_row[0] else None
+                        nullable = field_row[1].strip() if field_row and field_row[1] else None
+
+                        nodes[target_key] = {
+                            "id": target_key,
+                            "type": "field",
+                            "name": target_field,
+                            "dataset": {
+                                "name": target_dataset,
+                                "namespace": target_meta["namespace"],
+                                "sourceType": target_meta["sourceType"]
+                            },
+                            "metadata": {
+                                "columnType": field_type,
+                                "nullable": nullable == 'Y'
+                            }
+                        }
+
+                    # Add edge
+                    edge_id = f"{source_key}->{target_key}"
+                    if not any(e["id"] == edge_id for e in edges):
+                        edges.append({
+                            "id": edge_id,
+                            "source": source_key,
+                            "target": target_key,
+                            "transformationType": transformation_type
+                        })
+
+        return jsonify({
+            "databaseName": database_name,
+            "direction": direction,
+            "maxDepth": max_depth,
             "graph": {
                 "nodes": list(nodes.values()),
                 "edges": edges

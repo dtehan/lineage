@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Insert CTE Edge Case Test Data
+Insert CTE Edge Case Test Data (OpenLineage Schema)
 Inserts lineage records for testing recursive CTE edge cases:
 - Cycle detection
 - Deep chains
@@ -14,200 +14,200 @@ import sys
 
 from db_config import CONFIG
 
-# CTE test data inserts
+# CTE test data inserts for OL_COLUMN_LINEAGE
 CTE_TEST_INSERTS = [
     # Two-node cycle test data (A -> B -> A)
     # TC-EDGE-002: Verify cycle detection handles A -> B -> A pattern
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE_001', 'demo_user.CYCLE_TEST.col_a', 'demo_user', 'CYCLE_TEST', 'col_a',
-     'demo_user.CYCLE_TEST.col_b', 'demo_user', 'CYCLE_TEST', 'col_b',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE_001', NULL, 'teradata://demo', 'demo_user.CYCLE_TEST', 'col_a',
+     'teradata://demo', 'demo_user.CYCLE_TEST', 'col_b',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE_002', 'demo_user.CYCLE_TEST.col_b', 'demo_user', 'CYCLE_TEST', 'col_b',
-     'demo_user.CYCLE_TEST.col_a', 'demo_user', 'CYCLE_TEST', 'col_a',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE_002', NULL, 'teradata://demo', 'demo_user.CYCLE_TEST', 'col_b',
+     'teradata://demo', 'demo_user.CYCLE_TEST', 'col_a',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Multi-node cycle test data (A -> B -> C -> D -> A)
     # TC-EDGE-003: Verify cycle detection handles multi-node cycle
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_001', 'demo_user.MCYCLE_TEST.col_a', 'demo_user', 'MCYCLE_TEST', 'col_a',
-     'demo_user.MCYCLE_TEST.col_b', 'demo_user', 'MCYCLE_TEST', 'col_b',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_001', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_a',
+     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_b',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_002', 'demo_user.MCYCLE_TEST.col_b', 'demo_user', 'MCYCLE_TEST', 'col_b',
-     'demo_user.MCYCLE_TEST.col_c', 'demo_user', 'MCYCLE_TEST', 'col_c',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_002', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_b',
+     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_c',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_003', 'demo_user.MCYCLE_TEST.col_c', 'demo_user', 'MCYCLE_TEST', 'col_c',
-     'demo_user.MCYCLE_TEST.col_d', 'demo_user', 'MCYCLE_TEST', 'col_d',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_003', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_c',
+     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_d',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_004', 'demo_user.MCYCLE_TEST.col_d', 'demo_user', 'MCYCLE_TEST', 'col_d',
-     'demo_user.MCYCLE_TEST.col_a', 'demo_user', 'MCYCLE_TEST', 'col_a',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_004', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_d',
+     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_a',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Diamond pattern test (A -> B -> D, A -> C -> D)
     # TC-EDGE-004: Verify diamond pattern doesn't cause issues
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_001', 'demo_user.DIAMOND.col_a', 'demo_user', 'DIAMOND', 'col_a',
-     'demo_user.DIAMOND.col_b', 'demo_user', 'DIAMOND', 'col_b',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_001', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_a',
+     'teradata://demo', 'demo_user.DIAMOND', 'col_b',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_002', 'demo_user.DIAMOND.col_a', 'demo_user', 'DIAMOND', 'col_a',
-     'demo_user.DIAMOND.col_c', 'demo_user', 'DIAMOND', 'col_c',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_002', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_a',
+     'teradata://demo', 'demo_user.DIAMOND', 'col_c',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_003', 'demo_user.DIAMOND.col_b', 'demo_user', 'DIAMOND', 'col_b',
-     'demo_user.DIAMOND.col_d', 'demo_user', 'DIAMOND', 'col_d',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_003', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_b',
+     'teradata://demo', 'demo_user.DIAMOND', 'col_d',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_004', 'demo_user.DIAMOND.col_c', 'demo_user', 'DIAMOND', 'col_c',
-     'demo_user.DIAMOND.col_d', 'demo_user', 'DIAMOND', 'col_d',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_004', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_c',
+     'teradata://demo', 'demo_user.DIAMOND', 'col_d',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Inactive lineage test
     # TC-CTE-005: Verify only active lineage records are traversed
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_INACTIVE_001', 'demo_user.INACTIVE_TEST.active_source', 'demo_user', 'INACTIVE_TEST', 'active_source',
-     'demo_user.INACTIVE_TEST.target', 'demo_user', 'INACTIVE_TEST', 'target',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_INACTIVE_001', NULL, 'teradata://demo', 'demo_user.INACTIVE_TEST', 'active_source',
+     'teradata://demo', 'demo_user.INACTIVE_TEST', 'target',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_INACTIVE_002', 'demo_user.INACTIVE_TEST.inactive_source', 'demo_user', 'INACTIVE_TEST', 'inactive_source',
-     'demo_user.INACTIVE_TEST.target', 'demo_user', 'INACTIVE_TEST', 'target',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'N')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_INACTIVE_002', NULL, 'teradata://demo', 'demo_user.INACTIVE_TEST', 'inactive_source',
+     'teradata://demo', 'demo_user.INACTIVE_TEST', 'target',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'N')
     """,
 
     # Multi-level upstream chain (A <- B <- C <- D <- E)
     # For TC-CTE-002 and TC-CTE-003: Multi-level and max depth tests
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_001', 'demo_user.CHAIN_TEST.col_e', 'demo_user', 'CHAIN_TEST', 'col_e',
-     'demo_user.CHAIN_TEST.col_d', 'demo_user', 'CHAIN_TEST', 'col_d',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_001', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_e',
+     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_d',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_002', 'demo_user.CHAIN_TEST.col_d', 'demo_user', 'CHAIN_TEST', 'col_d',
-     'demo_user.CHAIN_TEST.col_c', 'demo_user', 'CHAIN_TEST', 'col_c',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_002', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_d',
+     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_c',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_003', 'demo_user.CHAIN_TEST.col_c', 'demo_user', 'CHAIN_TEST', 'col_c',
-     'demo_user.CHAIN_TEST.col_b', 'demo_user', 'CHAIN_TEST', 'col_b',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_003', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_c',
+     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_b',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_004', 'demo_user.CHAIN_TEST.col_b', 'demo_user', 'CHAIN_TEST', 'col_b',
-     'demo_user.CHAIN_TEST.col_a', 'demo_user', 'CHAIN_TEST', 'col_a',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_004', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_b',
+     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_a',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Multiple sources at same level (A <- B, A <- C, A <- D)
     # TC-CTE-004: Multiple sources at same level
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MULTISRC_001', 'demo_user.MULTISRC_TEST.src_b', 'demo_user', 'MULTISRC_TEST', 'src_b',
-     'demo_user.MULTISRC_TEST.target_a', 'demo_user', 'MULTISRC_TEST', 'target_a',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MULTISRC_001', NULL, 'teradata://demo', 'demo_user.MULTISRC_TEST', 'src_b',
+     'teradata://demo', 'demo_user.MULTISRC_TEST', 'target_a',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MULTISRC_002', 'demo_user.MULTISRC_TEST.src_c', 'demo_user', 'MULTISRC_TEST', 'src_c',
-     'demo_user.MULTISRC_TEST.target_a', 'demo_user', 'MULTISRC_TEST', 'target_a',
-     'CALCULATION', NULL, 0.85, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MULTISRC_002', NULL, 'teradata://demo', 'demo_user.MULTISRC_TEST', 'src_c',
+     'teradata://demo', 'demo_user.MULTISRC_TEST', 'target_a',
+     'CALCULATION', NULL, NULL, 'N', 0.85, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_MULTISRC_003', 'demo_user.MULTISRC_TEST.src_d', 'demo_user', 'MULTISRC_TEST', 'src_d',
-     'demo_user.MULTISRC_TEST.target_a', 'demo_user', 'MULTISRC_TEST', 'target_a',
-     'JOIN', NULL, 0.75, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MULTISRC_003', NULL, 'teradata://demo', 'demo_user.MULTISRC_TEST', 'src_d',
+     'teradata://demo', 'demo_user.MULTISRC_TEST', 'target_a',
+     'JOIN', NULL, NULL, 'N', 0.75, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Fan-out test (single source -> multiple targets)
     # TC-CTE-008: Fan-out pattern
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_001', 'demo_user.FANOUT_TEST.source', 'demo_user', 'FANOUT_TEST', 'source',
-     'demo_user.FANOUT_TEST.target_1', 'demo_user', 'FANOUT_TEST', 'target_1',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_001', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
+     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_002', 'demo_user.FANOUT_TEST.source', 'demo_user', 'FANOUT_TEST', 'source',
-     'demo_user.FANOUT_TEST.target_2', 'demo_user', 'FANOUT_TEST', 'target_2',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_002', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
+     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_2',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_003', 'demo_user.FANOUT_TEST.source', 'demo_user', 'FANOUT_TEST', 'source',
-     'demo_user.FANOUT_TEST.target_3', 'demo_user', 'FANOUT_TEST', 'target_3',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_003', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
+     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_3',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_004', 'demo_user.FANOUT_TEST.source', 'demo_user', 'FANOUT_TEST', 'source',
-     'demo_user.FANOUT_TEST.target_4', 'demo_user', 'FANOUT_TEST', 'target_4',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_004', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
+     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_4',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     # Second level fan-out (target_1 -> more targets)
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_005', 'demo_user.FANOUT_TEST.target_1', 'demo_user', 'FANOUT_TEST', 'target_1',
-     'demo_user.FANOUT_TEST.target_1a', 'demo_user', 'FANOUT_TEST', 'target_1a',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_005', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1',
+     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1a',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_006', 'demo_user.FANOUT_TEST.target_1', 'demo_user', 'FANOUT_TEST', 'target_1',
-     'demo_user.FANOUT_TEST.target_1b', 'demo_user', 'FANOUT_TEST', 'target_1b',
-     'DIRECT', NULL, 1.00, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_006', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1',
+     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1b',
+     'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Transformation types test
     # TC-CTE-009: Verify transformation_type is correctly returned
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_TRANS_001', 'demo_user.TRANS_TEST.src1', 'demo_user', 'TRANS_TEST', 'src1',
-     'demo_user.TRANS_TEST.tgt1', 'demo_user', 'TRANS_TEST', 'tgt1',
-     'AGGREGATION', NULL, 0.95, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_TRANS_001', NULL, 'teradata://demo', 'demo_user.TRANS_TEST', 'src1',
+     'teradata://demo', 'demo_user.TRANS_TEST', 'tgt1',
+     'AGGREGATION', NULL, NULL, 'N', 0.95, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.LIN_COLUMN_LINEAGE VALUES
-    ('TEST_TRANS_002', 'demo_user.TRANS_TEST.src2', 'demo_user', 'TRANS_TEST', 'src2',
-     'demo_user.TRANS_TEST.tgt2', 'demo_user', 'TRANS_TEST', 'tgt2',
-     'FILTER', NULL, 0.80, NULL, TIMESTAMP '2024-01-15 10:00:00', TIMESTAMP '2024-01-15 10:00:00', 'Y')
+    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
+    ('TEST_TRANS_002', NULL, 'teradata://demo', 'demo_user.TRANS_TEST', 'src2',
+     'teradata://demo', 'demo_user.TRANS_TEST', 'tgt2',
+     'FILTER', NULL, NULL, 'N', 0.80, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 ]
 
 
 def main():
     print("=" * 60)
-    print("Insert CTE Edge Case Test Data")
+    print("Insert CTE Edge Case Test Data (OpenLineage Schema)")
     print("=" * 60)
 
     # Connect
@@ -223,7 +223,7 @@ def main():
     # Remove existing test data
     print("\n--- Removing existing TEST_* lineage records ---")
     try:
-        cursor.execute("DELETE FROM demo_user.LIN_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
+        cursor.execute("DELETE FROM demo_user.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
         print("  Cleared existing TEST_* records")
     except Exception as e:
         print(f"  Warning: {e}")
@@ -242,7 +242,7 @@ def main():
 
     # Verify test data
     print("\n--- Verifying CTE test data ---")
-    cursor.execute("SELECT COUNT(*) FROM demo_user.LIN_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
+    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
     count = cursor.fetchone()[0]
     print(f"  Total TEST_* lineage records: {count}")
 
@@ -261,7 +261,7 @@ def main():
                 ELSE 'Other'
             END AS test_type,
             COUNT(*) AS record_count
-        FROM demo_user.LIN_COLUMN_LINEAGE
+        FROM demo_user.OL_COLUMN_LINEAGE
         WHERE lineage_id LIKE 'TEST_%'
         GROUP BY 1
         ORDER BY 1

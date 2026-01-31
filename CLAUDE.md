@@ -44,12 +44,11 @@ pip install -r requirements.txt  # requirements.txt is at project root
 cp .env.example .env
 # Edit .env with your Teradata credentials
 
-# 3. Setup database
-cd database && python setup_lineage_schema.py && python setup_test_data.py
+# 3. Setup database (creates OL_* tables)
+cd database && python setup_lineage_schema.py --openlineage && python setup_test_data.py
 
-# 4. Populate lineage (choose one):
+# 4. Populate OpenLineage tables
 python populate_lineage.py              # Manual mappings (demo/testing)
-python populate_lineage.py --dbql       # DBQL extraction (production)
 
 # 5. Start backend (Python Flask - recommended for testing)
 cd lineage-api && python python_server.py  # Runs on :8080
@@ -77,13 +76,9 @@ npx playwright test              # Run E2E tests
 # Database
 cd database
 python run_tests.py              # Run 73 database tests
-python populate_lineage.py       # Manual lineage mappings (default)
-python populate_lineage.py --dbql  # DBQL-based extraction
-python extract_dbql_lineage.py   # Direct DBQL extraction
-
-# Database with OpenLineage tables
-python setup_lineage_schema.py --openlineage  # Create both LIN_* and OL_* tables
-python populate_lineage.py --openlineage      # Populate OL_* tables
+python populate_lineage.py       # Populate OpenLineage tables (manual mappings)
+python populate_lineage.py --dry-run  # Preview what would be populated
+python setup_lineage_schema.py --openlineage  # Create OL_* tables
 ```
 
 ## Architecture
@@ -145,27 +140,14 @@ lineage-ui/
 ```
 database/
 ├── db_config.py              # Connection config (uses TERADATA_* env vars, TD_* as fallback)
-├── setup_lineage_schema.py   # Creates LIN_* tables and indexes
+├── setup_lineage_schema.py   # Creates OpenLineage tables (OL_*)
 ├── setup_test_data.py        # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
-├── populate_lineage.py       # Extracts metadata and populates lineage (manual or DBQL mode)
-├── extract_dbql_lineage.py   # DBQL-based automated lineage extraction
-├── sql_parser.py             # SQLGlot-based SQL parser for column lineage
+├── populate_lineage.py       # Populates OpenLineage tables from DBC views (manual mappings)
 ├── insert_cte_test_data.py   # Edge cases: cycles, diamonds, fan-out
 └── run_tests.py              # 73 database tests
 ```
 
-## Key Teradata Tables
-
-### Legacy Schema (LIN_* tables)
-
-- `LIN_DATABASE`, `LIN_TABLE`, `LIN_COLUMN` - Asset registries extracted from DBC views
-- `LIN_COLUMN_LINEAGE` - Column-to-column relationships (core lineage data)
-- `LIN_TABLE_LINEAGE` - Table-level lineage summary
-- `LIN_TRANSFORMATION` - Transformation metadata
-- `LIN_QUERY` - Query registry from DBQL
-- `LIN_WATERMARK` - Incremental extraction tracking
-
-### OpenLineage Schema (OL_* tables)
+## OpenLineage Schema
 
 Aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-model):
 
@@ -178,18 +160,9 @@ Aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-m
 - `OL_COLUMN_LINEAGE` - Column-level lineage with OpenLineage transformation types
 - `OL_SCHEMA_VERSION` - Schema version tracking
 
+The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views.
+
 ## API Endpoints
-
-### v1 API (Legacy)
-
-- `GET /api/v1/assets/databases` - List databases
-- `GET /api/v1/assets/databases/{db}/tables` - List tables
-- `GET /api/v1/assets/databases/{db}/tables/{table}/columns` - List columns
-- `GET /api/v1/lineage/{assetId}` - Get lineage graph (supports `?direction=upstream|downstream|both&maxDepth=N`)
-- `GET /api/v1/lineage/{assetId}/upstream` - Get upstream lineage
-- `GET /api/v1/lineage/{assetId}/downstream` - Get downstream lineage
-- `GET /api/v1/lineage/{assetId}/impact` - Get impact analysis
-- `GET /api/v1/search?q=query` - Search assets
 
 ### v2 API (OpenLineage-aligned)
 

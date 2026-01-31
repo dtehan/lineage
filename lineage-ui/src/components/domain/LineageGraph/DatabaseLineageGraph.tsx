@@ -15,17 +15,17 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useDatabaseLineage } from '../../../api/hooks/useLineage';
-import { useTables, useColumns } from '../../../api/hooks/useAssets';
+import { useOpenLineageDatabaseLineage } from '../../../api/hooks/useOpenLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
-import { layoutGraph } from '../../../utils/graph/layoutEngine';
+import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
+import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
 import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
-import { Map, ChevronUp, ChevronDown, ChevronRight, Database, Loader2, Table, Columns } from 'lucide-react';
+import { Map, ChevronUp, ChevronDown, Database } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
 import {
@@ -33,7 +33,6 @@ import {
   useKeyboardShortcuts,
   useLineageExport,
 } from './hooks';
-import type { LineageNode, LineageEdge as LineageEdgeType } from '../../../types';
 
 const nodeTypes = {
   tableNode: TableNode,
@@ -55,11 +54,11 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
 
   const {
     direction,
+    setDirection,
     maxDepth,
+    setMaxDepth,
     viewMode,
     setViewMode,
-    setDirection,
-    setMaxDepth,
     setGraph,
     selectedAssetId,
     setSelectedAssetId,
@@ -78,51 +77,15 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     showDatabaseClusters,
     nodes: storeNodes,
     edges: storeEdges,
-    setPagination,
-    setIsLoadingMore,
-    loadMoreCount,
-    setLoadMoreCount,
+    assetTypeFilter,
+    setAssetTypeFilter,
   } = useLineageStore();
 
-  const {
-    data,
-    isLoading,
-    error,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useDatabaseLineage(databaseName, { direction, maxDepth: maxDepth || 2, pageSize: loadMoreCount });
+  // Fetch database lineage using OpenLineage API
+  const { data, isLoading, error } = useOpenLineageDatabaseLineage(databaseName, direction, maxDepth || 3);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-
-  // Merge all pages of data
-  const mergedData = useMemo(() => {
-    if (!data?.pages) return { nodes: [], edges: [] };
-
-    const allNodes: LineageNode[] = [];
-    const allEdges: LineageEdgeType[] = [];
-    const seenNodeIds = new Set<string>();
-    const seenEdgeIds = new Set<string>();
-
-    for (const page of data.pages) {
-      for (const node of page.graph.nodes) {
-        if (!seenNodeIds.has(node.id)) {
-          seenNodeIds.add(node.id);
-          allNodes.push(node);
-        }
-      }
-      for (const edge of page.graph.edges) {
-        const edgeKey = `${edge.source}->${edge.target}`;
-        if (!seenEdgeIds.has(edgeKey)) {
-          seenEdgeIds.add(edgeKey);
-          allEdges.push(edge);
-        }
-      }
-    }
-
-    return { nodes: allNodes, edges: allEdges };
-  }, [data?.pages]);
 
   // Use the lineage highlight hook
   const { highlightPath } = useLineageHighlight({ nodes, edges });
@@ -138,34 +101,49 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     wrapperRef,
   });
 
-  // Create database clusters from nodes
-  const clusters = useDatabaseClustersFromNodes(nodes);
+  // Filter nodes and edges based on asset type filter
+  const filteredNodesAndEdges = useMemo(() => {
+    // Get the set of node IDs that match the asset type filter
+    const filteredNodeIds = new Set(
+      nodes
+        .filter((node) => {
+          if (node.type !== 'tableNode') return true; // Keep non-table nodes
+          const nodeData = node.data as TableNodeData;
+          return assetTypeFilter.includes(nodeData.assetType);
+        })
+        .map((node) => node.id)
+    );
 
-  // Update pagination info in store
-  useEffect(() => {
-    if (data?.pages && data.pages.length > 0) {
-      const lastPage = data.pages[data.pages.length - 1];
-      setPagination(lastPage.pagination);
-    }
-  }, [data?.pages, setPagination]);
+    // Filter nodes
+    const filteredNodes = nodes.filter((node) => filteredNodeIds.has(node.id));
 
-  // Update loading more state
-  useEffect(() => {
-    setIsLoadingMore(isFetchingNextPage);
-  }, [isFetchingNextPage, setIsLoadingMore]);
+    // Filter edges - only keep edges where both source and target are in filtered nodes
+    const filteredEdges = edges.filter(
+      (edge) => filteredNodeIds.has(edge.source) && filteredNodeIds.has(edge.target)
+    );
 
-  // Update nodes/edges when merged data changes
+    return { filteredNodes, filteredEdges };
+  }, [nodes, edges, assetTypeFilter]);
+
+  // Create database clusters from filtered nodes
+  const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
+
+  // Update nodes/edges when data changes
   useEffect(() => {
-    if (mergedData.nodes.length > 0) {
-      layoutGraph(mergedData.nodes, mergedData.edges).then(
-        ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-          setNodes(layoutedNodes);
-          setEdges(layoutedEdges);
-          setGraph(mergedData.nodes, mergedData.edges);
-        }
-      );
-    }
-  }, [mergedData, setNodes, setEdges, setGraph]);
+    if (!data?.graph?.nodes) return;
+
+    // Convert OpenLineage graph to React Flow format
+    const converted = convertOpenLineageGraph(data.graph.nodes, data.graph.edges);
+
+    // Layout the graph
+    layoutGraph(converted.nodes, converted.edges).then(
+      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+        setNodes(layoutedNodes);
+        setEdges(layoutedEdges);
+        setGraph(converted.nodes, converted.edges);
+      }
+    );
+  }, [data, setNodes, setEdges, setGraph]);
 
   // Handle column selection from TableNode/ColumnRow
   useEffect(() => {
@@ -210,13 +188,6 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   const handleExport = useCallback(() => {
     exportJson();
   }, [exportJson]);
-
-  // Handle load more
-  const handleLoadMore = useCallback(() => {
-    if (hasNextPage && !isFetchingNextPage) {
-      fetchNextPage();
-    }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Get column detail for panel
   const getColumnDetail = useCallback(
@@ -307,17 +278,19 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     );
   }
 
-  // Handle empty data - show database browser only if no nodes at all
-  if (mergedData.nodes.length === 0 && !isLoading) {
+  // Handle empty data
+  if (!data?.graph?.nodes.length && !isLoading) {
     return (
-      <DatabaseBrowser databaseName={databaseName} navigate={navigate} />
+      <div className="flex flex-col items-center justify-center h-full text-slate-500">
+        <Database className="w-16 h-16 mb-4 text-slate-300" />
+        <h2 className="text-xl font-semibold text-slate-700 mb-2">No Lineage Found</h2>
+        <p className="text-sm text-slate-500 max-w-md text-center">
+          No lineage relationships found for database "{databaseName}".
+          This database may not have any tables with known lineage.
+        </p>
+      </div>
     );
   }
-
-  // Get pagination info
-  const paginationInfo = data?.pages && data.pages.length > 0
-    ? data.pages[data.pages.length - 1].pagination
-    : null;
 
   // Get selected details for panel
   const selectedColumn = selectedAssetId ? getColumnDetail(selectedAssetId) : null;
@@ -333,42 +306,12 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         <div className="flex items-center gap-2">
           <Database className="w-5 h-5 text-blue-600" />
           <span className="font-medium text-blue-800">Database: {databaseName}</span>
-          {paginationInfo && (
+          {data?.graph && (
             <span className="text-sm text-blue-600">
-              ({paginationInfo.page * paginationInfo.pageSize} of {paginationInfo.totalTables} tables loaded)
+              ({data.graph.nodes.length} table{data.graph.nodes.length !== 1 ? 's' : ''})
             </span>
           )}
         </div>
-        {hasNextPage && (
-          <div className="flex items-center gap-2">
-            <select
-              value={loadMoreCount}
-              onChange={(e) => setLoadMoreCount(Number(e.target.value) as 10 | 20 | 50)}
-              className="px-2 py-1 text-sm border border-blue-300 rounded-md bg-white text-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="Number of tables to load"
-              data-testid="load-more-count-select"
-            >
-              <option value={10}>10</option>
-              <option value={20}>20</option>
-              <option value={50}>50</option>
-            </select>
-            <button
-              onClick={handleLoadMore}
-              disabled={isFetchingNextPage}
-              className="flex items-center gap-2 px-3 py-1 text-sm font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-50 disabled:opacity-50"
-              data-testid="load-more-btn"
-            >
-              {isFetchingNextPage ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                'Load More Tables'
-              )}
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Toolbar */}
@@ -384,7 +327,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         onFitView={handleFitView}
         onExport={handleExport}
         onFullscreen={toggleFullscreen}
-        isLoading={isLoading || isFetchingNextPage}
+        isLoading={isLoading}
       />
 
       {/* Graph View */}
