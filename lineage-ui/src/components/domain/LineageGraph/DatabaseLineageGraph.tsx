@@ -32,6 +32,7 @@ import {
   useLineageHighlight,
   useKeyboardShortcuts,
   useLineageExport,
+  useSmartViewport,
 } from './hooks';
 
 const nodeTypes = {
@@ -101,6 +102,9 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     wrapperRef,
   });
 
+  // Use smart viewport hook for size-aware positioning
+  const { applySmartViewport } = useSmartViewport();
+
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
     // Get the set of node IDs that match the asset type filter
@@ -144,6 +148,17 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
       }
     );
   }, [data, setNodes, setEdges, setGraph]);
+
+  // Apply smart viewport after layout completes
+  useEffect(() => {
+    if (nodes.length > 0) {
+      // Small delay to ensure React Flow has measured node dimensions
+      const timeoutId = setTimeout(() => {
+        applySmartViewport(nodes);
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [nodes, applySmartViewport]);
 
   // Handle column selection from TableNode/ColumnRow
   useEffect(() => {
@@ -344,8 +359,6 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
             minZoom={0.1}
             maxZoom={2}
             onlyRenderVisibleElements={nodes.length > 50}

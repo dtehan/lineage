@@ -32,6 +32,7 @@ import {
   useLineageHighlight,
   useKeyboardShortcuts,
   useLineageExport,
+  useSmartViewport,
 } from './hooks';
 import type { LineageNode, LineageEdge as LineageEdgeType } from '../../../types';
 
@@ -141,6 +142,9 @@ function AllDatabasesLineageGraphInner() {
     wrapperRef,
   });
 
+  // Use smart viewport hook for size-aware positioning
+  const { applySmartViewport } = useSmartViewport();
+
   // Create database clusters from nodes
   const clusters = useDatabaseClustersFromNodes(nodes);
 
@@ -169,6 +173,17 @@ function AllDatabasesLineageGraphInner() {
       );
     }
   }, [mergedData, setNodes, setEdges, setGraph]);
+
+  // Apply smart viewport after layout completes
+  useEffect(() => {
+    if (nodes.length > 0) {
+      // Small delay to ensure React Flow has measured node dimensions
+      const timeoutId = setTimeout(() => {
+        applySmartViewport(nodes);
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [nodes, applySmartViewport]);
 
   // Handle column selection from TableNode/ColumnRow
   useEffect(() => {
@@ -485,8 +500,6 @@ function AllDatabasesLineageGraphInner() {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
             minZoom={0.05}
             maxZoom={2}
             onlyRenderVisibleElements={nodes.length > 30}

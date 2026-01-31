@@ -24,7 +24,8 @@ import { LineageEdge } from './LineageEdge';
 import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
-import { LoadingSpinner } from '../../common/LoadingSpinner';
+import { LoadingProgress } from '../../common/LoadingProgress';
+import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
@@ -32,6 +33,7 @@ import {
   useLineageHighlight,
   useKeyboardShortcuts,
   useLineageExport,
+  useSmartViewport,
 } from './hooks';
 
 const nodeTypes = {
@@ -102,6 +104,12 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     wrapperRef,
   });
 
+  // Use loading progress hook
+  const { stage, progress, message, setStage, setProgress, reset } = useLoadingProgress();
+
+  // Use smart viewport hook for size-aware positioning
+  const { applySmartViewport } = useSmartViewport();
+
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
     // Get the set of node IDs that match the asset type filter
@@ -129,29 +137,64 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Create database clusters from filtered nodes
   const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
 
+  // Reset loading state when datasetId changes
+  useEffect(() => {
+    reset();
+  }, [datasetId, reset]);
+
+  // Sync data fetch stage with TanStack Query loading state
+  useEffect(() => {
+    if (isLoading) {
+      setStage('fetching');
+    }
+  }, [isLoading, setStage]);
+
   // Update nodes/edges when data changes
   useEffect(() => {
     if (data?.graph) {
+      setStage('layout');
+
       // Convert OpenLineage graph to legacy format for layout engine
       const { nodes: legacyNodes, edges: legacyEdges } = convertOpenLineageGraph(
         data.graph.nodes,
         data.graph.edges
       );
 
-      layoutGraph(legacyNodes, legacyEdges)
+      layoutGraph(legacyNodes, legacyEdges, {
+        onProgress: (layoutProgress) => setProgress(layoutProgress),
+      })
         .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+          setStage('rendering');
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
           // Store the legacy format in the store for compatibility
           setGraph(legacyNodes, legacyEdges);
+          // Use requestAnimationFrame to detect render complete
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setStage('complete');
+            });
+          });
         })
         .catch((error) => {
           console.error('Layout error:', error);
           // Fallback: set nodes without layout
           setGraph(legacyNodes, legacyEdges);
+          setStage('complete');
         });
     }
-  }, [data, setNodes, setEdges, setGraph]);
+  }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
+
+  // Apply smart viewport after layout completes
+  useEffect(() => {
+    if (nodes.length > 0 && stage === 'complete') {
+      // Small delay to ensure React Flow has measured node dimensions
+      const timeoutId = setTimeout(() => {
+        applySmartViewport(nodes);
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [nodes, stage, applySmartViewport]);
 
   // Auto-highlight the specified field when component mounts (if not '_all')
   useEffect(() => {
@@ -295,10 +338,13 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     [setSelectedEdge, openPanel, setViewMode]
   );
 
-  if (isLoading) {
+  // Show progress during any loading stage (fetching, layout, or rendering)
+  const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
+
+  if (showProgress) {
     return (
       <div className="flex items-center justify-center h-full">
-        <LoadingSpinner size="lg" />
+        <LoadingProgress progress={progress} message={message} size="lg" />
       </div>
     );
   }
@@ -382,8 +428,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
-            fitView
-            fitViewOptions={{ padding: 0.2 }}
             minZoom={0.1}
             maxZoom={2}
             onlyRenderVisibleElements={filteredNodesAndEdges.filteredNodes.length > 50}
