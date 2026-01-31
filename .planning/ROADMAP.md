@@ -82,10 +82,10 @@ Plans:
   3. Test database contains fan-out patterns (1 source to 5+ and 10+ targets)
   4. Test database contains fan-in patterns (5+ and 10+ sources to 1 target)
   5. Test database contains combined patterns (cycle+diamond, fan-out+fan-in together)
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 15-01: TBD
+- [ ] 15-01-PLAN.md — Extend test data with comprehensive graph patterns (cycles, diamonds, fan-out/fan-in, combined)
 
 ### Phase 16: Correctness Validation
 **Goal**: Graph algorithms correctly handle cycles, diamonds, and fan patterns without duplication or infinite loops
@@ -142,11 +142,11 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 |-------|-----------|----------------|--------|-----------|
 | 13. Graph Loading Experience | v3.0 | 0/TBD | Not started | - |
 | 14. Viewport & Space Optimization | v3.0 | 0/TBD | Not started | - |
-| 15. Correctness Test Data | v3.0 | 0/TBD | Not started | - |
+| 15. Correctness Test Data | v3.0 | 0/1 | Planned | - |
 | 16. Correctness Validation | v3.0 | 0/TBD | Not started | - |
 | 17. CTE Performance Optimization | v3.0 | 0/TBD | Not started | - |
 | 18. Frontend Rendering Performance | v3.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-01-31 (v3.0 milestone added)*
+*Last updated: 2026-01-31 (Phase 15 planned)*
