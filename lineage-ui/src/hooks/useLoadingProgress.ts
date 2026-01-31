@@ -82,13 +82,8 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
   }, []);
 
   const setProgress = useCallback((newProgress: number) => {
-    setProgressState((currentProgress) => {
-      // Get current stage config - we need to read from the state
-      // Note: This callback doesn't have access to current stage directly,
-      // so we determine the stage based on the progress ranges
-      // For simplicity, clamp to 0-100
-      return Math.max(0, Math.min(100, newProgress));
-    });
+    // Clamp to 0-100
+    setProgressState(Math.max(0, Math.min(100, newProgress)));
   }, []);
 
   const reset = useCallback(() => {
