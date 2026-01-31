@@ -79,21 +79,40 @@ The lineage application must be secure and stable for production use - no data e
 - ✓ **OL-05**: Full-stack integration (Go backend + Python population + TypeScript frontend) — v2.0
 - ✓ **OL-06**: Backwards compatibility maintained (v1 API unchanged, LIN_* tables preserved) — v2.0
 
+**v2.1 Pagination UI - Asset Browser (shipped 2026-01-31):**
+
+*Pagination Component:*
+- ✓ **UI-01**: Reusable Pagination component with First/Last/Previous/Next navigation — v2.1
+- ✓ **UI-02**: Page size selector (25, 50, 100, 200 items per page) — v2.1
+- ✓ **UI-03**: Current page and total pages display — v2.1
+- ✓ **UI-04**: "Showing X-Y of Z items" information display — v2.1
+- ✓ **UI-05**: Component matches existing application styling — v2.1
+
+*Asset Browser Integration:*
+- ✓ **ASSET-01**: Database list pagination with persistent page state — v2.1
+- ✓ **ASSET-02**: Table list pagination with persistent page state — v2.1
+- ✓ **ASSET-03**: Column list pagination with persistent page state — v2.1
+- ✓ **ASSET-04**: Pagination resets to page 1 on context change — v2.1
+- ✓ **ASSET-05**: Scroll-into-view behavior on pagination changes — v2.1
+- ✓ **ASSET-06**: Integration with usePaginatedAssets hooks — v2.1
+- ✓ **ASSET-07**: Unit test coverage for pagination controls — v2.1
+
 ### Active
 
 <!-- Requirements for next milestone -->
 
-## Current Milestone: v2.1 Pagination UI Completion
+## Current Milestone: v3.0 Graph Improvements
 
-**Goal:** Complete pagination feature by adding frontend controls across all user-facing views.
+**Goal:** Enhance lineage graph usability and validate correctness for production use.
 
 **Target features:**
-- Pagination component matching existing UI style (buttons, inputs)
-- Asset browser pagination (database, table, column lists)
-- Search results pagination
-- Lineage graph view pagination (where applicable)
-- Integration with existing usePaginatedAssets hooks
-- Unit and E2E test coverage
+- Graph loading progress indicator (percentage-based progress bar)
+- Improved viewport positioning (start at top-left instead of centered)
+- Smart zoom fitting (optimize based on graph size for minimal scrolling)
+- Node spacing optimization (reduce gaps between tables)
+- Graph correctness validation (cycles, diamonds, fan-out/fan-in patterns)
+- Deep graph performance optimization (recursive CTE for depth > 10)
+- Large graph rendering tests (100+ nodes)
 
 **Deferred to future milestones:**
 
@@ -148,10 +167,15 @@ The lineage application must be secure and stable for production use - no data e
 - 25 commits
 - Git range: `b32ef4e` → `28a9efa`
 
-**Technical Debt (v2.1 target):**
-- Frontend pagination controls not implemented (hooks ready, UI controls missing) — MEDIUM priority, affects UX ← **v2.1 milestone focus**
-- Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe (deferred)
-- SetPaginationConfig not called in main.go — LOW priority, follows validation pattern (deferred)
+**Milestone v2.1 Stats (Pagination UI - Asset Browser):**
+- 2 phases, 5 plans completed
+- Files modified: TBD
+- 1 day (2026-01-31)
+- Git range: TBD
+
+**Technical Debt:**
+- Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe
+- SetPaginationConfig not called in main.go — LOW priority, follows validation pattern
 
 **Deployment Assumptions:**
 - Application deployed behind authentication proxy or within internal network
@@ -190,4 +214,4 @@ The lineage application must be secure and stable for production use - no data e
 | Expose v2 API at /api/v2/openlineage/* (v2.0) | API versioning, non-breaking change, clear separation of concerns | ✓ Complete - v1 and v2 routes registered in same router |
 
 ---
-*Last updated: 2026-01-31 after v2.1 milestone initialization*
+*Last updated: 2026-01-31 after v3.0 milestone start*
