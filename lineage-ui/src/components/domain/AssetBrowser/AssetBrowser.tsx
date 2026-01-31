@@ -230,17 +230,19 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
       isInitialTableMount.current = false;
       return;
     }
-    // Use requestAnimationFrame to ensure this happens after any browser scroll
+    // Use multiple animation frames to ensure DOM updates are complete
     requestAnimationFrame(() => {
-      if (databaseHeaderRef.current) {
-        const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
-        if (scrollContainer) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const headerRect = databaseHeaderRef.current.getBoundingClientRect();
-          const relativeTop = headerRect.top - containerRect.top + scrollContainer.scrollTop;
-          scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
+      requestAnimationFrame(() => {
+        if (databaseHeaderRef.current) {
+          const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
+          if (scrollContainer) {
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const headerRect = databaseHeaderRef.current.getBoundingClientRect();
+            const relativeTop = headerRect.top - containerRect.top + scrollContainer.scrollTop;
+            scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
+          }
         }
-      }
+      });
     });
   }, [tableOffset]);
 
@@ -342,17 +344,19 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
       isInitialFieldMount.current = false;
       return;
     }
-    // Use requestAnimationFrame to ensure this happens after any browser scroll
+    // Use multiple animation frames to ensure DOM updates are complete
     requestAnimationFrame(() => {
-      if (datasetRef.current) {
-        const scrollContainer = datasetRef.current.closest('.overflow-auto');
-        if (scrollContainer) {
-          const containerRect = scrollContainer.getBoundingClientRect();
-          const datasetRect = datasetRef.current.getBoundingClientRect();
-          const relativeTop = datasetRect.top - containerRect.top + scrollContainer.scrollTop;
-          scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
+      requestAnimationFrame(() => {
+        if (datasetRef.current) {
+          const scrollContainer = datasetRef.current.closest('.overflow-auto');
+          if (scrollContainer) {
+            const containerRect = scrollContainer.getBoundingClientRect();
+            const datasetRect = datasetRef.current.getBoundingClientRect();
+            const relativeTop = datasetRect.top - containerRect.top + scrollContainer.scrollTop;
+            scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
+          }
         }
-      }
+      });
     });
   }, [fieldOffset]);
 
