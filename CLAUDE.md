@@ -79,6 +79,8 @@ python run_tests.py              # Run 73 database tests
 python populate_lineage.py       # Populate OpenLineage tables (manual mappings)
 python populate_lineage.py --dry-run  # Preview what would be populated
 python setup_lineage_schema.py --openlineage  # Create OL_* tables
+python insert_cte_test_data.py   # Insert test lineage patterns (cycles, diamonds, fans)
+python populate_test_metadata.py # Populate OL_* metadata for test tables (run after insert_cte_test_data.py)
 ```
 
 ## Architecture
@@ -143,7 +145,8 @@ database/
 ├── setup_lineage_schema.py   # Creates OpenLineage tables (OL_*)
 ├── setup_test_data.py        # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
 ├── populate_lineage.py       # Populates OpenLineage tables from DBC views (manual mappings)
-├── insert_cte_test_data.py   # Edge cases: cycles, diamonds, fan-out
+├── insert_cte_test_data.py   # Inserts test lineage patterns into OL_COLUMN_LINEAGE
+├── populate_test_metadata.py # Populates OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD for test data
 └── run_tests.py              # 73 database tests
 ```
 

@@ -1,5 +1,35 @@
 # Project Milestones: Lineage Application
 
+## v2.1 Pagination UI - Asset Browser (Shipped: 2026-01-31)
+
+**Delivered:** Frontend pagination controls for Asset Browser database, table, and column navigation.
+
+**Phases completed:** 9-10 (5 plans total)
+
+**Key accomplishments:**
+
+- Reusable Pagination component: First/Last/Previous/Next navigation, page size selector (25/50/100/200), current page display, item count information
+- Asset Browser integration: Database, table, and column list pagination with persistent page state across navigation
+- Scroll behavior: Auto-scroll to parent container on pagination changes for improved UX
+- Test coverage: Unit tests for pagination controls and integration tests for asset browser behavior
+
+**Phases cancelled:**
+- Phase 11 (Search & Graph Integration): Not needed for current use cases
+- Phase 12 (Testing): Already covered by Phase 10 test plans
+
+**Stats:**
+
+- 2 phases, 5 plans completed
+- Multiple commits on 2026-01-31
+
+**Tech Debt:**
+- Pagination bounds hardcoded (not configurable via env vars - LOW priority)
+- SetPaginationConfig not called in main.go (LOW priority)
+
+**What's next:** Application feature-complete. Future work should address high-priority concerns from PROJECT.md (Redis integration, SQL parser improvements, etc.).
+
+---
+
 ## v2.0 Configuration Improvements (Shipped: 2026-01-30)
 
 **Delivered:** Unified environment variable configuration and OpenLineage standard alignment for industry interoperability.
@@ -22,13 +52,13 @@
 - 25 commits
 
 **Tech Debt:**
-- Frontend pagination controls not implemented (hooks ready, UI controls missing - MEDIUM priority)
+- ✓ Frontend pagination controls (RESOLVED in v2.1)
 - Pagination bounds hardcoded (not configurable via env vars - LOW priority)
 - SetPaginationConfig not called in main.go (LOW priority)
 
 **Git range:** `b32ef4e` (feat(08-01)) → `28a9efa` (feat(08-08))
 
-**What's next:** Address pagination UI controls or plan next milestone for additional OpenLineage features.
+**What's next:** ✓ RESOLVED - Pagination UI delivered in v2.1
 
 ---
 

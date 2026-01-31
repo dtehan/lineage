@@ -25,23 +25,48 @@ The `populate_lineage.py` script populates these tables by extracting metadata d
 | `setup_lineage_schema.py` | Create OpenLineage tables (OL_*) |
 | `populate_lineage.py` | Populate OpenLineage tables from DBC views |
 | `setup_test_data.py` | Create test data tables |
+| `insert_cte_test_data.py` | Insert test lineage patterns (cycles, diamonds, fans) |
+| `populate_test_metadata.py` | Populate OL_* metadata for test tables |
 | `run_tests.py` | Run database tests |
 
 ## Usage
 
+### Production Setup
+
 ```bash
-# Create OpenLineage tables
+# 1. Create OpenLineage tables
 python setup_lineage_schema.py --openlineage
 
-# Populate with manual mappings
+# 2. Populate with production data
 python populate_lineage.py
 
-# Preview what would be populated
+# Preview what would be populated (dry-run)
 python populate_lineage.py --dry-run
 
 # Append mode (don't clear existing data)
 python populate_lineage.py --skip-clear
 ```
+
+### Test Data Setup
+
+For testing lineage algorithms (cycle detection, diamond patterns, fan-in/out):
+
+```bash
+# 1. Insert test lineage patterns into OL_COLUMN_LINEAGE
+python insert_cte_test_data.py
+
+# 2. Populate metadata so test tables appear in UI
+python populate_test_metadata.py
+```
+
+**Important:** You must run `populate_test_metadata.py` after `insert_cte_test_data.py` for test data to be visible in the UI. The test lineage script only populates `OL_COLUMN_LINEAGE`, but the UI requires entries in `OL_NAMESPACE`, `OL_DATASET`, and `OL_DATASET_FIELD` to display tables in the Asset Browser.
+
+Test data includes:
+- 89 lineage records covering 17 test patterns
+- 2-node, 4-node, and 5-node cycles
+- Simple, nested, and wide diamond patterns
+- Fan-out patterns (1→5, 1→10) and fan-in patterns (5→1, 10→1)
+- Combined patterns (cycle+diamond, fan-out+fan-in)
 
 ## Configuration
 

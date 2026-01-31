@@ -277,20 +277,27 @@ it('handles diamond pattern graph across different tables', async () => {
 
 Phase 15 created the following test patterns in `database/insert_cte_test_data.py`:
 
-| Pattern | Table | Nodes | Edges | Test Purpose |
-|---------|-------|-------|-------|--------------|
-| 2-node cycle | CYCLE_TEST | 2 | 2 | A->B->A loop detection |
-| 4-node cycle | MCYCLE_TEST | 4 | 4 | Multi-hop cycle |
-| 5-node cycle | CYCLE5_TEST | 5 | 5 | Larger cycle |
-| Simple diamond | DIAMOND | 4 | 4 | A->B->D, A->C->D |
-| Nested diamond | NESTED_DIAMOND | 7 | 8 | Two diamonds in series |
-| Wide diamond | WIDE_DIAMOND | 6 | 8 | A->B,C,D,E->F |
-| Fan-out 5 | FANOUT5_TEST | 6 | 5 | 1 source -> 5 targets |
-| Fan-out 10 | FANOUT10_TEST | 11 | 10 | 1 source -> 10 targets |
-| Fan-in 5 | FANIN5_TEST | 6 | 5 | 5 sources -> 1 target |
-| Fan-in 10 | FANIN10_TEST | 11 | 10 | 10 sources -> 1 target |
-| Cycle+Diamond | COMBINED_CYCLE_DIAMOND | 4 | 5 | Combined patterns |
-| Fan-out+Fan-in | COMBINED_FAN | 5 | 6 | Bow-tie pattern |
+**IMPORTANT:** All test patterns use **single-table** patterns (all columns within the same table). This tests intra-table lineage scenarios.
+
+| Pattern | Table | Column Nodes | Edges | Frontend Table Nodes | Test Purpose |
+|---------|-------|--------------|-------|---------------------|--------------|
+| 2-node cycle | CYCLE_TEST | 2 | 2 | 1 | A->B->A loop detection |
+| 4-node cycle | MCYCLE_TEST | 4 | 4 | 1 | Multi-hop cycle |
+| 5-node cycle | CYCLE5_TEST | 5 | 5 | 1 | Larger cycle |
+| Simple diamond | DIAMOND | 4 | 4 | 1 | A->B->D, A->C->D |
+| Nested diamond | NESTED_DIAMOND | 7 | 8 | 1 | Two diamonds in series |
+| Wide diamond | WIDE_DIAMOND | 6 | 8 | 1 | A->B,C,D,E->F |
+| Fan-out 5 | FANOUT5_TEST | 6 | 5 | 1 | 1 source -> 5 targets |
+| Fan-out 10 | FANOUT10_TEST | 11 | 10 | 1 | 1 source -> 10 targets |
+| Fan-in 5 | FANIN5_TEST | 6 | 5 | 1 | 5 sources -> 1 target |
+| Fan-in 10 | FANIN10_TEST | 11 | 10 | 1 | 10 sources -> 1 target |
+| Cycle+Diamond | COMBINED_CYCLE_DIAMOND | 4 | 5 | 1 | Combined patterns |
+| Fan-out+Fan-in | COMBINED_FAN | 5 | 6 | 1 | Bow-tie pattern |
+
+**Frontend Testing Strategy:**
+- **Single-table tests**: Match database patterns (1 table node with N columns)
+- **Multi-table tests**: Cross-table lineage (N table nodes with 1 column each)
+- Both scenarios are valid and need validation
 
 ## State of the Art
 
