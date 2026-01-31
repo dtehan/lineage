@@ -81,7 +81,12 @@ skipped: 0
   reason: "User reported: when you click on next, it brings up the remaining columns, but I had to scroll to find the table, I think it needs to show the next set of columns with the table at the top"
   severity: minor
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "No scroll behavior is implemented when column pagination state (fieldOffset) changes. When the user clicks Next on column pagination, React re-renders the column list with new data but the browser viewport remains at its current scroll position. The user must manually scroll up to see the dataset header and the new set of columns. This is a missing feature - there is no useEffect hook or callback to trigger scrollIntoView() or scrollTo() when fieldOffset changes."
+  artifacts:
+    - lineage-ui/src/components/domain/AssetBrowser/AssetBrowser.tsx
+  missing:
+    - "Add useRef hook to DatasetItem component to reference the outer <li> element"
+    - "Add useEffect hook that watches fieldOffset changes (excluding initial mount)"
+    - "Call datasetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }) when fieldOffset changes"
+    - "Similar scroll behavior may be needed for tableOffset in DatabaseItem (not reported in UAT but same UX pattern)"
+  debug_session: ".planning/debug/column-pagination-scroll.md"
