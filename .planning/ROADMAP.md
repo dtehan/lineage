@@ -37,8 +37,8 @@ See MILESTONES.md for details. 2 phases, 5 plans.
 - [x] **Phase 13: Graph Loading Experience** - Progress indicator during graph loading stages
 - [x] **Phase 14: Viewport & Space Optimization** - Improved initial positioning and node spacing
 - [x] **Phase 15: Correctness Test Data** - Create test fixtures for cycles, diamonds, and fan patterns
-- [ ] **Phase 16: Correctness Validation** - Verify graph algorithms handle complex patterns correctly
-- [ ] **Phase 17: CTE Performance Optimization** - Benchmark and optimize recursive CTE for deep graphs
+- [x] **Phase 16: Correctness Validation** - Verify graph algorithms handle complex patterns correctly
+- [x] **Phase 17: CTE Performance Optimization** - Benchmark and optimize recursive CTE for deep graphs
 - [ ] **Phase 18: Frontend Rendering Performance** - Benchmark and optimize ELK.js and React Flow for large graphs
 
 ## Phase Details
