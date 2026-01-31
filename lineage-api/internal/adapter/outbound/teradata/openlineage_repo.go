@@ -529,8 +529,10 @@ func (r *OpenLineageRepository) GetColumnLineage(ctx context.Context, datasetID,
 }
 
 // buildUpstreamQuery builds a recursive CTE for upstream lineage traversal.
+// Uses LOCKING ROW FOR ACCESS hint to reduce lock contention (PERF-CTE-05).
 func (r *OpenLineageRepository) buildUpstreamQuery(maxDepth int) string {
 	return fmt.Sprintf(`
+		LOCKING ROW FOR ACCESS
 		WITH RECURSIVE lineage_path (
 			lineage_id, run_id, source_namespace, source_dataset, source_field,
 			target_namespace, target_dataset, target_field,
@@ -576,8 +578,10 @@ func (r *OpenLineageRepository) buildUpstreamQuery(maxDepth int) string {
 }
 
 // buildDownstreamQuery builds a recursive CTE for downstream lineage traversal.
+// Uses LOCKING ROW FOR ACCESS hint to reduce lock contention (PERF-CTE-05).
 func (r *OpenLineageRepository) buildDownstreamQuery(maxDepth int) string {
 	return fmt.Sprintf(`
+		LOCKING ROW FOR ACCESS
 		WITH RECURSIVE lineage_path (
 			lineage_id, run_id, source_namespace, source_dataset, source_field,
 			target_namespace, target_dataset, target_field,
@@ -623,9 +627,11 @@ func (r *OpenLineageRepository) buildDownstreamQuery(maxDepth int) string {
 }
 
 // buildBidirectionalQuery builds a recursive CTE for both upstream and downstream traversal.
+// Uses LOCKING ROW FOR ACCESS hint to reduce lock contention (PERF-CTE-05).
 func (r *OpenLineageRepository) buildBidirectionalQuery(maxDepth int) string {
 	// For bidirectional, we combine upstream and downstream results
 	return fmt.Sprintf(`
+		LOCKING ROW FOR ACCESS
 		WITH RECURSIVE upstream_path (
 			lineage_id, run_id, source_namespace, source_dataset, source_field,
 			target_namespace, target_dataset, target_field,
