@@ -208,11 +208,17 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
     // to counteract browser scrolling to pagination at bottom
     if (isExpanded) {
       // Small delay to ensure content is rendered
-      setTimeout(() => {
+      requestAnimationFrame(() => {
         if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
-          databaseHeaderRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          databaseHeaderRef.current.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
+          // Then scroll it to the top of the container
+          const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
+          if (scrollContainer && databaseHeaderRef.current) {
+            const headerTop = databaseHeaderRef.current.offsetTop;
+            scrollContainer.scrollTop = headerTop - 8; // 8px padding
+          }
         }
-      }, 100);
+      });
     }
   }, [isExpanded]);
 
@@ -222,13 +228,17 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
       isInitialTableMount.current = false;
       return;
     }
-    // Small delay to ensure pagination click scroll is complete before we scroll to header
-    setTimeout(() => {
-      // scrollIntoView may not exist in test environments (JSDOM)
+    // Use requestAnimationFrame to ensure this happens after any browser scroll
+    requestAnimationFrame(() => {
       if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
-        databaseHeaderRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Find the scroll container and scroll to the header position
+        const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
+        if (scrollContainer && databaseHeaderRef.current) {
+          const headerTop = databaseHeaderRef.current.offsetTop;
+          scrollContainer.scrollTop = headerTop - 8; // 8px padding from top
+        }
       }
-    }, 50);
+    });
   }, [tableOffset]);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
@@ -329,13 +339,17 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
       isInitialFieldMount.current = false;
       return;
     }
-    // Small delay to ensure pagination click scroll is complete before we scroll to header
-    setTimeout(() => {
-      // scrollIntoView may not exist in test environments (JSDOM)
+    // Use requestAnimationFrame to ensure this happens after any browser scroll
+    requestAnimationFrame(() => {
       if (datasetRef.current && typeof datasetRef.current.scrollIntoView === 'function') {
-        datasetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Find the scroll container and scroll to the dataset position
+        const scrollContainer = datasetRef.current.closest('.overflow-auto');
+        if (scrollContainer && datasetRef.current) {
+          const datasetTop = datasetRef.current.offsetTop;
+          scrollContainer.scrollTop = datasetTop - 8; // 8px padding from top
+        }
       }
-    }, 50);
+    });
   }, [fieldOffset]);
 
   const navigate = useNavigate();
