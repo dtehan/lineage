@@ -102,8 +102,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 16-01-PLAN.md - Database CTE correctness tests (cycles, diamonds, fans)
-- [ ] 16-02-PLAN.md - Frontend integration tests with mock data
+- [x] 16-01-PLAN.md - Database CTE correctness tests (cycles, diamonds, fans)
+- [x] 16-02-PLAN.md - Frontend integration tests with mock data
 
 ### Phase 17: CTE Performance Optimization
 **Goal**: Recursive CTE queries perform acceptably at depth 10+ with documented benchmarks
@@ -146,7 +146,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 13. Graph Loading Experience | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 14. Viewport & Space Optimization | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 15. Correctness Test Data | v3.0 | 1/1 | Complete | 2026-01-31 |
-| 16. Correctness Validation | v3.0 | 0/2 | Planned | - |
+| 16. Correctness Validation | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 17. CTE Performance Optimization | v3.0 | 0/TBD | Not started | - |
 | 18. Frontend Rendering Performance | v3.0 | 0/TBD | Not started | - |
 
