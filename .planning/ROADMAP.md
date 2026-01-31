@@ -53,16 +53,16 @@ Plans:
 **Depends on**: Phase 9
 **Requirements**: ASSET-01, ASSET-02, ASSET-03, ASSET-04, ASSET-05, ASSET-06, ASSET-07
 **Success Criteria** (what must be TRUE):
-  1. User sees pagination controls on database list when more than 100 items exist
-  2. User sees pagination controls on table list when more than 100 items exist
-  3. User sees pagination controls on column list when more than 100 items exist
+  1. User sees pagination controls on database list (always visible per context decision)
+  2. User sees pagination controls on table list when database expanded (always visible)
+  3. User sees pagination controls on column list when table expanded (always visible)
   4. User's page selection persists when navigating away and returning to a list
   5. Pagination resets to page 1 when user switches context (different database or table)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 10-01: Database list pagination integration
-- [ ] 10-02: Table and column list pagination integration
+- [ ] 10-01-PLAN.md - Database and table list pagination integration
+- [ ] 10-02-PLAN.md - Column list pagination and test updates
 
 ### Phase 11: Search & Graph Integration
 **Goal**: Users can navigate paginated search results and lineage views
