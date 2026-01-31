@@ -15,13 +15,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useOpenLineageGraph, useOpenLineageTableLineage } from '../../../api/hooks/useOpenLineage';
+import { useOpenLineageTableLineage } from '../../../api/hooks/useOpenLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
-import { Toolbar, type ScopeMode } from './Toolbar';
+import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
@@ -44,16 +44,14 @@ const edgeTypes = {
 
 interface LineageGraphInnerProps {
   datasetId: string;
-  fieldName: string;
-  tableMode?: boolean; // If true, show lineage for all columns in the table
+  fieldName: string; // Used to highlight/focus a specific field
 }
 
-function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode = false }: LineageGraphInnerProps) {
+function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const reactFlowInstance = useReactFlow();
   const navigate = useNavigate();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
-  const [scopeMode, setScopeMode] = useState<ScopeMode>(initialTableMode ? 'table' : 'column');
 
   const {
     direction,
@@ -84,19 +82,8 @@ function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode =
     setAssetTypeFilter,
   } = useLineageStore();
 
-  // Determine if we're in table mode based on scope
-  const isTableMode = scopeMode === 'table';
-
-  // Use table lineage hook if in table mode, otherwise use field lineage hook
-  const fieldLineageQuery = useOpenLineageGraph(datasetId, fieldName, direction, maxDepth, {
-    enabled: !isTableMode,
-  });
-  const tableLineageQuery = useOpenLineageTableLineage(datasetId, direction, maxDepth, {
-    enabled: isTableMode,
-  });
-
-  // Use the appropriate query result based on mode
-  const { data, isLoading, error } = isTableMode ? tableLineageQuery : fieldLineageQuery;
+  // Always use table lineage to show all columns
+  const { data, isLoading, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -309,10 +296,6 @@ function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode =
   // Handle empty lineage data - check edges since root node is always included
   const hasNoLineageData = data && data.graph && data.graph.edges?.length === 0;
   if (hasNoLineageData) {
-    const displayText = isTableMode
-      ? `table ${datasetId}`
-      : `${datasetId}.${fieldName}`;
-
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500">
         <svg
@@ -331,12 +314,10 @@ function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode =
         </svg>
         <h3 className="text-lg font-medium text-slate-700 mb-2">No Lineage Data Available</h3>
         <p className="text-sm text-slate-500 text-center max-w-md">
-          No lineage relationships have been discovered for <span className="font-mono text-slate-600">{displayText}</span>.
+          No lineage relationships have been discovered for <span className="font-mono text-slate-600">table {datasetId}</span>.
         </p>
         <p className="text-sm text-slate-400 mt-2 text-center max-w-md">
-          {isTableMode
-            ? "This table's columns may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet."
-            : "This field may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet."}
+          This table's columns may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet.
         </p>
       </div>
     );
@@ -355,8 +336,6 @@ function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode =
       <Toolbar
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        scopeMode={scopeMode}
-        onScopeModeChange={setScopeMode}
         direction={direction}
         onDirectionChange={setDirection}
         depth={maxDepth}
@@ -470,14 +449,13 @@ function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode =
 
 export interface LineageGraphProps {
   datasetId: string;
-  fieldName: string;
-  tableMode?: boolean; // If true, show lineage for all columns in the table
+  fieldName: string; // Used to highlight/focus a specific field
 }
 
-export function LineageGraph({ datasetId, fieldName, tableMode = false }: LineageGraphProps) {
+export function LineageGraph({ datasetId, fieldName }: LineageGraphProps) {
   return (
     <ReactFlowProvider>
-      <LineageGraphInner datasetId={datasetId} fieldName={fieldName} tableMode={tableMode} />
+      <LineageGraphInner datasetId={datasetId} fieldName={fieldName} />
     </ReactFlowProvider>
   );
 }

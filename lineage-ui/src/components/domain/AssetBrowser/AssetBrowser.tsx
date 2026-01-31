@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe, GitBranch } from 'lucide-react';
+import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe } from 'lucide-react';
 import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
 import { Tooltip } from '../../common/Tooltip';
@@ -228,21 +228,13 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
 
   // Navigate to field lineage when clicking a field
   const handleFieldClick = (fieldName: string) => {
-    // Navigate to lineage view for this field
+    // Navigate to lineage view - now always shows all columns with this field highlighted
     navigate(`/lineage/${encodeURIComponent(dataset.id)}/${encodeURIComponent(fieldName)}`);
-  };
-
-  // Navigate to table lineage (all columns) - use first field or a placeholder
-  const handleTableLineageClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    // Use first field if available, otherwise use a placeholder
-    const firstField = fields.length > 0 ? fields[0].name : '_table_view';
-    navigate(`/lineage/${encodeURIComponent(dataset.id)}/${encodeURIComponent(firstField)}?mode=table`);
   };
 
   return (
     <li>
-      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100 group">
+      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
           onClick={handleChevronClick}
           className="p-0.5 hover:bg-slate-200 rounded"
@@ -258,16 +250,6 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
           <AssetTypeIcon sourceType={dataset.sourceType} />
           <span className="text-sm text-slate-700">{tableName}</span>
         </div>
-        {/* View Table Lineage Button - shown on hover */}
-        <Tooltip content="View lineage for all columns in this table" position="right">
-          <button
-            onClick={handleTableLineageClick}
-            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
-            aria-label="View table lineage"
-          >
-            <GitBranch className="w-3.5 h-3.5" />
-          </button>
-        </Tooltip>
       </div>
       {isExpanded && (
         <ul className="ml-4 mt-1 space-y-1">

@@ -1,11 +1,10 @@
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { LineageGraph } from '../components/domain/LineageGraph/LineageGraph';
 import { useLineageStore } from '../stores/useLineageStore';
 import { BackButton } from '../components/common/BackButton';
 
 export function LineagePage() {
   const { datasetId, fieldName } = useParams<{ datasetId: string; fieldName: string }>();
-  const [searchParams] = useSearchParams();
   const { maxDepth, setMaxDepth, direction, setDirection } = useLineageStore();
 
   if (!datasetId || !fieldName) {
@@ -15,9 +14,6 @@ export function LineagePage() {
   // Decode URL parameters
   const decodedDatasetId = decodeURIComponent(datasetId);
   const decodedFieldName = decodeURIComponent(fieldName);
-
-  // Check if table mode is requested via query parameter
-  const tableMode = searchParams.get('mode') === 'table';
 
   return (
     <div className="flex flex-col h-full">
@@ -56,7 +52,7 @@ export function LineagePage() {
         </div>
       </header>
       <main className="flex-1">
-        <LineageGraph datasetId={decodedDatasetId} fieldName={decodedFieldName} tableMode={tableMode} />
+        <LineageGraph datasetId={decodedDatasetId} fieldName={decodedFieldName} />
       </main>
     </div>
   );
