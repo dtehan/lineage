@@ -21,6 +21,7 @@ interface LayoutOptions {
   direction?: 'RIGHT' | 'LEFT' | 'DOWN' | 'UP';
   nodeSpacing?: number;
   layerSpacing?: number;
+  onProgress?: (progress: number) => void;
 }
 
 // Constants for node sizing
@@ -221,10 +222,12 @@ export async function layoutGraph(
     direction = 'RIGHT',
     nodeSpacing = 40,
     layerSpacing = 100,
+    onProgress,
   } = options;
 
   // Group columns by table
   const tableGroups = groupColumnsByTable(rawNodes);
+  onProgress?.(35); // Entered layout stage
 
   // If no column nodes, fall back to simple layout
   if (tableGroups.size === 0) {
@@ -233,6 +236,7 @@ export async function layoutGraph(
 
   // Transform to table node format
   const { nodes: tableNodeData, columnToTableMap } = transformToTableNodes(tableGroups, rawEdges);
+  onProgress?.(45); // Data transformed
 
   // Group tables by database for compound node layout
   const databaseGroups = groupTablesByDatabase(tableNodeData);
@@ -300,10 +304,10 @@ export async function layoutGraph(
       edges: allElkEdges,
     };
 
-    
+    onProgress?.(55); // Graph built, starting ELK layout
     const layoutedGraph = await elk.layout(elkGraph);
+    onProgress?.(70); // Layout complete, entering render
 
-    
     // Transform to React Flow nodes
     const layoutedNodes: Node[] = (layoutedGraph.children || [])
       .map((elkNode) => {
@@ -453,10 +457,10 @@ export async function layoutGraph(
     edges: [], // No external edges in this path
   };
 
-  
+  onProgress?.(55); // Graph built, starting ELK layout
   const layoutedGraph = await elk.layout(elkGraph);
+  onProgress?.(70); // Layout complete, entering render
 
-  
   // Transform to React Flow nodes - extract table positions from within database compound nodes
   const layoutedNodes: Node[] = [];
 
@@ -534,6 +538,7 @@ async function layoutSimpleNodes(
     direction = 'RIGHT',
     nodeSpacing = 40,
     layerSpacing = 100,
+    onProgress,
   } = options;
 
   const elkNodes: ElkNode[] = nodes.map((node) => ({
@@ -542,6 +547,7 @@ async function layoutSimpleNodes(
     height: getNodeHeight(node),
     labels: [{ text: getNodeLabel(node) }],
   }));
+  onProgress?.(45); // ELK nodes built
 
   const elkEdges: ElkExtendedEdge[] = edges.map((edge) => ({
     id: edge.id,
@@ -563,7 +569,9 @@ async function layoutSimpleNodes(
     edges: elkEdges,
   };
 
+  onProgress?.(55); // Graph built, starting ELK layout
   const layoutedGraph = await elk.layout(elkGraph);
+  onProgress?.(70); // Layout complete, entering render
 
   const layoutedNodes: Node[] = (layoutedGraph.children || []).map((elkNode) => {
     const originalNode = nodes.find((n) => n.id === elkNode.id)!;
