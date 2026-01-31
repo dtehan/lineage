@@ -190,7 +190,7 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
   const navigate = useNavigate();
   const [tableOffset, setTableOffset] = useState(0);
   const TABLE_LIMIT = 100;
-  const databaseRef = useRef<HTMLLIElement>(null);
+  const databaseHeaderRef = useRef<HTMLDivElement>(null);
   const isInitialTableMount = useRef(true);
 
   // Paginate the datasets (tables) for this database (client-side slicing)
@@ -209,8 +209,8 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
       return;
     }
     // scrollIntoView may not exist in test environments (JSDOM)
-    if (databaseRef.current && typeof databaseRef.current.scrollIntoView === 'function') {
-      databaseRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
+      databaseHeaderRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [tableOffset]);
 
@@ -226,8 +226,8 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
   };
 
   return (
-    <li ref={databaseRef}>
-      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
+    <li>
+      <div ref={databaseHeaderRef} className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
         <button
           onClick={handleChevronClick}
           className="p-0.5 hover:bg-slate-200 rounded"
