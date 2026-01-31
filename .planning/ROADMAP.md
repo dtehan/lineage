@@ -67,10 +67,11 @@ Plans:
   3. Large graphs (over 50 nodes) fit more nodes on screen while maintaining usability
   4. Node spacing is compact with minimal gaps between tables
   5. User can manually adjust zoom after initial fit completes
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 14-01: TBD
+- [ ] 14-01-PLAN.md — Compact layout configuration (reduce ELK spacing)
+- [ ] 14-02-PLAN.md — Smart viewport positioning (top-left start, size-aware zoom)
 
 ### Phase 15: Correctness Test Data
 **Goal**: Database contains diverse test patterns (cycles, diamonds, fan-out/fan-in) for validating graph algorithms
@@ -141,7 +142,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 13. Graph Loading Experience | v3.0 | 0/TBD | Not started | - |
-| 14. Viewport & Space Optimization | v3.0 | 0/TBD | Not started | - |
+| 14. Viewport & Space Optimization | v3.0 | 0/2 | Planned | - |
 | 15. Correctness Test Data | v3.0 | 0/1 | Planned | - |
 | 16. Correctness Validation | v3.0 | 0/TBD | Not started | - |
 | 17. CTE Performance Optimization | v3.0 | 0/TBD | Not started | - |
@@ -149,4 +150,4 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-01-31 (Phase 15 planned)*
+*Last updated: 2026-01-31 (Phase 14 planned)*
