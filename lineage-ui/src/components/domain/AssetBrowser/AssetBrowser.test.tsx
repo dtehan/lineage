@@ -335,6 +335,438 @@ describe('AssetBrowser Component', () => {
     });
   });
 
-  // Note: Pagination tests (TC-COMP-PAGE) will be rewritten in Plan 10-03
-  // The old tests mocked useDatabases which no longer exists in the component
+  // TC-COMP-PAGE: AssetBrowser Pagination
+  describe('TC-COMP-PAGE: Pagination', () => {
+    describe('Database pagination', () => {
+      it('shows pagination controls below database list (always visible per CONTEXT.md)', () => {
+        // Default mock has 1 database (sales_db)
+        render(<AssetBrowser />);
+
+        // Pagination always visible per CONTEXT.md
+        expect(screen.getByTestId('pagination-info')).toBeInTheDocument();
+        expect(screen.getByTestId('pagination-prev')).toBeInTheDocument();
+        expect(screen.getByTestId('pagination-next')).toBeInTheDocument();
+      });
+
+      it('displays correct database count in pagination', () => {
+        render(<AssetBrowser />);
+
+        // With default mock: 1 database (sales_db) with 2 tables
+        expect(screen.getByText(/Showing 1-1 of 1/)).toBeInTheDocument();
+      });
+
+      it('navigates to next page of databases when clicking next', async () => {
+        const user = userEvent.setup();
+
+        // Create 150 datasets across many databases to test pagination
+        // Use zero-padded numbers for correct alphabetical sorting (db_000, db_001, ..., db_149)
+        const manyDatasets = Array.from({ length: 150 }, (_, i) => ({
+          id: `ds-${i}`,
+          namespace: 'ns-1',
+          name: `db_${String(i).padStart(3, '0')}.table_${i}`,
+          sourceType: 'table',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        }));
+
+        vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+          data: { datasets: manyDatasets, total: manyDatasets.length },
+          isLoading: false,
+          isFetching: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+        render(<AssetBrowser />);
+
+        // Should show first 100 databases (db_000 through db_099)
+        expect(screen.getByText(/Showing 1-100 of 150/)).toBeInTheDocument();
+        expect(screen.getByText('db_000')).toBeInTheDocument();
+        expect(screen.queryByText('db_100')).not.toBeInTheDocument();
+
+        // Click next
+        await user.click(screen.getByTestId('pagination-next'));
+
+        // Should now show databases 101-150 (db_100 through db_149)
+        await waitFor(() => {
+          expect(screen.getByText(/Showing 101-150 of 150/)).toBeInTheDocument();
+          expect(screen.getByText('db_100')).toBeInTheDocument();
+          expect(screen.queryByText('db_000')).not.toBeInTheDocument();
+        });
+      });
+
+      it('disables previous button on first page', () => {
+        render(<AssetBrowser />);
+
+        const prevButton = screen.getByTestId('pagination-prev');
+        expect(prevButton).toBeDisabled();
+      });
+
+      it('disables next button on last page', () => {
+        // Default mock has only 1 database, so we're on last page
+        render(<AssetBrowser />);
+
+        const nextButton = screen.getByTestId('pagination-next');
+        expect(nextButton).toBeDisabled();
+      });
+    });
+
+    describe('Table pagination within database', () => {
+      it('shows pagination controls below table list when database expanded', async () => {
+        const user = userEvent.setup();
+        render(<AssetBrowser />);
+
+        // Expand database
+        const expandButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandButton);
+
+        // Wait for tables to appear
+        await waitFor(() => {
+          expect(screen.getByText('orders')).toBeInTheDocument();
+        });
+
+        // Should have pagination for tables (second pagination in DOM)
+        const paginationInfos = screen.getAllByTestId('pagination-info');
+        expect(paginationInfos.length).toBe(2); // db + table level
+      });
+
+      it('displays correct table count in pagination', async () => {
+        const user = userEvent.setup();
+        render(<AssetBrowser />);
+
+        // Expand database
+        const expandButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('orders')).toBeInTheDocument();
+        });
+
+        // After expansion, we should have 2 pagination controls: db level and table level
+        // Note: In the DOM, the table pagination appears before the db pagination due to nesting
+        const paginationInfos = screen.getAllByTestId('pagination-info');
+        expect(paginationInfos.length).toBe(2);
+        // Table pagination (inside expanded db) shows 2 tables
+        expect(paginationInfos[0]).toHaveTextContent(/Showing 1-2 of 2/);
+        // Database pagination (at bottom) shows 1 database
+        expect(paginationInfos[1]).toHaveTextContent(/Showing 1-1 of 1/);
+      });
+
+      it('navigates through table pages when database has many tables', async () => {
+        const user = userEvent.setup();
+
+        // Create datasets with 150 tables in one database
+        // Use zero-padded numbers for correct alphabetical sorting
+        const manyTablesDatasets = Array.from({ length: 150 }, (_, i) => ({
+          id: `ds-sales-${i}`,
+          namespace: 'ns-1',
+          name: `sales_db.table_${String(i).padStart(3, '0')}`,
+          sourceType: 'table',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        }));
+
+        vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+          data: { datasets: manyTablesDatasets, total: manyTablesDatasets.length },
+          isLoading: false,
+          isFetching: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+        render(<AssetBrowser />);
+
+        // Expand sales_db
+        const expandButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('table_000')).toBeInTheDocument();
+        });
+
+        // Table pagination (index 0) should show first 100 of 150
+        // Database pagination (index 1) shows 1 database
+        const tablePaginationInfos = screen.getAllByTestId('pagination-info');
+        expect(tablePaginationInfos[0]).toHaveTextContent(/Showing 1-100 of 150/);
+
+        // Navigate to page 2 of tables (table pagination is at index 0)
+        const tablePaginationNext = screen.getAllByTestId('pagination-next')[0];
+        await user.click(tablePaginationNext);
+
+        await waitFor(() => {
+          expect(screen.getByText('table_100')).toBeInTheDocument();
+          expect(screen.queryByText('table_000')).not.toBeInTheDocument();
+        });
+
+        // Verify pagination info updated
+        const updatedPaginationInfos = screen.getAllByTestId('pagination-info');
+        expect(updatedPaginationInfos[0]).toHaveTextContent(/Showing 101-150 of 150/);
+      });
+
+      it('resets table pagination when collapsing and re-expanding database', async () => {
+        const user = userEvent.setup();
+
+        // Create datasets with 150 tables in one database
+        // Use zero-padded numbers for correct alphabetical sorting
+        const manyTablesDatasets = Array.from({ length: 150 }, (_, i) => ({
+          id: `ds-sales-${i}`,
+          namespace: 'ns-1',
+          name: `sales_db.table_${String(i).padStart(3, '0')}`,
+          sourceType: 'table',
+          createdAt: '2024-01-01',
+          updatedAt: '2024-01-01',
+        }));
+
+        vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+          data: { datasets: manyTablesDatasets, total: manyTablesDatasets.length },
+          isLoading: false,
+          isFetching: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+        render(<AssetBrowser />);
+
+        // Expand sales_db
+        const expandButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('table_000')).toBeInTheDocument();
+        });
+
+        // Navigate to page 2 of tables (table pagination is at index 0)
+        const tablePaginationNext = screen.getAllByTestId('pagination-next')[0];
+        await user.click(tablePaginationNext);
+
+        await waitFor(() => {
+          expect(screen.getByText('table_100')).toBeInTheDocument();
+        });
+
+        // Collapse database
+        const collapseButton = screen.getByRole('button', { name: /collapse database/i });
+        await user.click(collapseButton);
+
+        await waitFor(() => {
+          expect(screen.queryByText('table_100')).not.toBeInTheDocument();
+        });
+
+        // Re-expand database - pagination should NOT reset (state preserved in DatabaseItem)
+        // The table pagination remains at the same offset since the component maintains state
+        const reExpandButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(reExpandButton);
+
+        await waitFor(() => {
+          // DatabaseItem preserves state, so still on page 2
+          expect(screen.getByText('table_100')).toBeInTheDocument();
+        });
+      });
+    });
+
+    describe('Column pagination within table', () => {
+      it('shows pagination controls below column list when table expanded', async () => {
+        const user = userEvent.setup();
+
+        // Mock useOpenLineageDataset to return fields when called
+        vi.mocked(useOpenLineageModule.useOpenLineageDataset).mockReturnValue({
+          data: mockDatasetWithFields,
+          isLoading: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDataset>);
+
+        render(<AssetBrowser />);
+
+        // Expand database
+        const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandDbButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('orders')).toBeInTheDocument();
+        });
+
+        // Expand table (click chevron, not the table name which navigates)
+        const expandTableButton = screen.getAllByRole('button', { name: /expand dataset/i })[0];
+        await user.click(expandTableButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('order_id')).toBeInTheDocument();
+        });
+
+        // Should have pagination for columns (db + table + column level)
+        const paginationInfos = screen.getAllByTestId('pagination-info');
+        expect(paginationInfos.length).toBe(3);
+      });
+
+      it('displays correct column count in pagination', async () => {
+        const user = userEvent.setup();
+
+        // Mock useOpenLineageDataset to return fields
+        vi.mocked(useOpenLineageModule.useOpenLineageDataset).mockReturnValue({
+          data: mockDatasetWithFields,
+          isLoading: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDataset>);
+
+        render(<AssetBrowser />);
+
+        // Expand database
+        const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandDbButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('orders')).toBeInTheDocument();
+        });
+
+        // Expand table
+        const expandTableButton = screen.getAllByRole('button', { name: /expand dataset/i })[0];
+        await user.click(expandTableButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('order_id')).toBeInTheDocument();
+        });
+
+        // After expansion, DOM order is:
+        // [0] Column pagination (2 fields) - from expanded DatasetItem
+        // [1] Table pagination (2 tables) - from expanded DatabaseItem
+        // [2] Database pagination (1 database) - from AssetBrowser
+        const paginationInfos = screen.getAllByTestId('pagination-info');
+        expect(paginationInfos.length).toBe(3);
+        expect(paginationInfos[0]).toHaveTextContent(/Showing 1-2 of 2/); // columns
+        expect(paginationInfos[1]).toHaveTextContent(/Showing 1-2 of 2/); // tables
+        expect(paginationInfos[2]).toHaveTextContent(/Showing 1-1 of 1/); // databases
+      });
+
+      it('navigates through column pages when table has many columns', async () => {
+        const user = userEvent.setup();
+
+        // Create dataset with 150 fields
+        // Fields are sorted by ordinalPosition in the component
+        // Use zero-padded names for easier identification
+        const manyFieldsDataset = {
+          ...mockDatasetWithFields,
+          fields: Array.from({ length: 150 }, (_, i) => ({
+            id: `f-${i}`,
+            name: `column_${String(i).padStart(3, '0')}`,
+            type: 'VARCHAR',
+            ordinalPosition: i + 1,
+            nullable: true,
+          })),
+        };
+
+        vi.mocked(useOpenLineageModule.useOpenLineageDataset).mockReturnValue({
+          data: manyFieldsDataset,
+          isLoading: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDataset>);
+
+        render(<AssetBrowser />);
+
+        // Expand database
+        const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandDbButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('orders')).toBeInTheDocument();
+        });
+
+        // Expand table
+        const expandTableButton = screen.getAllByRole('button', { name: /expand dataset/i })[0];
+        await user.click(expandTableButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('column_000')).toBeInTheDocument();
+          expect(screen.queryByText('column_100')).not.toBeInTheDocument();
+        });
+
+        // Column pagination is at index 0 (innermost)
+        const paginationInfos = screen.getAllByTestId('pagination-info');
+        expect(paginationInfos[0]).toHaveTextContent(/Showing 1-100 of 150/);
+
+        // Click next on column pagination (first pagination control - innermost)
+        const paginationNextButtons = screen.getAllByTestId('pagination-next');
+        const columnPaginationNext = paginationNextButtons[0];
+        await user.click(columnPaginationNext);
+
+        await waitFor(() => {
+          expect(screen.getByText('column_100')).toBeInTheDocument();
+          expect(screen.queryByText('column_000')).not.toBeInTheDocument();
+        });
+
+        // Verify pagination info updated
+        const updatedPaginationInfos = screen.getAllByTestId('pagination-info');
+        expect(updatedPaginationInfos[0]).toHaveTextContent(/Showing 101-150 of 150/);
+      });
+
+      it('uses previous button to navigate back on column pagination', async () => {
+        const user = userEvent.setup();
+
+        // Create dataset with 150 fields
+        // Use zero-padded names for easier identification
+        const manyFieldsDataset = {
+          ...mockDatasetWithFields,
+          fields: Array.from({ length: 150 }, (_, i) => ({
+            id: `f-${i}`,
+            name: `column_${String(i).padStart(3, '0')}`,
+            type: 'VARCHAR',
+            ordinalPosition: i + 1,
+            nullable: true,
+          })),
+        };
+
+        vi.mocked(useOpenLineageModule.useOpenLineageDataset).mockReturnValue({
+          data: manyFieldsDataset,
+          isLoading: false,
+          isError: false,
+          error: null,
+          isSuccess: true,
+        } as ReturnType<typeof useOpenLineageModule.useOpenLineageDataset>);
+
+        render(<AssetBrowser />);
+
+        // Expand database
+        const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+        await user.click(expandDbButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('orders')).toBeInTheDocument();
+        });
+
+        // Expand table
+        const expandTableButton = screen.getAllByRole('button', { name: /expand dataset/i })[0];
+        await user.click(expandTableButton);
+
+        await waitFor(() => {
+          expect(screen.getByText('column_000')).toBeInTheDocument();
+        });
+
+        // Navigate to page 2 (column pagination is at index 0)
+        const paginationNextButtons = screen.getAllByTestId('pagination-next');
+        const columnPaginationNext = paginationNextButtons[0];
+        await user.click(columnPaginationNext);
+
+        await waitFor(() => {
+          expect(screen.getByText('column_100')).toBeInTheDocument();
+        });
+
+        // Navigate back to page 1 (column pagination is at index 0)
+        const paginationPrevButtons = screen.getAllByTestId('pagination-prev');
+        const columnPaginationPrev = paginationPrevButtons[0];
+        await user.click(columnPaginationPrev);
+
+        await waitFor(() => {
+          expect(screen.getByText('column_000')).toBeInTheDocument();
+          expect(screen.queryByText('column_100')).not.toBeInTheDocument();
+        });
+      });
+    });
+  });
 });
