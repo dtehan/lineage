@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe } from 'lucide-react';
 import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
+import { Pagination } from '../../common/Pagination';
 import { Tooltip } from '../../common/Tooltip';
 import type { OpenLineageDataset } from '../../../types/openlineage';
 
@@ -56,6 +57,8 @@ const parseTableFromDatasetName = (datasetName: string): string => {
 export function AssetBrowser() {
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
+  const [dbOffset, setDbOffset] = useState(0);
+  const DB_LIMIT = 100;
 
   const { data: namespacesData, isLoading: isLoadingNamespaces } = useOpenLineageNamespaces();
   const namespaces = namespacesData?.namespaces || [];
@@ -84,6 +87,10 @@ export function AssetBrowser() {
   }, [datasets]);
 
   const databaseNames = Object.keys(datasetsByDatabase).sort();
+
+  // Paginate database list (client-side - databases are derived from grouped datasets)
+  const totalDatabases = databaseNames.length;
+  const paginatedDatabaseNames = databaseNames.slice(dbOffset, dbOffset + DB_LIMIT);
 
   const toggleDatabase = (dbName: string) => {
     setExpandedDatabases((prev) => {
@@ -142,7 +149,7 @@ export function AssetBrowser() {
 
         <h2 className="px-2 py-1 text-sm font-semibold text-slate-700">Databases</h2>
         <ul className="space-y-1">
-          {databaseNames.map((dbName) => (
+          {paginatedDatabaseNames.map((dbName) => (
             <DatabaseItem
               key={dbName}
               databaseName={dbName}
@@ -154,6 +161,17 @@ export function AssetBrowser() {
             />
           ))}
         </ul>
+        {/* Database pagination - always visible per CONTEXT.md */}
+        <div className="mt-4 flex justify-center px-2">
+          <Pagination
+            totalCount={totalDatabases}
+            limit={DB_LIMIT}
+            offset={dbOffset}
+            onPageChange={setDbOffset}
+            showFirstLast={true}
+            showPageInfo={true}
+          />
+        </div>
       </div>
     </div>
   );
@@ -170,6 +188,17 @@ interface DatabaseItemProps {
 
 function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDatasets, onToggleDataset }: DatabaseItemProps) {
   const navigate = useNavigate();
+  const [tableOffset, setTableOffset] = useState(0);
+  const TABLE_LIMIT = 100;
+
+  // Paginate the datasets (tables) for this database (client-side slicing)
+  const totalTables = datasets.length;
+  const paginatedDatasets = datasets.slice(tableOffset, tableOffset + TABLE_LIMIT);
+
+  // Reset pagination if database name changes (shouldn't happen but defensive)
+  useEffect(() => {
+    setTableOffset(0);
+  }, [databaseName]);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
   const handleChevronClick = (e: React.MouseEvent) => {
@@ -208,16 +237,29 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
         </button>
       </div>
       {isExpanded && (
-        <ul className="ml-4 mt-1 space-y-1">
-          {datasets.map((dataset) => (
-            <DatasetItem
-              key={dataset.id}
-              dataset={dataset}
-              isExpanded={expandedDatasets.has(dataset.id)}
-              onToggle={() => onToggleDataset(dataset.id)}
+        <>
+          <ul className="ml-4 mt-1 space-y-1">
+            {paginatedDatasets.map((dataset) => (
+              <DatasetItem
+                key={dataset.id}
+                dataset={dataset}
+                isExpanded={expandedDatasets.has(dataset.id)}
+                onToggle={() => onToggleDataset(dataset.id)}
+              />
+            ))}
+          </ul>
+          {/* Table pagination - always visible per CONTEXT.md */}
+          <div className="ml-4 mt-2 flex justify-center">
+            <Pagination
+              totalCount={totalTables}
+              limit={TABLE_LIMIT}
+              offset={tableOffset}
+              onPageChange={setTableOffset}
+              showFirstLast={true}
+              showPageInfo={true}
             />
-          ))}
-        </ul>
+          </div>
+        </>
       )}
     </li>
   );
