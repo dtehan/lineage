@@ -118,8 +118,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md - Create CTE benchmark suite and collect baseline metrics
-- [ ] 17-02-PLAN.md - Apply optimizations and verify performance improvement
+- [x] 17-01-PLAN.md - Create CTE benchmark suite and collect baseline metrics
+- [x] 17-02-PLAN.md - Apply optimizations and verify performance improvement
 
 ### Phase 18: Frontend Rendering Performance
 **Goal**: ELK.js layout and React Flow rendering perform acceptably with 100+ node graphs
@@ -148,9 +148,9 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 | 14. Viewport & Space Optimization | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 15. Correctness Test Data | v3.0 | 1/1 | Complete | 2026-01-31 |
 | 16. Correctness Validation | v3.0 | 2/2 | Complete | 2026-01-31 |
-| 17. CTE Performance Optimization | v3.0 | 0/2 | Not started | - |
+| 17. CTE Performance Optimization | v3.0 | 2/2 | Complete | 2026-01-31 |
 | 18. Frontend Rendering Performance | v3.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-01-31 (Phase 17 planned)*
+*Last updated: 2026-01-31 (Phase 17 complete)*

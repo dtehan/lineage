@@ -49,11 +49,11 @@ Requirements for enhancing lineage graph usability, correctness, and performance
 
 ### Graph Performance - CTE Optimization
 
-- [ ] **PERF-CTE-01**: Benchmark recursive CTE at depths 5, 10, 15, 20
-- [ ] **PERF-CTE-02**: Profile identifies performance bottlenecks (path concat, POSITION search)
-- [ ] **PERF-CTE-03**: Implementation optimizes identified bottlenecks
-- [ ] **PERF-CTE-04**: Performance tests verify improvement at depth > 10
-- [ ] **PERF-CTE-05**: Query hints added for Teradata optimization (if beneficial)
+- [x] **PERF-CTE-01**: Benchmark recursive CTE at depths 5, 10, 15, 20
+- [x] **PERF-CTE-02**: Profile identifies performance bottlenecks (path concat, POSITION search)
+- [x] **PERF-CTE-03**: Implementation optimizes identified bottlenecks
+- [x] **PERF-CTE-04**: Performance tests verify improvement at depth > 10
+- [x] **PERF-CTE-05**: Query hints added for Teradata optimization (if beneficial)
 
 ### Graph Performance - Frontend Rendering
 
@@ -131,11 +131,11 @@ Which phases cover which requirements.
 | CORRECT-VAL-05 | Phase 16 | Complete |
 | CORRECT-VAL-06 | Phase 16 | Complete |
 | CORRECT-VAL-07 | Phase 16 | Complete |
-| PERF-CTE-01 | Phase 17 | Pending |
-| PERF-CTE-02 | Phase 17 | Pending |
-| PERF-CTE-03 | Phase 17 | Pending |
-| PERF-CTE-04 | Phase 17 | Pending |
-| PERF-CTE-05 | Phase 17 | Pending |
+| PERF-CTE-01 | Phase 17 | Complete |
+| PERF-CTE-02 | Phase 17 | Complete |
+| PERF-CTE-03 | Phase 17 | Complete |
+| PERF-CTE-04 | Phase 17 | Complete |
+| PERF-CTE-05 | Phase 17 | Complete |
 | PERF-RENDER-01 | Phase 18 | Pending |
 | PERF-RENDER-02 | Phase 18 | Pending |
 | PERF-RENDER-03 | Phase 18 | Pending |
@@ -150,4 +150,4 @@ Which phases cover which requirements.
 
 ---
 *Requirements defined: 2026-01-31*
-*Last updated: 2026-01-31 (phases 13-15 completed, 18/36 requirements met)*
+*Last updated: 2026-01-31 (phases 13-17 completed, 33/36 requirements met)*
