@@ -83,7 +83,21 @@ The lineage application must be secure and stable for production use - no data e
 
 <!-- Requirements for next milestone -->
 
-**v2.0 High Priority Concerns:**
+## Current Milestone: v2.1 Pagination UI Completion
+
+**Goal:** Complete pagination feature by adding frontend controls across all user-facing views.
+
+**Target features:**
+- Pagination component matching existing UI style (buttons, inputs)
+- Asset browser pagination (database, table, column lists)
+- Search results pagination
+- Lineage graph view pagination (where applicable)
+- Integration with existing usePaginatedAssets hooks
+- Unit and E2E test coverage
+
+**Deferred to future milestones:**
+
+**High Priority Concerns:**
 - [ ] **REDIS-01**: Integrate Redis caching or remove dead code
 - [ ] **PARSER-01**: Improve SQL parser with confidence tracking and fallback visibility
 - [ ] **GRAPH-01**: Validate lineage graph building correctness with complex patterns
@@ -134,10 +148,10 @@ The lineage application must be secure and stable for production use - no data e
 - 25 commits
 - Git range: `b32ef4e` → `28a9efa`
 
-**Technical Debt:**
-- Frontend pagination controls not implemented (hooks ready, UI controls missing) — MEDIUM priority, affects UX
-- Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe
-- SetPaginationConfig not called in main.go — LOW priority, follows validation pattern
+**Technical Debt (v2.1 target):**
+- Frontend pagination controls not implemented (hooks ready, UI controls missing) — MEDIUM priority, affects UX ← **v2.1 milestone focus**
+- Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe (deferred)
+- SetPaginationConfig not called in main.go — LOW priority, follows validation pattern (deferred)
 
 **Deployment Assumptions:**
 - Application deployed behind authentication proxy or within internal network
@@ -176,4 +190,4 @@ The lineage application must be secure and stable for production use - no data e
 | Expose v2 API at /api/v2/openlineage/* (v2.0) | API versioning, non-breaking change, clear separation of concerns | ✓ Complete - v1 and v2 routes registered in same router |
 
 ---
-*Last updated: 2026-01-30 after v2.0 milestone completion*
+*Last updated: 2026-01-31 after v2.1 milestone initialization*

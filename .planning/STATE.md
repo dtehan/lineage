@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-01-30)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** Planning next milestone
+**Current focus:** Milestone v2.1 - Pagination UI Completion
 
 ## Current Position
 
-Phase: N/A (between milestones)
-Plan: N/A
-Status: v2.0 milestone complete - ready for next milestone planning
-Last activity: 2026-01-30 - v2.0 milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for v2.1 pagination UI
+Last activity: 2026-01-31 - Milestone v2.1 started
 
 Progress: v1.0 complete (6 phases, 13 plans) | v2.0 complete (2 phases, 11 plans)
 [========================] 24/24 plans shipped (100%)
