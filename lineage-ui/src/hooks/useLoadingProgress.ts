@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 
 /**
  * Loading stages for graph visualization
@@ -28,7 +28,7 @@ interface StageConfig {
  */
 export const STAGE_CONFIG: Record<LoadingStage, StageConfig> = {
   idle: { min: 0, max: 0, message: '' },
-  fetching: { min: 0, max: 30, message: 'Loading data...' },
+  fetching: { min: 15, max: 30, message: 'Loading data...' },
   layout: { min: 30, max: 70, message: 'Calculating layout...' },
   rendering: { min: 70, max: 95, message: 'Rendering graph...' },
   complete: { min: 100, max: 100, message: '' },
@@ -90,6 +90,31 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
     setStageState('idle');
     setProgressState(0);
   }, []);
+
+  // Auto-advance progress during fetching stage (simulated progress)
+  useEffect(() => {
+    if (stage === 'fetching') {
+      const config = STAGE_CONFIG[stage];
+      const startProgress = config.min;
+      const endProgress = config.max - 2; // Stop at 28% (don't reach 30% to avoid overlap with layout)
+      const duration = 3000; // 3 seconds
+      const steps = 30;
+      const increment = (endProgress - startProgress) / steps;
+      const interval = duration / steps;
+
+      let currentStep = 0;
+      const timer = setInterval(() => {
+        currentStep++;
+        if (currentStep >= steps) {
+          clearInterval(timer);
+          return;
+        }
+        setProgressState(startProgress + increment * currentStep);
+      }, interval);
+
+      return () => clearInterval(timer);
+    }
+  }, [stage]);
 
   return {
     stage,
