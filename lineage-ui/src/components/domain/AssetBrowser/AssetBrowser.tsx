@@ -202,6 +202,20 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
     setTableOffset(0);
   }, [databaseName]);
 
+  // Scroll database header into view when expanded or when table pagination changes
+  useEffect(() => {
+    // Always scroll to header when database is expanded (even on first expansion)
+    // to counteract browser scrolling to pagination at bottom
+    if (isExpanded) {
+      // Small delay to ensure content is rendered
+      setTimeout(() => {
+        if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
+          databaseHeaderRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 100);
+    }
+  }, [isExpanded]);
+
   // Scroll database header into view when table pagination changes
   useEffect(() => {
     if (isInitialTableMount.current) {
