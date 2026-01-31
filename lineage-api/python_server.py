@@ -1483,6 +1483,758 @@ def search():
         return jsonify({"error": str(e)}), 500
 
 
+# ============================================================================
+# API v2 - OpenLineage Aligned Routes
+# ============================================================================
+
+@app.route("/api/v2/openlineage/namespaces", methods=["GET"])
+def list_namespaces():
+    """List all OpenLineage namespaces."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        namespace_id,
+                        namespace_uri,
+                        description,
+                        spec_version,
+                        created_at
+                    FROM OL_NAMESPACE
+                    ORDER BY namespace_uri
+                """)
+                rows = cur.fetchall()
+                namespaces = [
+                    {
+                        "id": row[0].strip() if row[0] else "",
+                        "uri": row[1].strip() if row[1] else "",
+                        "description": row[2].strip() if row[2] else "",
+                        "specVersion": row[3].strip() if row[3] else "2-0-2",
+                        "createdAt": row[4].isoformat() if row[4] else None
+                    }
+                    for row in rows
+                ]
+        return jsonify({"namespaces": namespaces})
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/namespaces/<namespace_id>", methods=["GET"])
+def get_namespace(namespace_id):
+    """Get a specific OpenLineage namespace."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT
+                        namespace_id,
+                        namespace_uri,
+                        description,
+                        spec_version,
+                        created_at
+                    FROM OL_NAMESPACE
+                    WHERE namespace_id = ?
+                """, [namespace_id])
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({"error": "Namespace not found"}), 404
+
+                namespace = {
+                    "id": row[0].strip() if row[0] else "",
+                    "uri": row[1].strip() if row[1] else "",
+                    "description": row[2].strip() if row[2] else "",
+                    "specVersion": row[3].strip() if row[3] else "2-0-2",
+                    "createdAt": row[4].isoformat() if row[4] else None
+                }
+        return jsonify(namespace)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/namespaces/<namespace_id>/datasets", methods=["GET"])
+def list_datasets(namespace_id):
+    """List datasets in a namespace."""
+    limit = int(request.args.get("limit", "100"))
+    offset = int(request.args.get("offset", "0"))
+
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get total count
+                cur.execute("""
+                    SELECT COUNT(*)
+                    FROM OL_DATASET
+                    WHERE namespace_id = ?
+                """, [namespace_id])
+                total = cur.fetchone()[0] or 0
+
+                # Get datasets with pagination using ROW_NUMBER (Teradata native)
+                cur.execute("""
+                    SELECT dataset_id, dataset_name, namespace_id, namespace_uri,
+                           description, source_type, created_at, updated_at
+                    FROM (
+                        SELECT
+                            d.dataset_id,
+                            d."name" as dataset_name,
+                            d.namespace_id,
+                            n.namespace_uri,
+                            d.description,
+                            d.source_type,
+                            d.created_at,
+                            d.updated_at,
+                            ROW_NUMBER() OVER (ORDER BY d."name") as rn
+                        FROM OL_DATASET d
+                        JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                        WHERE d.namespace_id = ?
+                    ) t
+                    WHERE rn > ? AND rn <= ?
+                """, [namespace_id, offset, offset + limit])
+
+                rows = cur.fetchall()
+                datasets = [
+                    {
+                        "id": row[0].strip() if row[0] else "",
+                        "name": row[1].strip() if row[1] else "",
+                        "namespace": row[3].strip() if row[3] else "",  # namespace_uri
+                        "description": row[4].strip() if row[4] else "",
+                        "sourceType": row[5].strip() if row[5] else None,
+                        "createdAt": row[6].isoformat() if row[6] else None,
+                        "updatedAt": row[7].isoformat() if row[7] else None
+                    }
+                    for row in rows
+                ]
+
+        return jsonify({
+            "datasets": datasets,
+            "pagination": {
+                "total": total,
+                "limit": limit,
+                "offset": offset
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/datasets/<path:dataset_id>", methods=["GET"])
+def get_dataset(dataset_id):
+    """Get a specific dataset with its fields."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get dataset
+                cur.execute("""
+                    SELECT
+                        d.dataset_id,
+                        d."name",
+                        d.namespace_id,
+                        n.namespace_uri,
+                        d.description,
+                        d.source_type,
+                        d.created_at,
+                        d.updated_at
+                    FROM OL_DATASET d
+                    JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                    WHERE d.dataset_id = ?
+                """, [dataset_id])
+
+                row = cur.fetchone()
+                if not row:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                dataset = {
+                    "id": row[0].strip() if row[0] else "",
+                    "name": row[1].strip() if row[1] else "",
+                    "namespace": row[3].strip() if row[3] else "",  # namespace_uri
+                    "description": row[4].strip() if row[4] else "",
+                    "sourceType": row[5].strip() if row[5] else None,
+                    "createdAt": row[6].isoformat() if row[6] else None,
+                    "updatedAt": row[7].isoformat() if row[7] else None
+                }
+
+                # Get fields
+                cur.execute("""
+                    SELECT
+                        field_id,
+                        field_name,
+                        field_type,
+                        field_description,
+                        ordinal_position,
+                        nullable
+                    FROM OL_DATASET_FIELD
+                    WHERE dataset_id = ?
+                    ORDER BY ordinal_position, field_name
+                """, [dataset_id])
+
+                fields = [
+                    {
+                        "id": row[0].strip() if row[0] else "",
+                        "name": row[1].strip() if row[1] else "",
+                        "type": row[2].strip() if row[2] else None,
+                        "description": row[3].strip() if row[3] else None,
+                        "ordinalPosition": row[4] if row[4] is not None else 0,
+                        "nullable": row[5] == 'Y' if row[5] else True
+                    }
+                    for row in cur.fetchall()
+                ]
+
+                dataset["fields"] = fields
+
+        return jsonify(dataset)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/datasets/search", methods=["GET"])
+def search_datasets():
+    """Search for datasets."""
+    query = request.args.get("q", "")
+    limit = int(request.args.get("limit", "50"))
+
+    if not query or len(query) < 2:
+        return jsonify({"error": "Query must be at least 2 characters"}), 400
+
+    try:
+        search_pattern = f"%{query}%"
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"""
+                    SELECT TOP {limit}
+                        d.dataset_id,
+                        d."name",
+                        d.namespace_id,
+                        n.namespace_uri,
+                        d.description,
+                        d.source_type,
+                        d.created_at,
+                        d.updated_at
+                    FROM OL_DATASET d
+                    JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                    WHERE d."name" LIKE ?
+                       OR d.description LIKE ?
+                    ORDER BY d."name"
+                """, [search_pattern, search_pattern])
+
+                rows = cur.fetchall()
+                datasets = [
+                    {
+                        "id": row[0].strip() if row[0] else "",
+                        "name": row[1].strip() if row[1] else "",
+                        "namespace": row[3].strip() if row[3] else "",  # namespace_uri
+                        "description": row[4].strip() if row[4] else "",
+                        "sourceType": row[5].strip() if row[5] else None,
+                        "createdAt": row[6].isoformat() if row[6] else None,
+                        "updatedAt": row[7].isoformat() if row[7] else None
+                    }
+                    for row in rows
+                ]
+
+        return jsonify({
+            "datasets": datasets,
+            "query": query,
+            "count": len(datasets)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/lineage/<path:dataset_id>/<field_name>", methods=["GET"])
+def get_openlineage_lineage(dataset_id, field_name):
+    """Get lineage graph for a dataset field using OpenLineage tables."""
+    direction = request.args.get("direction", "both")
+    max_depth = int(request.args.get("maxDepth", "5"))
+
+    try:
+        nodes = {}
+        edges = []
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get the dataset name for the requested dataset_id
+                cur.execute("""
+                    SELECT "name", namespace_id
+                    FROM OL_DATASET
+                    WHERE dataset_id = ?
+                """, [dataset_id])
+
+                dataset_row = cur.fetchone()
+                if not dataset_row:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                dataset_name = dataset_row[0].strip() if dataset_row[0] else ""
+
+                # OL_COLUMN_LINEAGE uses string columns (source_dataset, source_field, etc.)
+                # not foreign key references, so we query by dataset name + field name
+
+                # Get upstream lineage if requested
+                if direction in ("upstream", "both"):
+                    cur.execute("""
+                        WITH RECURSIVE upstream_lineage AS (
+                            SELECT
+                                source_namespace,
+                                source_dataset,
+                                source_field,
+                                target_namespace,
+                                target_dataset,
+                                target_field,
+                                transformation_type,
+                                1 as depth,
+                                CAST(target_dataset || '.' || target_field || '->' || source_dataset || '.' || source_field AS VARCHAR(10000)) as path
+                            FROM OL_COLUMN_LINEAGE
+                            WHERE target_dataset = ?
+                              AND UPPER(target_field) = UPPER(?)
+                              AND is_active = 'Y'
+
+                            UNION ALL
+
+                            SELECT
+                                cl.source_namespace,
+                                cl.source_dataset,
+                                cl.source_field,
+                                cl.target_namespace,
+                                cl.target_dataset,
+                                cl.target_field,
+                                cl.transformation_type,
+                                ul.depth + 1,
+                                ul.path || '->' || cl.source_dataset || '.' || cl.source_field
+                            FROM OL_COLUMN_LINEAGE cl
+                            INNER JOIN upstream_lineage ul
+                                ON cl.target_dataset = ul.source_dataset
+                                AND cl.target_field = ul.source_field
+                            WHERE cl.is_active = 'Y'
+                              AND ul.depth < ?
+                              AND POSITION(cl.source_dataset || '.' || cl.source_field IN ul.path) = 0
+                        )
+                        SELECT DISTINCT
+                            source_namespace,
+                            source_dataset,
+                            source_field,
+                            target_namespace,
+                            target_dataset,
+                            target_field,
+                            transformation_type
+                        FROM upstream_lineage
+                    """, [dataset_name, field_name, max_depth])
+
+                    for row in cur.fetchall():
+                        source_key = f"{row[1]}.{row[2]}"
+                        target_key = f"{row[4]}.{row[5]}"
+
+                        # Add source node
+                        if source_key not in nodes:
+                            nodes[source_key] = {
+                                "id": source_key,
+                                "type": "field",
+                                "name": row[2].strip() if row[2] else "",
+                                "dataset": {
+                                    "name": row[1].strip() if row[1] else "",
+                                    "namespace": row[0].strip() if row[0] else ""
+                                }
+                            }
+
+                        # Add target node
+                        if target_key not in nodes:
+                            nodes[target_key] = {
+                                "id": target_key,
+                                "type": "field",
+                                "name": row[5].strip() if row[5] else "",
+                                "dataset": {
+                                    "name": row[4].strip() if row[4] else "",
+                                    "namespace": row[3].strip() if row[3] else ""
+                                }
+                            }
+
+                        # Add edge
+                        edge_id = f"{source_key}->{target_key}"
+                        if not any(e["id"] == edge_id for e in edges):
+                            edges.append({
+                                "id": edge_id,
+                                "source": source_key,
+                                "target": target_key,
+                                "transformationType": row[6].strip() if row[6] else "DIRECT"
+                            })
+
+                # Get downstream lineage if requested
+                if direction in ("downstream", "both"):
+                    cur.execute("""
+                        WITH RECURSIVE downstream_lineage AS (
+                            SELECT
+                                source_namespace,
+                                source_dataset,
+                                source_field,
+                                target_namespace,
+                                target_dataset,
+                                target_field,
+                                transformation_type,
+                                1 as depth,
+                                CAST(source_dataset || '.' || source_field || '->' || target_dataset || '.' || target_field AS VARCHAR(10000)) as path
+                            FROM OL_COLUMN_LINEAGE
+                            WHERE source_dataset = ?
+                              AND UPPER(source_field) = UPPER(?)
+                              AND is_active = 'Y'
+
+                            UNION ALL
+
+                            SELECT
+                                cl.source_namespace,
+                                cl.source_dataset,
+                                cl.source_field,
+                                cl.target_namespace,
+                                cl.target_dataset,
+                                cl.target_field,
+                                cl.transformation_type,
+                                dl.depth + 1,
+                                dl.path || '->' || cl.target_dataset || '.' || cl.target_field
+                            FROM OL_COLUMN_LINEAGE cl
+                            INNER JOIN downstream_lineage dl
+                                ON cl.source_dataset = dl.target_dataset
+                                AND cl.source_field = dl.target_field
+                            WHERE cl.is_active = 'Y'
+                              AND dl.depth < ?
+                              AND POSITION(cl.target_dataset || '.' || cl.target_field IN dl.path) = 0
+                        )
+                        SELECT DISTINCT
+                            source_namespace,
+                            source_dataset,
+                            source_field,
+                            target_namespace,
+                            target_dataset,
+                            target_field,
+                            transformation_type
+                        FROM downstream_lineage
+                    """, [dataset_name, field_name, max_depth])
+
+                    for row in cur.fetchall():
+                        source_key = f"{row[1]}.{row[2]}"
+                        target_key = f"{row[4]}.{row[5]}"
+
+                        # Add source node
+                        if source_key not in nodes:
+                            nodes[source_key] = {
+                                "id": source_key,
+                                "type": "field",
+                                "name": row[2].strip() if row[2] else "",
+                                "dataset": {
+                                    "name": row[1].strip() if row[1] else "",
+                                    "namespace": row[0].strip() if row[0] else ""
+                                }
+                            }
+
+                        # Add target node
+                        if target_key not in nodes:
+                            nodes[target_key] = {
+                                "id": target_key,
+                                "type": "field",
+                                "name": row[5].strip() if row[5] else "",
+                                "dataset": {
+                                    "name": row[4].strip() if row[4] else "",
+                                    "namespace": row[3].strip() if row[3] else ""
+                                }
+                            }
+
+                        # Add edge
+                        edge_id = f"{source_key}->{target_key}"
+                        if not any(e["id"] == edge_id for e in edges):
+                            edges.append({
+                                "id": edge_id,
+                                "source": source_key,
+                                "target": target_key,
+                                "transformationType": row[6].strip() if row[6] else "DIRECT"
+                            })
+
+                # Add the root field node if not already present
+                root_key = f"{dataset_name}.{field_name}"
+                if root_key not in nodes:
+                    # Get namespace for this dataset
+                    cur.execute("""
+                        SELECT n.namespace_uri
+                        FROM OL_DATASET d
+                        JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                        WHERE d.dataset_id = ?
+                    """, [dataset_id])
+
+                    ns_row = cur.fetchone()
+                    namespace = ns_row[0].strip() if ns_row and ns_row[0] else ""
+
+                    nodes[root_key] = {
+                        "id": root_key,
+                        "type": "field",
+                        "name": field_name,
+                        "dataset": {
+                            "name": dataset_name,
+                            "namespace": namespace
+                        }
+                    }
+
+        return jsonify({
+            "datasetId": dataset_id,
+            "fieldName": field_name,
+            "graph": {
+                "nodes": list(nodes.values()),
+                "edges": edges
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/v2/openlineage/lineage/table/<path:dataset_id>", methods=["GET"])
+def get_openlineage_table_lineage(dataset_id):
+    """Get lineage graph for all fields in a dataset (table-level lineage)."""
+    direction = request.args.get("direction", "both")
+    max_depth = int(request.args.get("maxDepth", "5"))
+
+    try:
+        nodes = {}
+        edges = []
+
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Get the dataset name and namespace
+                cur.execute("""
+                    SELECT d."name", d.namespace_id, n.namespace_uri
+                    FROM OL_DATASET d
+                    JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                    WHERE d.dataset_id = ?
+                """, [dataset_id])
+
+                dataset_row = cur.fetchone()
+                if not dataset_row:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                dataset_name = dataset_row[0].strip() if dataset_row[0] else ""
+                namespace_uri = dataset_row[2].strip() if dataset_row[2] else ""
+
+                # Get all fields for this dataset
+                cur.execute("""
+                    SELECT field_name
+                    FROM OL_DATASET_FIELD
+                    WHERE dataset_id = ?
+                    ORDER BY ordinal_position
+                """, [dataset_id])
+
+                fields = [row[0].strip() if row[0] else "" for row in cur.fetchall()]
+
+                if not fields:
+                    return jsonify({"error": "No fields found for dataset"}), 404
+
+                # For each field, get its lineage
+                for field_name in fields:
+                    # Add the field as a root node
+                    root_key = f"{dataset_name}.{field_name}"
+                    if root_key not in nodes:
+                        nodes[root_key] = {
+                            "id": root_key,
+                            "type": "field",
+                            "name": field_name,
+                            "dataset": {
+                                "name": dataset_name,
+                                "namespace": namespace_uri
+                            }
+                        }
+
+                    # Get upstream lineage if requested
+                    if direction in ("upstream", "both"):
+                        cur.execute("""
+                            WITH RECURSIVE upstream_lineage AS (
+                                SELECT
+                                    source_namespace,
+                                    source_dataset,
+                                    source_field,
+                                    target_namespace,
+                                    target_dataset,
+                                    target_field,
+                                    transformation_type,
+                                    1 as depth,
+                                    CAST(target_dataset || '.' || target_field || '->' || source_dataset || '.' || source_field AS VARCHAR(10000)) as path
+                                FROM OL_COLUMN_LINEAGE
+                                WHERE target_dataset = ?
+                                  AND UPPER(target_field) = UPPER(?)
+                                  AND is_active = 'Y'
+
+                                UNION ALL
+
+                                SELECT
+                                    cl.source_namespace,
+                                    cl.source_dataset,
+                                    cl.source_field,
+                                    cl.target_namespace,
+                                    cl.target_dataset,
+                                    cl.target_field,
+                                    cl.transformation_type,
+                                    ul.depth + 1,
+                                    ul.path || '->' || cl.source_dataset || '.' || cl.source_field
+                                FROM OL_COLUMN_LINEAGE cl
+                                INNER JOIN upstream_lineage ul
+                                    ON cl.target_dataset = ul.source_dataset
+                                    AND cl.target_field = ul.source_field
+                                WHERE cl.is_active = 'Y'
+                                  AND ul.depth < ?
+                                  AND POSITION(cl.source_dataset || '.' || cl.source_field IN ul.path) = 0
+                            )
+                            SELECT DISTINCT
+                                source_namespace,
+                                source_dataset,
+                                source_field,
+                                target_namespace,
+                                target_dataset,
+                                target_field,
+                                transformation_type
+                            FROM upstream_lineage
+                        """, [dataset_name, field_name, max_depth])
+
+                        for row in cur.fetchall():
+                            source_key = f"{row[1]}.{row[2]}"
+                            target_key = f"{row[4]}.{row[5]}"
+
+                            # Add source node
+                            if source_key not in nodes:
+                                nodes[source_key] = {
+                                    "id": source_key,
+                                    "type": "field",
+                                    "name": row[2].strip() if row[2] else "",
+                                    "dataset": {
+                                        "name": row[1].strip() if row[1] else "",
+                                        "namespace": row[0].strip() if row[0] else ""
+                                    }
+                                }
+
+                            # Add target node
+                            if target_key not in nodes:
+                                nodes[target_key] = {
+                                    "id": target_key,
+                                    "type": "field",
+                                    "name": row[5].strip() if row[5] else "",
+                                    "dataset": {
+                                        "name": row[4].strip() if row[4] else "",
+                                        "namespace": row[3].strip() if row[3] else ""
+                                    }
+                                }
+
+                            # Add edge
+                            edge_id = f"{source_key}->{target_key}"
+                            if not any(e["id"] == edge_id for e in edges):
+                                edges.append({
+                                    "id": edge_id,
+                                    "source": source_key,
+                                    "target": target_key,
+                                    "transformationType": row[6].strip() if row[6] else "DIRECT"
+                                })
+
+                    # Get downstream lineage if requested
+                    if direction in ("downstream", "both"):
+                        cur.execute("""
+                            WITH RECURSIVE downstream_lineage AS (
+                                SELECT
+                                    source_namespace,
+                                    source_dataset,
+                                    source_field,
+                                    target_namespace,
+                                    target_dataset,
+                                    target_field,
+                                    transformation_type,
+                                    1 as depth,
+                                    CAST(source_dataset || '.' || source_field || '->' || target_dataset || '.' || target_field AS VARCHAR(10000)) as path
+                                FROM OL_COLUMN_LINEAGE
+                                WHERE source_dataset = ?
+                                  AND UPPER(source_field) = UPPER(?)
+                                  AND is_active = 'Y'
+
+                                UNION ALL
+
+                                SELECT
+                                    cl.source_namespace,
+                                    cl.source_dataset,
+                                    cl.source_field,
+                                    cl.target_namespace,
+                                    cl.target_dataset,
+                                    cl.target_field,
+                                    cl.transformation_type,
+                                    dl.depth + 1,
+                                    dl.path || '->' || cl.target_dataset || '.' || cl.target_field
+                                FROM OL_COLUMN_LINEAGE cl
+                                INNER JOIN downstream_lineage dl
+                                    ON cl.source_dataset = dl.target_dataset
+                                    AND cl.source_field = dl.target_field
+                                WHERE cl.is_active = 'Y'
+                                  AND dl.depth < ?
+                                  AND POSITION(cl.target_dataset || '.' || cl.target_field IN dl.path) = 0
+                            )
+                            SELECT DISTINCT
+                                source_namespace,
+                                source_dataset,
+                                source_field,
+                                target_namespace,
+                                target_dataset,
+                                target_field,
+                                transformation_type
+                            FROM downstream_lineage
+                        """, [dataset_name, field_name, max_depth])
+
+                        for row in cur.fetchall():
+                            source_key = f"{row[1]}.{row[2]}"
+                            target_key = f"{row[4]}.{row[5]}"
+
+                            # Add source node
+                            if source_key not in nodes:
+                                nodes[source_key] = {
+                                    "id": source_key,
+                                    "type": "field",
+                                    "name": row[2].strip() if row[2] else "",
+                                    "dataset": {
+                                        "name": row[1].strip() if row[1] else "",
+                                        "namespace": row[0].strip() if row[0] else ""
+                                    }
+                                }
+
+                            # Add target node
+                            if target_key not in nodes:
+                                nodes[target_key] = {
+                                    "id": target_key,
+                                    "type": "field",
+                                    "name": row[5].strip() if row[5] else "",
+                                    "dataset": {
+                                        "name": row[4].strip() if row[4] else "",
+                                        "namespace": row[3].strip() if row[3] else ""
+                                    }
+                                }
+
+                            # Add edge
+                            edge_id = f"{source_key}->{target_key}"
+                            if not any(e["id"] == edge_id for e in edges):
+                                edges.append({
+                                    "id": edge_id,
+                                    "source": source_key,
+                                    "target": target_key,
+                                    "transformationType": row[6].strip() if row[6] else "DIRECT"
+                                })
+
+        return jsonify({
+            "datasetId": dataset_id,
+            "graph": {
+                "nodes": list(nodes.values()),
+                "edges": edges
+            }
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("API_PORT") or os.environ.get("PORT", "8080"))
     print(f"Starting Python Lineage API on port {port}")

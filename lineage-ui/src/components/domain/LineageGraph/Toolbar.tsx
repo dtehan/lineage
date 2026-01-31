@@ -5,10 +5,13 @@ import { Tooltip } from '../../common/Tooltip';
 export type ViewMode = 'graph' | 'table';
 export type Direction = 'upstream' | 'downstream' | 'both';
 export type AssetTypeFilter = 'table' | 'view' | 'materialized_view';
+export type ScopeMode = 'column' | 'table';
 
 export interface ToolbarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  scopeMode?: ScopeMode;
+  onScopeModeChange?: (mode: ScopeMode) => void;
   direction: Direction;
   onDirectionChange: (direction: Direction) => void;
   depth: number;
@@ -28,6 +31,8 @@ export interface ToolbarProps {
 export const Toolbar: React.FC<ToolbarProps> = ({
   viewMode,
   onViewModeChange,
+  scopeMode = 'column',
+  onScopeModeChange,
   direction,
   onDirectionChange,
   depth,
@@ -90,6 +95,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
     ? 'bg-blue-500 text-white'
     : 'bg-white text-slate-600 hover:bg-slate-50';
 
+  const columnScopeButtonClass = scopeMode === 'column'
+    ? 'bg-green-500 text-white'
+    : 'bg-white text-slate-600 hover:bg-slate-50';
+
+  const tableScopeButtonClass = scopeMode === 'table'
+    ? 'bg-green-500 text-white'
+    : 'bg-white text-slate-600 hover:bg-slate-50';
+
   return (
     <div
       data-testid="lineage-toolbar"
@@ -116,6 +129,28 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           </button>
         </div>
       </Tooltip>
+
+      {/* Scope Mode Toggle */}
+      {onScopeModeChange && (
+        <Tooltip content="Show lineage for a single column or all columns in the table" position="bottom">
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+            <button
+              onClick={() => onScopeModeChange('column')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${columnScopeButtonClass}`}
+              aria-pressed={scopeMode === 'column'}
+            >
+              Single Column
+            </button>
+            <button
+              onClick={() => onScopeModeChange('table')}
+              className={`px-3 py-1.5 text-sm font-medium transition-colors ${tableScopeButtonClass}`}
+              aria-pressed={scopeMode === 'table'}
+            >
+              All Columns
+            </button>
+          </div>
+        </Tooltip>
+      )}
 
       {/* Search */}
       <div className="flex-1 max-w-xs relative">

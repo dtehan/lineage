@@ -20,7 +20,7 @@ export const apiClient = axios.create({
 
 // Separate client for v2 API endpoints (OpenLineage-aligned)
 const apiClientV2 = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080',
+  baseURL: '', // Use relative URLs to work with Vite proxy
   timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
@@ -74,6 +74,18 @@ export const openLineageApi = {
   ): Promise<OpenLineageLineageResponse> {
     const response = await apiClientV2.get<OpenLineageLineageResponse>(
       `/api/v2/openlineage/lineage/${encodeURIComponent(datasetId)}/${encodeURIComponent(fieldName)}`,
+      { params }
+    );
+    return response.data;
+  },
+
+  // Table-level lineage (all columns)
+  async getTableLineageGraph(
+    datasetId: string,
+    params?: LineageQueryParams
+  ): Promise<OpenLineageLineageResponse> {
+    const response = await apiClientV2.get<OpenLineageLineageResponse>(
+      `/api/v2/openlineage/lineage/table/${encodeURIComponent(datasetId)}`,
       { params }
     );
     return response.data;

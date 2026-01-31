@@ -1,28 +1,26 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Network, Eye, Layers } from 'lucide-react';
-import { useDatabases, useTables, useColumns } from '../../../api/hooks/useAssets';
-import { useLineageStore } from '../../../stores/useLineageStore';
+import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe, GitBranch } from 'lucide-react';
+import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
-import { Pagination } from '../../common/Pagination';
 import { Tooltip } from '../../common/Tooltip';
-import type { Table } from '../../../types';
+import type { OpenLineageDataset } from '../../../types/openlineage';
 
-// Helper to determine asset type from tableKind
-const getAssetTypeFromTableKind = (tableKind: string): 'table' | 'view' | 'materialized_view' => {
-  switch (tableKind) {
-    case 'V':
-      return 'view';
-    case 'M':
+// Helper to determine asset type from sourceType
+const getAssetTypeFromSourceType = (sourceType?: string): 'table' | 'view' | 'materialized_view' => {
+  const type = sourceType?.toLowerCase() || '';
+  if (type.includes('view')) {
+    if (type.includes('materialized')) {
       return 'materialized_view';
-    default:
-      return 'table';
+    }
+    return 'view';
   }
+  return 'table';
 };
 
 // Asset type icon component with distinct styling
-const AssetTypeIcon = ({ tableKind }: { tableKind: string }) => {
-  const assetType = getAssetTypeFromTableKind(tableKind);
+const AssetTypeIcon = ({ sourceType }: { sourceType?: string }) => {
+  const assetType = getAssetTypeFromSourceType(sourceType);
   switch (assetType) {
     case 'view':
       return (
@@ -43,21 +41,49 @@ const AssetTypeIcon = ({ tableKind }: { tableKind: string }) => {
   }
 };
 
-// Get tooltip text for asset type
-const getAssetTypeTooltip = (tableKind: string, tableName: string, databaseName: string): string => {
-  const assetType = getAssetTypeFromTableKind(tableKind);
-  const typeLabel = assetType === 'view' ? 'View' : assetType === 'materialized_view' ? 'Materialized View' : 'Table';
-  return `View lineage for ${typeLabel.toLowerCase()} ${databaseName}.${tableName}`;
+// Parse database name from dataset name (e.g., "demo_user.customers" -> "demo_user")
+const parseDatabaseFromDatasetName = (datasetName: string): string => {
+  const parts = datasetName.split('.');
+  return parts.length > 1 ? parts[0] : datasetName;
+};
+
+// Parse table name from dataset name (e.g., "demo_user.customers" -> "customers")
+const parseTableFromDatasetName = (datasetName: string): string => {
+  const parts = datasetName.split('.');
+  return parts.length > 1 ? parts.slice(1).join('.') : datasetName;
 };
 
 export function AssetBrowser() {
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
-  const [databasePagination, setDatabasePagination] = useState({ limit: 100, offset: 0 });
-  const navigate = useNavigate();
+  const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
 
-  const { data: databasesResult, isLoading } = useDatabases(databasePagination);
-  const databases = databasesResult?.data;
+  const { data: namespacesData, isLoading: isLoadingNamespaces } = useOpenLineageNamespaces();
+  const namespaces = namespacesData?.namespaces || [];
+
+  // Get the first namespace (usually there's only one Teradata instance)
+  const defaultNamespace = namespaces.length > 0 ? namespaces[0] : null;
+
+  // Fetch datasets from the default namespace
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useOpenLineageDatasets(
+    defaultNamespace?.id || '',
+    { limit: 1000, offset: 0 }
+  );
+  const datasets = datasetsData?.datasets || [];
+
+  // Group datasets by database name (extracted from dataset name)
+  const datasetsByDatabase = useMemo(() => {
+    const grouped: Record<string, OpenLineageDataset[]> = {};
+    datasets.forEach((dataset) => {
+      const dbName = parseDatabaseFromDatasetName(dataset.name);
+      if (!grouped[dbName]) {
+        grouped[dbName] = [];
+      }
+      grouped[dbName].push(dataset);
+    });
+    return grouped;
+  }, [datasets]);
+
+  const databaseNames = Object.keys(datasetsByDatabase).sort();
 
   const toggleDatabase = (dbName: string) => {
     setExpandedDatabases((prev) => {
@@ -71,23 +97,19 @@ export function AssetBrowser() {
     });
   };
 
-  const toggleTable = (tableKey: string) => {
-    setExpandedTables((prev) => {
+  const toggleDataset = (datasetId: string) => {
+    setExpandedDatasets((prev) => {
       const next = new Set(prev);
-      if (next.has(tableKey)) {
-        next.delete(tableKey);
+      if (next.has(datasetId)) {
+        next.delete(datasetId);
       } else {
-        next.add(tableKey);
+        next.add(datasetId);
       }
       return next;
     });
   };
 
-  const handleViewAllDatabases = () => {
-    navigate('/lineage/all-databases');
-  };
-
-  if (isLoading) {
+  if (isLoadingNamespaces || isLoadingDatasets) {
     return (
       <div className="p-4">
         <LoadingSpinner />
@@ -95,69 +117,58 @@ export function AssetBrowser() {
     );
   }
 
+  if (!defaultNamespace) {
+    return (
+      <div className="p-4 text-slate-500">
+        <p className="text-sm">No namespaces found</p>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full overflow-auto">
       <div className="p-2">
-        {/* All Databases Lineage View Button */}
-        <div className="mb-3">
-          <Tooltip content="View lineage across all databases" position="right">
-            <button
-              onClick={handleViewAllDatabases}
-              className="flex items-center w-full px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors"
-              data-testid="all-databases-lineage-btn"
-            >
-              <Network className="w-4 h-4 mr-2" />
-              View All Databases Lineage
-            </button>
-          </Tooltip>
-        </div>
+        {/* Namespace header (if multiple namespaces exist) */}
+        {namespaces.length > 1 && (
+          <div className="mb-3 p-2 bg-slate-50 rounded border border-slate-200">
+            <div className="flex items-center">
+              <Globe className="w-4 h-4 mr-2 text-slate-500" />
+              <span className="text-xs font-medium text-slate-600">
+                Namespace: {defaultNamespace.uri}
+              </span>
+            </div>
+          </div>
+        )}
 
         <h2 className="px-2 py-1 text-sm font-semibold text-slate-700">Databases</h2>
         <ul className="space-y-1">
-          {databases?.filter((db) => db.name !== 'All').map((db) => (
+          {databaseNames.map((dbName) => (
             <DatabaseItem
-              key={db.id}
-              database={db}
-              isExpanded={expandedDatabases.has(db.name)}
-              onToggle={() => toggleDatabase(db.name)}
-              expandedTables={expandedTables}
-              onToggleTable={toggleTable}
+              key={dbName}
+              databaseName={dbName}
+              datasets={datasetsByDatabase[dbName]}
+              isExpanded={expandedDatabases.has(dbName)}
+              onToggle={() => toggleDatabase(dbName)}
+              expandedDatasets={expandedDatasets}
+              onToggleDataset={toggleDataset}
             />
           ))}
         </ul>
-        {databasesResult?.pagination && databasesResult.pagination.total_count > databasePagination.limit && (
-          <Pagination
-            totalCount={databasesResult.pagination.total_count}
-            limit={databasePagination.limit}
-            offset={databasePagination.offset}
-            onPageChange={(offset) => setDatabasePagination(prev => ({ ...prev, offset }))}
-            className="mt-2 px-2"
-            data-testid="database-pagination"
-          />
-        )}
       </div>
     </div>
   );
 }
 
 interface DatabaseItemProps {
-  database: { id: string; name: string };
+  databaseName: string;
+  datasets: OpenLineageDataset[];
   isExpanded: boolean;
   onToggle: () => void;
-  expandedTables: Set<string>;
-  onToggleTable: (key: string) => void;
+  expandedDatasets: Set<string>;
+  onToggleDataset: (datasetId: string) => void;
 }
 
-function DatabaseItem({ database, isExpanded, onToggle, expandedTables, onToggleTable }: DatabaseItemProps) {
-  const { data: tablesResult } = useTables(isExpanded ? database.name : '');
-  const tables = tablesResult?.data;
-  const navigate = useNavigate();
-
-  const handleViewDatabaseLineage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigate(`/lineage/database/${encodeURIComponent(database.name)}`);
-  };
-
+function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDatasets, onToggleDataset }: DatabaseItemProps) {
   return (
     <li>
       <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100 group">
@@ -173,57 +184,41 @@ function DatabaseItem({ database, isExpanded, onToggle, expandedTables, onToggle
           <Tooltip content="Database" position="right">
             <Database className="w-4 h-4 mr-2 text-blue-500" />
           </Tooltip>
-          <span className="text-sm text-slate-700">{database.name}</span>
+          <span className="text-sm text-slate-700">{databaseName}</span>
+          <span className="ml-2 text-xs text-slate-400">({datasets.length})</span>
         </button>
-        <Tooltip content={`View all lineage for ${database.name}`} position="left">
-          <button
-            onClick={handleViewDatabaseLineage}
-            className="p-1 opacity-0 group-hover:opacity-100 hover:bg-slate-200 rounded transition-opacity"
-            aria-label={`View lineage for database ${database.name}`}
-            data-testid={`database-lineage-btn-${database.name}`}
-          >
-            <Eye className="w-4 h-4 text-blue-600" />
-          </button>
-        </Tooltip>
       </div>
-      {isExpanded && tables && (
+      {isExpanded && (
         <ul className="ml-4 mt-1 space-y-1">
-          {tables.map((table) => {
-            const tableKey = `${database.name}.${table.tableName}`;
-            return (
-              <TableItem
-                key={table.id}
-                databaseName={database.name}
-                table={table}
-                isExpanded={expandedTables.has(tableKey)}
-                onToggle={() => onToggleTable(tableKey)}
-              />
-            );
-          })}
+          {datasets.map((dataset) => (
+            <DatasetItem
+              key={dataset.id}
+              dataset={dataset}
+              isExpanded={expandedDatasets.has(dataset.id)}
+              onToggle={() => onToggleDataset(dataset.id)}
+            />
+          ))}
         </ul>
       )}
     </li>
   );
 }
 
-interface TableItemProps {
-  databaseName: string;
-  table: Table;
+interface DatasetItemProps {
+  dataset: OpenLineageDataset;
   isExpanded: boolean;
   onToggle: () => void;
 }
 
-function TableItem({ databaseName, table, isExpanded, onToggle }: TableItemProps) {
-  const { data: columnsResult } = useColumns(isExpanded ? databaseName : '', isExpanded ? table.tableName : '');
-  const columns = columnsResult?.data;
-  const { setSelectedAssetId } = useLineageStore();
+function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
+  // Fetch dataset with fields when expanded
+  const { data: datasetWithFields } = useOpenLineageDataset(isExpanded ? dataset.id : '', {
+    enabled: isExpanded,
+  });
+  const fields = datasetWithFields?.fields || [];
   const navigate = useNavigate();
 
-  // Navigate to table lineage view
-  const handleTableClick = () => {
-    // Use the table's asset ID to navigate to lineage page
-    navigate(`/lineage/${encodeURIComponent(table.id)}`);
-  };
+  const tableName = parseTableFromDatasetName(dataset.name);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
   const handleChevronClick = (e: React.MouseEvent) => {
@@ -231,13 +226,27 @@ function TableItem({ databaseName, table, isExpanded, onToggle }: TableItemProps
     onToggle();
   };
 
+  // Navigate to field lineage when clicking a field
+  const handleFieldClick = (fieldName: string) => {
+    // Navigate to lineage view for this field
+    navigate(`/lineage/${encodeURIComponent(dataset.id)}/${encodeURIComponent(fieldName)}`);
+  };
+
+  // Navigate to table lineage (all columns) - use first field or a placeholder
+  const handleTableLineageClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    // Use first field if available, otherwise use a placeholder
+    const firstField = fields.length > 0 ? fields[0].name : '_table_view';
+    navigate(`/lineage/${encodeURIComponent(dataset.id)}/${encodeURIComponent(firstField)}?mode=table`);
+  };
+
   return (
     <li>
-      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100">
+      <div className="flex items-center w-full px-2 py-1 rounded hover:bg-slate-100 group">
         <button
           onClick={handleChevronClick}
           className="p-0.5 hover:bg-slate-200 rounded"
-          aria-label={isExpanded ? 'Collapse table' : 'Expand table'}
+          aria-label={isExpanded ? 'Collapse dataset' : 'Expand dataset'}
         >
           {isExpanded ? (
             <ChevronDown className="w-4 h-4 text-slate-500" />
@@ -245,34 +254,47 @@ function TableItem({ databaseName, table, isExpanded, onToggle }: TableItemProps
             <ChevronRight className="w-4 h-4 text-slate-500" />
           )}
         </button>
-        <Tooltip content={getAssetTypeTooltip(table.tableKind, table.tableName, databaseName)} position="right">
+        <div className="flex items-center flex-1 ml-1">
+          <AssetTypeIcon sourceType={dataset.sourceType} />
+          <span className="text-sm text-slate-700">{tableName}</span>
+        </div>
+        {/* View Table Lineage Button - shown on hover */}
+        <Tooltip content="View lineage for all columns in this table" position="right">
           <button
-            onClick={handleTableClick}
-            className="flex items-center flex-1 ml-1 text-left hover:text-blue-600"
+            onClick={handleTableLineageClick}
+            className="opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-all"
+            aria-label="View table lineage"
           >
-            <AssetTypeIcon tableKind={table.tableKind} />
-            <span className="text-sm text-slate-700 hover:text-blue-600">{table.tableName}</span>
+            <GitBranch className="w-3.5 h-3.5" />
           </button>
         </Tooltip>
       </div>
-      {isExpanded && columns && (
+      {isExpanded && (
         <ul className="ml-4 mt-1 space-y-1">
-          {columns.map((column) => (
-            <li key={column.id}>
-              <Tooltip content={`View lineage for column ${column.columnName}`} position="right">
-                <button
-                  onClick={() => setSelectedAssetId(column.id)}
-                  className="flex items-center w-full px-2 py-1 text-left rounded hover:bg-blue-50"
-                >
-                  <Columns className="w-4 h-4 mr-2 text-purple-500" />
-                  <span className="text-sm text-slate-700">{column.columnName}</span>
-                  <Tooltip content={`Data type: ${column.columnType}`} position="top">
-                    <span className="ml-2 text-xs text-slate-400 cursor-help">{column.columnType}</span>
+          {fields.length === 0 ? (
+            <li className="px-2 py-1 text-xs text-slate-400 italic">No fields found</li>
+          ) : (
+            fields
+              .sort((a, b) => a.ordinalPosition - b.ordinalPosition)
+              .map((field) => (
+                <li key={field.id}>
+                  <Tooltip content={`View lineage for field ${field.name}`} position="right">
+                    <button
+                      onClick={() => handleFieldClick(field.name)}
+                      className="flex items-center w-full px-2 py-1 text-left rounded hover:bg-blue-50"
+                    >
+                      <Columns className="w-4 h-4 mr-2 text-purple-500" />
+                      <span className="text-sm text-slate-700">{field.name}</span>
+                      {field.type && (
+                        <Tooltip content={`Data type: ${field.type}`} position="top">
+                          <span className="ml-2 text-xs text-slate-400 cursor-help">{field.type}</span>
+                        </Tooltip>
+                      )}
+                    </button>
                   </Tooltip>
-                </button>
-              </Tooltip>
-            </li>
-          ))}
+                </li>
+              ))
+          )}
         </ul>
       )}
     </li>

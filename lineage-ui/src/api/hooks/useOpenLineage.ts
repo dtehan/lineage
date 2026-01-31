@@ -107,6 +107,22 @@ export function useOpenLineageGraph(
   });
 }
 
+// Table-level lineage hook (all columns in a table)
+export function useOpenLineageTableLineage(
+  datasetId: string,
+  direction: LineageDirection = 'both',
+  maxDepth: number = 5,
+  options?: Omit<UseQueryOptions<OpenLineageLineageResponse, Error>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: [...openLineageKeys.all, 'table-lineage', datasetId, direction, maxDepth],
+    queryFn: () =>
+      openLineageApi.getTableLineageGraph(datasetId, { direction, maxDepth }),
+    enabled: !!datasetId,
+    ...options,
+  });
+}
+
 // Simplified hook for common use case
 export function useOpenLineageFieldLineage(
   datasetId: string,

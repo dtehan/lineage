@@ -15,12 +15,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import { useLineage } from '../../../api/hooks/useLineage';
+import { useOpenLineageGraph, useOpenLineageTableLineage } from '../../../api/hooks/useOpenLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
+import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
-import { Toolbar } from './Toolbar';
+import { Toolbar, type ScopeMode } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
@@ -42,14 +43,17 @@ const edgeTypes = {
 };
 
 interface LineageGraphInnerProps {
-  assetId: string;
+  datasetId: string;
+  fieldName: string;
+  tableMode?: boolean; // If true, show lineage for all columns in the table
 }
 
-function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
+function LineageGraphInner({ datasetId, fieldName, tableMode: initialTableMode = false }: LineageGraphInnerProps) {
   const reactFlowInstance = useReactFlow();
   const navigate = useNavigate();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [scopeMode, setScopeMode] = useState<ScopeMode>(initialTableMode ? 'table' : 'column');
 
   const {
     direction,
@@ -80,7 +84,19 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
     setAssetTypeFilter,
   } = useLineageStore();
 
-  const { data, isLoading, error } = useLineage(assetId, { direction, maxDepth });
+  // Determine if we're in table mode based on scope
+  const isTableMode = scopeMode === 'table';
+
+  // Use table lineage hook if in table mode, otherwise use field lineage hook
+  const fieldLineageQuery = useOpenLineageGraph(datasetId, fieldName, direction, maxDepth, {
+    enabled: !isTableMode,
+  });
+  const tableLineageQuery = useOpenLineageTableLineage(datasetId, direction, maxDepth, {
+    enabled: isTableMode,
+  });
+
+  // Use the appropriate query result based on mode
+  const { data, isLoading, error } = isTableMode ? tableLineageQuery : fieldLineageQuery;
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -129,16 +145,23 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
   // Update nodes/edges when data changes
   useEffect(() => {
     if (data?.graph) {
-      layoutGraph(data.graph.nodes, data.graph.edges)
+      // Convert OpenLineage graph to legacy format for layout engine
+      const { nodes: legacyNodes, edges: legacyEdges } = convertOpenLineageGraph(
+        data.graph.nodes,
+        data.graph.edges
+      );
+
+      layoutGraph(legacyNodes, legacyEdges)
         .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
-          setGraph(data.graph.nodes, data.graph.edges);
+          // Store the legacy format in the store for compatibility
+          setGraph(legacyNodes, legacyEdges);
         })
         .catch((error) => {
           console.error('Layout error:', error);
           // Fallback: set nodes without layout
-          setGraph(data.graph.nodes, data.graph.edges);
+          setGraph(legacyNodes, legacyEdges);
         });
     }
   }, [data, setNodes, setEdges, setGraph]);
@@ -286,11 +309,9 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
   // Handle empty lineage data - check edges since root node is always included
   const hasNoLineageData = data && data.graph && data.graph.edges?.length === 0;
   if (hasNoLineageData) {
-    // Parse the assetId to show a friendly name (format: database.table.column or database.table)
-    const assetParts = assetId.split('.');
-    const assetName = assetParts.length >= 2
-      ? `${assetParts[0]}.${assetParts[1]}${assetParts[2] ? '.' + assetParts[2] : ''}`
-      : assetId;
+    const displayText = isTableMode
+      ? `table ${datasetId}`
+      : `${datasetId}.${fieldName}`;
 
     return (
       <div className="flex flex-col items-center justify-center h-full text-slate-500">
@@ -310,10 +331,12 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
         </svg>
         <h3 className="text-lg font-medium text-slate-700 mb-2">No Lineage Data Available</h3>
         <p className="text-sm text-slate-500 text-center max-w-md">
-          No lineage relationships have been discovered for <span className="font-mono text-slate-600">{assetName}</span>.
+          No lineage relationships have been discovered for <span className="font-mono text-slate-600">{displayText}</span>.
         </p>
         <p className="text-sm text-slate-400 mt-2 text-center max-w-md">
-          This column may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet.
+          {isTableMode
+            ? "This table's columns may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet."
+            : "This field may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet."}
         </p>
       </div>
     );
@@ -332,6 +355,8 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
       <Toolbar
         viewMode={viewMode}
         onViewModeChange={setViewMode}
+        scopeMode={scopeMode}
+        onScopeModeChange={setScopeMode}
         direction={direction}
         onDirectionChange={setDirection}
         depth={maxDepth}
@@ -379,10 +404,11 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
             {showMinimap && (
               <MiniMap
                 nodeColor={(node) => {
-                  // Highlight the focused asset
+                  // Highlight the focused field
+                  const fieldId = `${datasetId}.${fieldName}`;
                   if (filteredNodesAndEdges.filteredNodes.some((n) => n.type === 'tableNode' && n.data)) {
                     const tableData = node.data as { columns?: Array<{ id: string }> } | undefined;
-                    if (tableData?.columns?.some((col) => col.id === assetId)) {
+                    if (tableData?.columns?.some((col) => col.id === fieldId)) {
                       return '#3b82f6';
                     }
                   }
@@ -443,13 +469,15 @@ function LineageGraphInner({ assetId }: LineageGraphInnerProps) {
 }
 
 export interface LineageGraphProps {
-  assetId: string;
+  datasetId: string;
+  fieldName: string;
+  tableMode?: boolean; // If true, show lineage for all columns in the table
 }
 
-export function LineageGraph({ assetId }: LineageGraphProps) {
+export function LineageGraph({ datasetId, fieldName, tableMode = false }: LineageGraphProps) {
   return (
     <ReactFlowProvider>
-      <LineageGraphInner assetId={assetId} />
+      <LineageGraphInner datasetId={datasetId} fieldName={fieldName} tableMode={tableMode} />
     </ReactFlowProvider>
   );
 }
