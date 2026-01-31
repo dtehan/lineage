@@ -58,12 +58,14 @@ Plans:
   3. User sees pagination controls on column list when table expanded (always visible)
   4. User's page selection persists when navigating away and returning to a list
   5. Pagination resets to page 1 when user switches context (different database or table)
-**Plans**: 3 plans
+  6. Column list scrolls table header into view when changing pagination pages (UAT gap closure)
+**Plans**: 4 plans
 
 Plans:
 - [x] 10-01-PLAN.md - Database and table list pagination integration
 - [x] 10-02-PLAN.md - Column list pagination and test mock updates
 - [x] 10-03-PLAN.md - Pagination test coverage
+- [ ] 10-04-PLAN.md - Gap closure: scroll-into-view on pagination changes
 
 ### Phase 11: Search & Graph Integration
 **Goal**: Users can navigate paginated search results and lineage views
@@ -104,7 +106,7 @@ Phases execute in numeric order: 9 → 10 → 11 → 12
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 9. Pagination Component | v2.1 | 1/1 | ✓ Complete | 2026-01-31 |
-| 10. Asset Browser Integration | v2.1 | 3/3 | ✓ Complete | 2026-01-31 |
+| 10. Asset Browser Integration | v2.1 | 3/4 | Gap closure | - |
 | 11. Search & Graph Integration | v2.1 | 0/2 | Not started | - |
 | 12. Testing | v2.1 | 0/2 | Not started | - |
 
