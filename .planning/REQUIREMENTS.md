@@ -33,8 +33,8 @@ Requirements for enhancing lineage graph usability, correctness, and performance
 
 - [ ] **CORRECT-DATA-01**: Test data includes 3+ cycle patterns (2-node, 3-node, 5-node cycles)
 - [ ] **CORRECT-DATA-02**: Test data includes 3+ diamond patterns (simple, nested, wide diamonds)
-- [ ] **CORRECT-DATA-03**: Test data includes fan-out patterns (1→5, 1→10 targets)
-- [ ] **CORRECT-DATA-04**: Test data includes fan-in patterns (5→1, 10→1 sources)
+- [ ] **CORRECT-DATA-03**: Test data includes fan-out patterns (1->5, 1->10 targets)
+- [ ] **CORRECT-DATA-04**: Test data includes fan-in patterns (5->1, 10->1 sources)
 - [ ] **CORRECT-DATA-05**: Test data includes combined patterns (cycle+diamond, fan-out+fan-in)
 
 ### Graph Correctness - Validation
@@ -102,17 +102,52 @@ Explicitly excluded from v3.0 milestone.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be filled by roadmapper) | | |
+| UX-LOAD-01 | Phase 13 | Pending |
+| UX-LOAD-02 | Phase 13 | Pending |
+| UX-LOAD-03 | Phase 13 | Pending |
+| UX-LOAD-04 | Phase 13 | Pending |
+| UX-VIEW-01 | Phase 14 | Pending |
+| UX-VIEW-02 | Phase 14 | Pending |
+| UX-VIEW-03 | Phase 14 | Pending |
+| UX-VIEW-04 | Phase 14 | Pending |
+| UX-VIEW-05 | Phase 14 | Pending |
+| UX-SPACE-01 | Phase 14 | Pending |
+| UX-SPACE-02 | Phase 14 | Pending |
+| UX-SPACE-03 | Phase 14 | Pending |
+| UX-SPACE-04 | Phase 14 | Pending |
+| CORRECT-DATA-01 | Phase 15 | Pending |
+| CORRECT-DATA-02 | Phase 15 | Pending |
+| CORRECT-DATA-03 | Phase 15 | Pending |
+| CORRECT-DATA-04 | Phase 15 | Pending |
+| CORRECT-DATA-05 | Phase 15 | Pending |
+| CORRECT-VAL-01 | Phase 16 | Pending |
+| CORRECT-VAL-02 | Phase 16 | Pending |
+| CORRECT-VAL-03 | Phase 16 | Pending |
+| CORRECT-VAL-04 | Phase 16 | Pending |
+| CORRECT-VAL-05 | Phase 16 | Pending |
+| CORRECT-VAL-06 | Phase 16 | Pending |
+| CORRECT-VAL-07 | Phase 16 | Pending |
+| PERF-CTE-01 | Phase 17 | Pending |
+| PERF-CTE-02 | Phase 17 | Pending |
+| PERF-CTE-03 | Phase 17 | Pending |
+| PERF-CTE-04 | Phase 17 | Pending |
+| PERF-CTE-05 | Phase 17 | Pending |
+| PERF-RENDER-01 | Phase 18 | Pending |
+| PERF-RENDER-02 | Phase 18 | Pending |
+| PERF-RENDER-03 | Phase 18 | Pending |
+| PERF-RENDER-04 | Phase 18 | Pending |
+| PERF-RENDER-05 | Phase 18 | Pending |
+| PERF-RENDER-06 | Phase 18 | Pending |
 
 **Coverage:**
-- v3.0 requirements: 33 total
-- Mapped to phases: (pending)
-- Unmapped: (pending)
+- v3.0 requirements: 36 total
+- Mapped to phases: 36
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-01-31*
-*Last updated: 2026-01-31 after initial definition*
+*Last updated: 2026-01-31 (traceability added for v3.0)*
