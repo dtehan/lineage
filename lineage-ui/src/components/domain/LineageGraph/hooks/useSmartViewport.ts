@@ -2,8 +2,6 @@ import { useCallback } from 'react';
 import { useReactFlow, type Node } from '@xyflow/react';
 
 interface SmartViewportOptions {
-  /** Padding around the graph (0-1, where 0.1 = 10%) */
-  padding?: number;
   /** Small graph threshold (nodes <= this zoom to readable size) */
   smallGraphThreshold?: number;
   /** Large graph threshold (nodes >= this use smaller zoom) */
@@ -15,12 +13,14 @@ interface SmartViewportOptions {
 }
 
 const DEFAULT_OPTIONS: Required<SmartViewportOptions> = {
-  padding: 0.1,
   smallGraphThreshold: 20,
   largeGraphThreshold: 50,
   smallGraphZoom: 1.0,
   largeGraphZoom: 0.5,
 };
+
+// Fixed padding in pixels (not percentage of graph size)
+const VIEWPORT_PADDING = 20;
 
 /**
  * Hook that provides smart viewport positioning based on graph size.
@@ -53,32 +53,23 @@ export function useSmartViewport(options: SmartViewportOptions = {}) {
 
     // Find the bounds of all nodes
     let minX = Infinity, minY = Infinity;
-    let maxX = -Infinity, maxY = -Infinity;
 
     for (const node of nodes) {
       const x = node.position.x;
       const y = node.position.y;
-      const width = node.measured?.width ?? node.width ?? 280;
-      const height = node.measured?.height ?? node.height ?? 100;
 
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x + width);
-      maxY = Math.max(maxY, y + height);
     }
 
-    // Add padding
-    const paddingX = (maxX - minX) * opts.padding;
-    const paddingY = (maxY - minY) * opts.padding;
-
-    // Position viewport at top-left of graph (with small offset for padding)
+    // Position viewport at top-left of graph with small fixed padding
     // The viewport x/y are in screen coordinates, negative values shift the graph right/down
     setViewport({
-      x: -minX * targetZoom + paddingX,
-      y: -minY * targetZoom + paddingY,
+      x: -minX * targetZoom + VIEWPORT_PADDING,
+      y: -minY * targetZoom + VIEWPORT_PADDING,
       zoom: targetZoom,
     });
-  }, [setViewport, opts.smallGraphThreshold, opts.largeGraphThreshold, opts.smallGraphZoom, opts.largeGraphZoom, opts.padding]);
+  }, [setViewport, opts.smallGraphThreshold, opts.largeGraphThreshold, opts.smallGraphZoom, opts.largeGraphZoom]);
 
   return { applySmartViewport };
 }

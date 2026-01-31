@@ -152,10 +152,10 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   // Apply smart viewport after layout completes
   useEffect(() => {
     if (nodes.length > 0) {
-      // Small delay to ensure React Flow has measured node dimensions
+      // Delay to ensure React Flow has measured node dimensions (longer for large graphs)
       const timeoutId = setTimeout(() => {
         applySmartViewport(nodes);
-      }, 50);
+      }, 150);
       return () => clearTimeout(timeoutId);
     }
   }, [nodes, applySmartViewport]);
