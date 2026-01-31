@@ -222,10 +222,13 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
       isInitialTableMount.current = false;
       return;
     }
-    // scrollIntoView may not exist in test environments (JSDOM)
-    if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
-      databaseHeaderRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    // Small delay to ensure pagination click scroll is complete before we scroll to header
+    setTimeout(() => {
+      // scrollIntoView may not exist in test environments (JSDOM)
+      if (databaseHeaderRef.current && typeof databaseHeaderRef.current.scrollIntoView === 'function') {
+        databaseHeaderRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
   }, [tableOffset]);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
@@ -326,10 +329,13 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
       isInitialFieldMount.current = false;
       return;
     }
-    // scrollIntoView may not exist in test environments (JSDOM)
-    if (datasetRef.current && typeof datasetRef.current.scrollIntoView === 'function') {
-      datasetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+    // Small delay to ensure pagination click scroll is complete before we scroll to header
+    setTimeout(() => {
+      // scrollIntoView may not exist in test environments (JSDOM)
+      if (datasetRef.current && typeof datasetRef.current.scrollIntoView === 'function') {
+        datasetRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 50);
   }, [fieldOffset]);
 
   const navigate = useNavigate();
