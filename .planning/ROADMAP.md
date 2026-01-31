@@ -2,10 +2,10 @@
 
 ## Milestones
 
-- ✅ **v1.0 Production Readiness** - Phases 1-6 (shipped 2026-01-30)
-- ✅ **v2.0 Configuration Improvements** - Phases 7-8 (shipped 2026-01-30)
-- ✅ **v2.1 Pagination UI - Asset Browser** - Phases 9-10 (shipped 2026-01-31)
-- 🚧 **v3.0 Graph Improvements** - Phases 13-18 (in progress)
+- **v1.0 Production Readiness** - Phases 1-6 (shipped 2026-01-30)
+- **v2.0 Configuration Improvements** - Phases 7-8 (shipped 2026-01-30)
+- **v2.1 Pagination UI - Asset Browser** - Phases 9-10 (shipped 2026-01-31)
+- **v3.0 Graph Improvements** - Phases 13-18 (in progress)
 
 ## Phases
 
@@ -30,7 +30,7 @@ See MILESTONES.md for details. 2 phases, 5 plans.
 
 </details>
 
-### 🚧 v3.0 Graph Improvements (In Progress)
+### v3.0 Graph Improvements (In Progress)
 
 **Milestone Goal:** Enhance lineage graph usability, validate correctness for production use, and optimize performance for large graphs.
 
@@ -52,10 +52,11 @@ See MILESTONES.md for details. 2 phases, 5 plans.
   2. User sees text indicating current stage (data fetch, layout calculation, rendering)
   3. Progress indicator appears immediately when lineage request starts and disappears when graph is interactive
   4. Loading experience feels responsive (no frozen states or missing feedback)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 13-01: TBD
+- [ ] 13-01-PLAN.md - Create LoadingProgress component and useLoadingProgress hook
+- [ ] 13-02-PLAN.md - Integrate loading progress into LineageGraph
 
 ### Phase 14: Viewport & Space Optimization
 **Goal**: Users see a well-positioned, compact graph with minimal unnecessary scrolling
@@ -70,8 +71,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — Compact layout configuration (reduce ELK spacing)
-- [ ] 14-02-PLAN.md — Smart viewport positioning (top-left start, size-aware zoom)
+- [ ] 14-01-PLAN.md - Compact layout configuration (reduce ELK spacing)
+- [ ] 14-02-PLAN.md - Smart viewport positioning (top-left start, size-aware zoom)
 
 ### Phase 15: Correctness Test Data
 **Goal**: Database contains diverse test patterns (cycles, diamonds, fan-out/fan-in) for validating graph algorithms
@@ -86,7 +87,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 15-01-PLAN.md — Extend test data with comprehensive graph patterns (cycles, diamonds, fan-out/fan-in, combined)
+- [ ] 15-01-PLAN.md - Extend test data with comprehensive graph patterns (cycles, diamonds, fan-out/fan-in, combined)
 
 ### Phase 16: Correctness Validation
 **Goal**: Graph algorithms correctly handle cycles, diamonds, and fan patterns without duplication or infinite loops
@@ -141,7 +142,7 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 13. Graph Loading Experience | v3.0 | 0/TBD | Not started | - |
+| 13. Graph Loading Experience | v3.0 | 0/2 | Planned | - |
 | 14. Viewport & Space Optimization | v3.0 | 0/2 | Planned | - |
 | 15. Correctness Test Data | v3.0 | 0/1 | Planned | - |
 | 16. Correctness Validation | v3.0 | 0/TBD | Not started | - |
@@ -150,4 +151,4 @@ Phases execute in numeric order: 13 -> 14 -> 15 -> 16 -> 17 -> 18
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-01-31 (Phase 14 planned)*
+*Last updated: 2026-01-31 (Phase 13 planned)*
