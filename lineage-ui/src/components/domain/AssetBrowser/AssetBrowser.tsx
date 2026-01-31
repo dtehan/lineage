@@ -272,11 +272,24 @@ interface DatasetItemProps {
 }
 
 function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
+  const [fieldOffset, setFieldOffset] = useState(0);
+  const FIELD_LIMIT = 100;
+
   // Fetch dataset with fields when expanded
   const { data: datasetWithFields } = useOpenLineageDataset(isExpanded ? dataset.id : '', {
     enabled: isExpanded,
   });
-  const fields = datasetWithFields?.fields || [];
+  const allFields = datasetWithFields?.fields || [];
+
+  // Paginate fields (client-side)
+  const totalFields = allFields.length;
+  const paginatedFields = allFields.slice(fieldOffset, fieldOffset + FIELD_LIMIT);
+
+  // Reset field pagination when dataset changes
+  useEffect(() => {
+    setFieldOffset(0);
+  }, [dataset.id]);
+
   const navigate = useNavigate();
 
   const tableName = parseTableFromDatasetName(dataset.name);
@@ -321,32 +334,45 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
         </button>
       </div>
       {isExpanded && (
-        <ul className="ml-4 mt-1 space-y-1">
-          {fields.length === 0 ? (
-            <li className="px-2 py-1 text-xs text-slate-400 italic">No fields found</li>
-          ) : (
-            fields
-              .sort((a, b) => a.ordinalPosition - b.ordinalPosition)
-              .map((field) => (
-                <li key={field.id}>
-                  <Tooltip content={`View lineage for field ${field.name}`} position="right">
-                    <button
-                      onClick={() => handleFieldClick(field.name)}
-                      className="flex items-center w-full px-2 py-1 text-left rounded hover:bg-blue-50"
-                    >
-                      <Columns className="w-4 h-4 mr-2 text-purple-500" />
-                      <span className="text-sm text-slate-700">{field.name}</span>
-                      {field.type && (
-                        <Tooltip content={`Data type: ${field.type}`} position="top">
-                          <span className="ml-2 text-xs text-slate-400 cursor-help">{field.type}</span>
-                        </Tooltip>
-                      )}
-                    </button>
-                  </Tooltip>
-                </li>
-              ))
-          )}
-        </ul>
+        <>
+          <ul className="ml-4 mt-1 space-y-1">
+            {paginatedFields.length === 0 ? (
+              <li className="px-2 py-1 text-xs text-slate-400 italic">No fields found</li>
+            ) : (
+              paginatedFields
+                .sort((a, b) => a.ordinalPosition - b.ordinalPosition)
+                .map((field) => (
+                  <li key={field.id}>
+                    <Tooltip content={`View lineage for field ${field.name}`} position="right">
+                      <button
+                        onClick={() => handleFieldClick(field.name)}
+                        className="flex items-center w-full px-2 py-1 text-left rounded hover:bg-blue-50"
+                      >
+                        <Columns className="w-4 h-4 mr-2 text-purple-500" />
+                        <span className="text-sm text-slate-700">{field.name}</span>
+                        {field.type && (
+                          <Tooltip content={`Data type: ${field.type}`} position="top">
+                            <span className="ml-2 text-xs text-slate-400 cursor-help">{field.type}</span>
+                          </Tooltip>
+                        )}
+                      </button>
+                    </Tooltip>
+                  </li>
+                ))
+            )}
+          </ul>
+          {/* Field pagination - always visible per CONTEXT.md */}
+          <div className="ml-4 mt-2 flex justify-center">
+            <Pagination
+              totalCount={totalFields}
+              limit={FIELD_LIMIT}
+              offset={fieldOffset}
+              onPageChange={setFieldOffset}
+              showFirstLast={true}
+              showPageInfo={true}
+            />
+          </div>
+        </>
       )}
     </li>
   );
