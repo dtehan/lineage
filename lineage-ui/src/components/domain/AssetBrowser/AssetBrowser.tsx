@@ -206,21 +206,8 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
   useEffect(() => {
     // Always scroll to header when database is expanded (even on first expansion)
     // to counteract browser scrolling to pagination at bottom
-    if (isExpanded) {
-      // Wait for content to be fully rendered
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          if (databaseHeaderRef.current) {
-            const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
-            if (scrollContainer) {
-              const containerRect = scrollContainer.getBoundingClientRect();
-              const headerRect = databaseHeaderRef.current.getBoundingClientRect();
-              const relativeTop = headerRect.top - containerRect.top + scrollContainer.scrollTop;
-              scrollContainer.scrollTop = relativeTop - 8; // 8px padding
-            }
-          }
-        });
-      });
+    if (isExpanded && databaseHeaderRef.current) {
+      databaseHeaderRef.current.scrollIntoView({ block: 'start', behavior: 'instant' });
     }
   }, [isExpanded]);
 
@@ -230,20 +217,9 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
       isInitialTableMount.current = false;
       return;
     }
-    // Use multiple animation frames to ensure DOM updates are complete
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (databaseHeaderRef.current) {
-          const scrollContainer = databaseHeaderRef.current.closest('.overflow-auto');
-          if (scrollContainer) {
-            const containerRect = scrollContainer.getBoundingClientRect();
-            const headerRect = databaseHeaderRef.current.getBoundingClientRect();
-            const relativeTop = headerRect.top - containerRect.top + scrollContainer.scrollTop;
-            scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
-          }
-        }
-      });
-    });
+    if (databaseHeaderRef.current) {
+      databaseHeaderRef.current.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
   }, [tableOffset]);
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
@@ -344,20 +320,9 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
       isInitialFieldMount.current = false;
       return;
     }
-    // Use multiple animation frames to ensure DOM updates are complete
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        if (datasetRef.current) {
-          const scrollContainer = datasetRef.current.closest('.overflow-auto');
-          if (scrollContainer) {
-            const containerRect = scrollContainer.getBoundingClientRect();
-            const datasetRect = datasetRef.current.getBoundingClientRect();
-            const relativeTop = datasetRect.top - containerRect.top + scrollContainer.scrollTop;
-            scrollContainer.scrollTop = relativeTop - 8; // 8px padding from top
-          }
-        }
-      });
-    });
+    if (datasetRef.current) {
+      datasetRef.current.scrollIntoView({ block: 'start', behavior: 'instant' });
+    }
   }, [fieldOffset]);
 
   const navigate = useNavigate();
