@@ -102,6 +102,11 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Always use table lineage to show all columns
   const { data, isLoading, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
 
+  // Debug: Log when query parameters change
+  useEffect(() => {
+    console.log('[LineageGraph] 🔍 Query params:', { datasetId, direction, maxDepth, isLoading });
+  }, [datasetId, direction, maxDepth, isLoading]);
+
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
@@ -185,6 +190,10 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Update nodes/edges when data changes
   useEffect(() => {
     if (data?.graph) {
+      console.log('[LineageGraph] 🔄 Data changed - triggering layout', {
+        nodeCount: data.graph.nodes.length,
+        edgeCount: data.graph.edges.length,
+      });
       setStage('layout');
 
       // Convert OpenLineage graph to legacy format for layout engine
@@ -197,6 +206,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         onProgress: (layoutProgress) => setProgress(layoutProgress),
       })
         .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+          console.log('[LineageGraph] ✅ Layout complete - setting nodes', layoutedNodes.length);
           setStage('rendering');
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
@@ -291,6 +301,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Handle node drag start - mark that user has interacted
   const onNodeDragStart = useCallback(() => {
+    console.log('[LineageGraph] 🖱️ User started dragging node');
     hasUserInteractedRef.current = true;
   }, []);
 
