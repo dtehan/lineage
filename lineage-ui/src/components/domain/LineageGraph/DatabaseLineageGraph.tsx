@@ -369,11 +369,6 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         <div className="flex items-center gap-2">
           <Database className="w-5 h-5 text-blue-600" />
           <span className="font-medium text-blue-800">Database: {databaseName}</span>
-          {data?.graph && (
-            <span className="text-sm text-blue-600">
-              ({data.graph.nodes.length} table{data.graph.nodes.length !== 1 ? 's' : ''})
-            </span>
-          )}
         </div>
       </div>
 
