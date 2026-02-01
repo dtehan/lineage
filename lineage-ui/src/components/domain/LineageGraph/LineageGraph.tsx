@@ -102,20 +102,8 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Always use table lineage to show all columns
   const { data, isLoading, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
 
-  // Debug: Log when query parameters change
-  useEffect(() => {
-    console.log('[LineageGraph] 🔍 Query params:', { datasetId, direction, maxDepth, isLoading });
-  }, [datasetId, direction, maxDepth, isLoading]);
-
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
-
-  // Debug: Log when nodes change
-  useEffect(() => {
-    if (nodes.length > 0) {
-      console.log('[LineageGraph] Nodes changed - length:', nodes.length, 'hasAppliedViewport:', hasAppliedViewportRef.current);
-    }
-  }, [nodes]);
 
   // Use the lineage highlight hook
   const { highlightPath } = useLineageHighlight({ nodes, edges });
@@ -190,10 +178,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Update nodes/edges when data changes
   useEffect(() => {
     if (data?.graph) {
-      console.log('[LineageGraph] 🔄 Data changed - triggering layout', {
-        nodeCount: data.graph.nodes.length,
-        edgeCount: data.graph.edges.length,
-      });
       setStage('layout');
 
       // Convert OpenLineage graph to legacy format for layout engine
@@ -206,7 +190,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         onProgress: (layoutProgress) => setProgress(layoutProgress),
       })
         .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-          console.log('[LineageGraph] ✅ Layout complete - setting nodes', layoutedNodes.length);
           setStage('rendering');
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
@@ -231,7 +214,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
     if (nodes.length > 0 && stage === 'complete' && !hasAppliedViewportRef.current && !hasUserInteractedRef.current) {
-      console.log('[LineageGraph] Applying smart viewport - nodes:', nodes.length, 'stage:', stage);
       // Delay to ensure React Flow has measured node dimensions (longer for large graphs)
       const timeoutId = setTimeout(() => {
         // Double-check user hasn't interacted during the timeout
@@ -301,7 +283,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Handle node drag start - mark that user has interacted
   const onNodeDragStart = useCallback(() => {
-    console.log('[LineageGraph] 🖱️ User started dragging node');
     hasUserInteractedRef.current = true;
   }, []);
 
@@ -480,11 +461,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
       ref={wrapperRef}
       className={`flex flex-col h-full ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
     >
-      {/* DEBUG: Visual indicator that new code is loaded */}
-      <div style={{ position: 'fixed', top: 0, left: 0, background: 'red', color: 'white', padding: '4px 8px', zIndex: 9999, fontSize: '12px' }}>
-        NEW CODE LOADED ✓
-      </div>
-
       {/* Toolbar */}
       <Toolbar
         viewMode={viewMode}

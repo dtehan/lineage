@@ -53,6 +53,8 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   const navigate = useNavigate();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
+  const hasAppliedViewportRef = useRef(false);
+  const hasUserInteractedRef = useRef(false);
 
   const {
     direction,
@@ -143,9 +145,11 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     }
   }, [isLoading, setStage]);
 
-  // Reset loading state when database changes
+  // Reset loading state and viewport flags when database changes
   useEffect(() => {
     reset();
+    hasAppliedViewportRef.current = false;
+    hasUserInteractedRef.current = false;
   }, [databaseName, reset]);
 
   // Update nodes/edges when data changes
@@ -176,16 +180,20 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     );
   }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
 
-  // Apply smart viewport after layout completes
+  // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
-    if (nodes.length > 0) {
+    if (nodes.length > 0 && stage === 'complete' && !hasAppliedViewportRef.current && !hasUserInteractedRef.current) {
       // Delay to ensure React Flow has measured node dimensions (longer for large graphs)
       const timeoutId = setTimeout(() => {
-        applySmartViewport(nodes);
+        // Double-check user hasn't interacted during the timeout
+        if (!hasUserInteractedRef.current) {
+          applySmartViewport(nodes);
+          hasAppliedViewportRef.current = true;
+        }
       }, 150);
       return () => clearTimeout(timeoutId);
     }
-  }, [nodes, applySmartViewport]);
+  }, [nodes.length, stage, applySmartViewport]);
 
   // Handle column selection from TableNode/ColumnRow
   useEffect(() => {
@@ -220,6 +228,11 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     clearHighlight();
     closePanel();
   }, [clearHighlight, closePanel]);
+
+  // Handle node drag start - mark that user has interacted
+  const onNodeDragStart = useCallback(() => {
+    hasUserInteractedRef.current = true;
+  }, []);
 
   // Handle fit view
   const handleFitView = useCallback(() => {
@@ -386,6 +399,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            onNodeDragStart={onNodeDragStart}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
