@@ -1,5 +1,37 @@
 # Project Milestones: Lineage Application
 
+## v3.0 Graph Improvements (Shipped: 2026-01-31)
+
+**Delivered:** Enhanced lineage graph usability with loading progress, optimized viewport positioning, correctness validation, and performance optimization.
+
+**Phases completed:** 13-18 (11 plans total)
+
+**Key accomplishments:**
+
+- Loading progress system: Five-stage tracking (idle → fetching → layout → rendering → complete) with progress bar and ELK layout callbacks
+- Graph UX improvements: 33% spacing reduction, top-left viewport positioning, size-aware zoom (1.0 for small, 0.5 for large graphs)
+- Comprehensive test data: 62 new test patterns covering cycles, diamonds, fan-out/fan-in, and combined scenarios (89 total TEST_* records)
+- Correctness validation: 16 database CTE tests + 32 frontend integration tests, all passing with 100% success rate
+- CTE performance optimization: 19.3% improvement via LOCKING ROW FOR ACCESS hint (182ms → 147ms average at depth 10+)
+- Large graph UX: ETA display, 200+ node warnings, depth reduction suggestions, virtualization at 50 nodes
+
+**Stats:**
+
+- 53 files modified (+9,538 / -290 lines)
+- 6 phases, 11 plans completed
+- ~2.5 hours from start to ship (2026-01-31 13:54 → 16:29)
+- 103 new tests (44 loading, 11 viewport, 32 correctness frontend, 16 correctness database)
+
+**Test Coverage:**
+- 48 correctness tests (100% pass rate)
+- All 36 v3.0 requirements verified
+
+**Git range:** `ac6893e` (feat(13-01)) → `305f2c4` (feat(18-02))
+
+**What's next:** Planning next milestone to address remaining high-priority concerns (Redis integration, SQL parser improvements, E2E validation, secrets vault).
+
+---
+
 ## v2.1 Pagination UI - Asset Browser (Shipped: 2026-01-31)
 
 **Delivered:** Frontend pagination controls for Asset Browser database, table, and column navigation.

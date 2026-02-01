@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A production-ready Teradata column-level data lineage application with security hardening, input validation, and scalability features. The application visualizes data flow between database columns with secure error handling, configurable validation bounds, and paginated asset browsing.
+A production-ready Teradata column-level data lineage application with enhanced graph usability, correctness validation, and performance optimization. The application visualizes data flow between database columns with loading progress feedback, optimized viewport positioning, comprehensive test coverage for complex graph patterns, and performance benchmarks for deep lineage traversals.
 
 ## Core Value
 
@@ -97,40 +97,74 @@ The lineage application must be secure and stable for production use - no data e
 - ✓ **ASSET-06**: Integration with usePaginatedAssets hooks — v2.1
 - ✓ **ASSET-07**: Unit test coverage for pagination controls — v2.1
 
+**v3.0 Graph Improvements (shipped 2026-01-31):**
+
+*Graph UX - Loading Experience:*
+- ✓ **UX-LOAD-01**: User sees progress bar (0-100%) during graph loading — v3.0
+- ✓ **UX-LOAD-02**: User sees current stage text ("Loading data...", "Calculating layout...", "Rendering...") — v3.0
+- ✓ **UX-LOAD-03**: Progress indicator replaces current spinner — v3.0
+- ✓ **UX-LOAD-04**: Progress tracking covers data fetch, ELK layout, and React Flow render stages — v3.0
+
+*Graph UX - Viewport & Zoom:*
+- ✓ **UX-VIEW-01**: Graph initial viewport positioned at top-left (not centered) — v3.0
+- ✓ **UX-VIEW-02**: Small graphs (<20 nodes) zoom to readable text size — v3.0
+- ✓ **UX-VIEW-03**: Large graphs (>50 nodes) fit more nodes on screen with smaller zoom — v3.0
+- ✓ **UX-VIEW-04**: Zoom level balances readability and content visibility — v3.0
+- ✓ **UX-VIEW-05**: User can manually adjust zoom after initial fit — v3.0
+
+*Graph UX - Space Optimization:*
+- ✓ **UX-SPACE-01**: Node spacing reduced between tables (minimize gaps) — v3.0
+- ✓ **UX-SPACE-02**: Layout algorithm configured for compact arrangement — v3.0
+- ✓ **UX-SPACE-03**: Column text remains readable at optimized spacing — v3.0
+- ✓ **UX-SPACE-04**: Scrolling required only for genuinely large graphs — v3.0
+
+*Graph Correctness - Test Data:*
+- ✓ **CORRECT-DATA-01**: Test data includes 3+ cycle patterns (2-node, 3-node, 5-node cycles) — v3.0
+- ✓ **CORRECT-DATA-02**: Test data includes 3+ diamond patterns (simple, nested, wide diamonds) — v3.0
+- ✓ **CORRECT-DATA-03**: Test data includes fan-out patterns (1->5, 1->10 targets) — v3.0
+- ✓ **CORRECT-DATA-04**: Test data includes fan-in patterns (5->1, 10->1 sources) — v3.0
+- ✓ **CORRECT-DATA-05**: Test data includes combined patterns (cycle+diamond, fan-out+fan-in) — v3.0
+
+*Graph Correctness - Validation:*
+- ✓ **CORRECT-VAL-01**: Integration tests verify cycle detection prevents infinite loops — v3.0
+- ✓ **CORRECT-VAL-02**: Tests verify diamond patterns produce single node (no duplication) — v3.0
+- ✓ **CORRECT-VAL-03**: Tests verify fan-out patterns include all target nodes — v3.0
+- ✓ **CORRECT-VAL-04**: Tests verify fan-in patterns include all source nodes — v3.0
+- ✓ **CORRECT-VAL-05**: Tests verify path tracking in CTE works for complex patterns — v3.0
+- ✓ **CORRECT-VAL-06**: Tests verify node count matches expected for each pattern — v3.0
+- ✓ **CORRECT-VAL-07**: Tests verify edge count matches expected for each pattern — v3.0
+
+*Graph Performance - CTE Optimization:*
+- ✓ **PERF-CTE-01**: Benchmark recursive CTE at depths 5, 10, 15, 20 — v3.0
+- ✓ **PERF-CTE-02**: Profile identifies performance bottlenecks (path concat, POSITION search) — v3.0
+- ✓ **PERF-CTE-03**: Implementation optimizes identified bottlenecks — v3.0
+- ✓ **PERF-CTE-04**: Performance tests verify improvement at depth > 10 — v3.0
+- ✓ **PERF-CTE-05**: Query hints added for Teradata optimization (LOCKING ROW FOR ACCESS) — v3.0
+
+*Graph Performance - Frontend Rendering:*
+- ✓ **PERF-RENDER-01**: Benchmark ELK.js layout time with 50, 100, 200 node graphs — v3.0
+- ✓ **PERF-RENDER-02**: Benchmark React Flow render time with 50, 100, 200 node graphs — v3.0
+- ✓ **PERF-RENDER-03**: Identify rendering bottlenecks (layout, node creation, edge rendering) — v3.0
+- ✓ **PERF-RENDER-04**: Verify `onlyRenderVisibleElements` threshold optimization — v3.0
+- ✓ **PERF-RENDER-05**: Test zoom/pan responsiveness with large graphs (target <100ms) — v3.0
+- ✓ **PERF-RENDER-06**: Performance tests automated and repeatable — v3.0
+
 ### Active
 
 <!-- Requirements for next milestone -->
 
-## Current Milestone: v3.0 Graph Improvements
-
-**Goal:** Enhance lineage graph usability and validate correctness for production use.
-
-**Target features:**
-- Graph loading progress indicator (percentage-based progress bar)
-- Improved viewport positioning (start at top-left instead of centered)
-- Smart zoom fitting (optimize based on graph size for minimal scrolling)
-- Node spacing optimization (reduce gaps between tables)
-- Graph correctness validation (cycles, diamonds, fan-out/fan-in patterns)
-- Deep graph performance optimization (recursive CTE for depth > 10)
-- Large graph rendering tests (100+ nodes)
-
-**Deferred to future milestones:**
-
 **High Priority Concerns:**
 - [ ] **REDIS-01**: Integrate Redis caching or remove dead code
 - [ ] **PARSER-01**: Improve SQL parser with confidence tracking and fallback visibility
-- [ ] **GRAPH-01**: Validate lineage graph building correctness with complex patterns
 - [ ] **EXTRACT-01**: Harden database extraction logic against Teradata version changes
 - [ ] **E2E-01**: End-to-end lineage validation testing through multiple hops
 - [ ] **CREDS-01**: Integrate with secrets vault (HashiCorp Vault, AWS Secrets Manager)
 
 **Medium Priority Concerns:**
 - [ ] **SEARCH-01**: Add secondary indexes for search performance
-- [ ] **CTE-01**: Optimize recursive CTE performance for deep graphs
 - [ ] **POOL-01**: Configure connection pooling (MaxOpenConns, MaxIdleConns, ConnMaxLifetime)
 - [ ] **DEP-01**: Pin SQLGlot version with compatibility tests
 - [ ] **REFRESH-01**: Implement selective lineage refresh from DBQL
-- [ ] **PERF-01**: Large graph performance testing (100+ nodes)
 
 ### Out of Scope
 
@@ -142,16 +176,18 @@ The lineage application must be secure and stable for production use - no data e
 
 ## Context
 
-**Current State (v2.0 shipped):**
-- Production-ready Teradata column-level lineage application with OpenLineage standard alignment
-- Go backend: Chi router, hexagonal architecture, slog logging, input validation, v1 + v2 APIs
-- React frontend: TypeScript, React Flow, TanStack Query hooks, types for v1 and v2 APIs
-- Python DBQL extraction: Continue-on-failure pattern, structured error tracking, OL_* table population
-- Database: LIN_* tables (custom schema) + OL_* tables (OpenLineage spec v2-0-2)
-- Test coverage: 73 database tests, 20 API tests, 396+ frontend tests, 21 E2E tests
+**Current State (v3.0 shipped):**
+- Production-ready Teradata column-level lineage application with enhanced graph usability and performance
+- Go backend: Chi router, hexagonal architecture, slog logging, input validation, v1 + v2 APIs, LOCKING ROW FOR ACCESS CTE optimization
+- React frontend: TypeScript, React Flow, TanStack Query hooks, five-stage loading progress, smart viewport positioning, size-aware zoom
+- Python DBQL extraction: Continue-on-failure pattern, structured error tracking, OL_* table population, comprehensive test patterns
+- Database: LIN_* tables (custom schema) + OL_* tables (OpenLineage spec v2-0-2), 89 TEST_* records for correctness validation
+- Test coverage: 73 database tests, 20 API tests, 444+ frontend tests (inc. 32 correctness, 11 viewport, 44 loading), 21 E2E tests, 16 CTE correctness tests
 - Security: Structured logging, generic error responses, fail-fast credential validation, SECURITY.md deployment guide
 - Configuration: Unified TERADATA_*/API_PORT variables with TD_*/PORT fallbacks for backwards compatibility
 - Scalability: Pagination (default 100, max 500), maxDepth limit (1-20 configurable)
+- Graph UX: Loading progress with ETA, compact layout (33% spacing reduction), top-left viewport, large graph warnings
+- Performance: 19.3% CTE improvement (LOCKING ROW FOR ACCESS), benchmark suites for CTE and rendering, virtualization at 50 nodes
 
 **Milestone v1.0 Stats (Production Readiness):**
 - 6 phases, 13 plans completed
@@ -169,9 +205,15 @@ The lineage application must be secure and stable for production use - no data e
 
 **Milestone v2.1 Stats (Pagination UI - Asset Browser):**
 - 2 phases, 5 plans completed
-- Files modified: TBD
+- Files modified: Multiple
 - 1 day (2026-01-31)
-- Git range: TBD
+
+**Milestone v3.0 Stats (Graph Improvements):**
+- 6 phases, 11 plans completed
+- 53 files modified (+9,538 / -290 lines)
+- ~2.5 hours (2026-01-31 13:54 → 16:29)
+- 103 new tests (44 loading, 11 viewport, 32 correctness frontend, 16 correctness database)
+- Git range: `ac6893e` → `305f2c4`
 
 **Technical Debt:**
 - Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe
@@ -184,8 +226,11 @@ The lineage application must be secure and stable for production use - no data e
 - HTTPS/TLS 1.2+ with security headers (HSTS, X-Content-Type-Options, X-Frame-Options, etc.)
 
 **Known Issues:**
-- 6 high-priority concerns deferred to v2.0 (Redis integration, SQL parser improvements, graph correctness, extraction brittleness, E2E validation, secrets vault)
-- 6 medium-priority concerns (search performance, CTE optimization, connection pooling, SQLGlot pinning, lineage refresh, large graph testing)
+- 5 high-priority concerns remain (Redis integration, SQL parser improvements, extraction brittleness, E2E validation, secrets vault)
+- 4 medium-priority concerns remain (search performance, connection pooling, SQLGlot pinning, lineage refresh)
+- ✓ Graph correctness validated in v3.0 (removed from concerns)
+- ✓ CTE performance optimized in v3.0 (removed from concerns)
+- ✓ Large graph testing completed in v3.0 (removed from concerns)
 
 ## Constraints
 
@@ -212,6 +257,13 @@ The lineage application must be secure and stable for production use - no data e
 | Implement OpenLineage spec v2-0-2 exactly (v2.0) | Future-proof interoperability with external lineage tools, industry standard | ✓ Complete - OL_* schema + v2 API endpoints |
 | Create OL_* alongside LIN_* tables (v2.0) | Backwards compatibility, gradual migration path, no breaking changes | ✓ Complete - Both schemas coexist, v1 API unchanged |
 | Expose v2 API at /api/v2/openlineage/* (v2.0) | API versioning, non-breaking change, clear separation of concerns | ✓ Complete - v1 and v2 routes registered in same router |
+| Five-stage loading progress (v3.0) | Clear user feedback on data fetch, layout, and render operations | ✓ Complete - Progress bar with stage text and ETA display |
+| Top-left viewport positioning (v3.0) | Show root/source nodes first instead of centering entire graph | ✓ Complete - Users see starting point immediately |
+| Size-aware zoom (v3.0) | Balance readability (small graphs 1.0x) and overview (large graphs 0.5x) | ✓ Complete - Interpolated zoom based on node count |
+| 33% spacing reduction (v3.0) | Fit more content on screen without sacrificing readability | ✓ Complete - nodeSpacing 60→40, layerSpacing 150→100 |
+| LOCKING ROW FOR ACCESS hint (v3.0) | Reduce lock contention for read-heavy CTE queries | ✓ Complete - 19.3% performance improvement verified |
+| Virtualization at 50 nodes (v3.0) | Balance small graph simplicity with large graph performance | ✓ Complete - onlyRenderVisibleElements threshold verified optimal |
+| Comprehensive test patterns (v3.0) | Validate correctness with cycles, diamonds, fans, combined scenarios | ✓ Complete - 89 TEST_* records, 48 passing correctness tests |
 
 ---
-*Last updated: 2026-01-31 after v3.0 milestone start*
+*Last updated: 2026-01-31 after v3.0 milestone completion*
