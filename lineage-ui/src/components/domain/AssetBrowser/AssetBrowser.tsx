@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, Globe } from 'lucide-react';
+import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers } from 'lucide-react';
 import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
 import { Tooltip } from '../../common/Tooltip';
@@ -60,8 +60,16 @@ export function AssetBrowser() {
   const { data: namespacesData, isLoading: isLoadingNamespaces } = useOpenLineageNamespaces();
   const namespaces = namespacesData?.namespaces || [];
 
-  // Get the first namespace (usually there's only one Teradata instance)
-  const defaultNamespace = namespaces.length > 0 ? namespaces[0] : null;
+  // Select the namespace with the most datasets (prefer production over test namespaces)
+  // Sort by creation date (oldest first) to prefer established namespaces over test ones
+  const defaultNamespace = namespaces.length > 0
+    ? [...namespaces].sort((a, b) => {
+        // Sort by createdAt ascending (oldest first)
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateA - dateB;
+      })[0]
+    : null;
 
   // Fetch datasets from the default namespace
   const { data: datasetsData, isLoading: isLoadingDatasets } = useOpenLineageDatasets(
@@ -128,18 +136,6 @@ export function AssetBrowser() {
   return (
     <div className="h-full overflow-auto">
       <div className="p-2">
-        {/* Namespace header (if multiple namespaces exist) */}
-        {namespaces.length > 1 && (
-          <div className="mb-3 p-2 bg-slate-50 rounded border border-slate-200">
-            <div className="flex items-center">
-              <Globe className="w-4 h-4 mr-2 text-slate-500" />
-              <span className="text-xs font-medium text-slate-600">
-                Namespace: {defaultNamespace.uri}
-              </span>
-            </div>
-          </div>
-        )}
-
         <h2 className="px-2 py-1 text-sm font-semibold text-slate-700">Databases</h2>
         <ul className="space-y-1">
           {databaseNames.map((dbName) => (
