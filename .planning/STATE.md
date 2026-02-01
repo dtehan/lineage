@@ -67,6 +67,7 @@ Recent decisions affecting current work:
 ### Pending Todos
 
 1. Views not showing their column types (2026-01-31, area: ui)
+2. Count label misleading - shows "tables" but includes all datasets (2026-01-31, area: ui)
 
 ### Blockers/Concerns
 
