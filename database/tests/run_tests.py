@@ -4,8 +4,11 @@ Test Runner for Data Lineage Database Component (OpenLineage Schema)
 Executes test cases for OL_* tables
 """
 
-import teradatasql
+from pathlib import Path
 import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import teradatasql
 from typing import Tuple, List
 
 from db_config import CONFIG

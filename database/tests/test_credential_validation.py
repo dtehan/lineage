@@ -9,8 +9,11 @@ NOTE: Tests that check for missing credentials must run in a clean environment
 where no .env file exists, to avoid dotenv loading credentials automatically.
 """
 
+from pathlib import Path
 import subprocess
 import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import os
 import tempfile
 import shutil
@@ -31,7 +34,7 @@ class TestDbConfigCredentialValidation:
         with tempfile.TemporaryDirectory() as tmpdir:
             # Copy db_config.py to temp directory
             db_config_src = os.path.join(
-                os.path.dirname(os.path.abspath(__file__)), "db_config.py"
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "db_config.py"
             )
             db_config_dst = os.path.join(tmpdir, "db_config.py")
             shutil.copy(db_config_src, db_config_dst)

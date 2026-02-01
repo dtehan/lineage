@@ -7,8 +7,11 @@ entries for all test tables used in insert_cte_test_data.py, enabling them to
 appear in the Asset Browser UI.
 """
 
-import teradatasql
+from pathlib import Path
 import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import teradatasql
 from datetime import datetime
 
 from db_config import CONFIG

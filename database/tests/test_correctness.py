@@ -17,8 +17,11 @@ Uses same CTE pattern as Go backend (openlineage_repo.go):
 - is_active = 'Y' for active filtering
 """
 
-import teradatasql
+from pathlib import Path
 import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+import teradatasql
 import signal
 from typing import Dict, Tuple, Optional
 from contextlib import contextmanager

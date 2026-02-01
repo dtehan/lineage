@@ -4,8 +4,11 @@ Setup Lineage Schema for Teradata
 Creates OpenLineage-aligned tables in the demo_user database.
 """
 
-import teradatasql
+from pathlib import Path
 import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import teradatasql
 
 from db_config import CONFIG
 

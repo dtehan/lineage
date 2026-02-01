@@ -91,7 +91,7 @@ Create the OpenLineage schema:
 
 ```bash
 cd database/
-python3 setup_lineage_schema.py --openlineage
+python3 scripts/setup/setup_lineage_schema.py --openlineage
 ```
 
 This creates the following OpenLineage tables in your `demo_user` database:
@@ -114,7 +114,7 @@ Plus performance indexes for efficient lineage traversal.
 Create test tables representing a medallion architecture ETL pipeline:
 
 ```bash
-python3 setup_test_data.py
+python3 scripts/setup/setup_test_data.py
 ```
 
 This creates a realistic data pipeline with 4 layers:
@@ -132,13 +132,13 @@ Extract metadata from Teradata system views and populate OpenLineage tables.
 
 ```bash
 # Standard population (manual mappings)
-python3 populate_lineage.py
+python3 scripts/populate/populate_lineage.py
 
 # Preview what would be populated
-python3 populate_lineage.py --dry-run
+python3 scripts/populate/populate_lineage.py --dry-run
 
 # Append mode (don't clear existing data)
-python3 populate_lineage.py --skip-clear
+python3 scripts/populate/populate_lineage.py --skip-clear
 ```
 
 This populates OpenLineage tables with:
@@ -160,7 +160,7 @@ See [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction) for detailed
 For testing recursive CTE functionality:
 
 ```bash
-python3 insert_cte_test_data.py
+python3 scripts/utils/insert_cte_test_data.py
 ```
 
 This adds test cases for cycles, diamond patterns, fan-out, and multi-source scenarios.
@@ -170,7 +170,7 @@ This adds test cases for cycles, diamond patterns, fan-out, and multi-source sce
 Run the test suite to validate your setup:
 
 ```bash
-python3 run_tests.py
+python3 tests/run_tests.py
 ```
 
 This executes 73 test cases covering schema validation, data extraction, recursive CTEs, edge cases, and data integrity.
@@ -977,7 +977,7 @@ Searches for assets by name.
 
 **Solutions:**
 1. Verify lineage data exists: Check `OL_COLUMN_LINEAGE` table
-2. Run `populate_lineage.py` to populate lineage data
+2. Run `scripts/populate/populate_lineage.py` to populate lineage data
 3. Ensure the asset ID format is correct: `database.table.column`
 
 ### Slow Performance
@@ -1225,7 +1225,7 @@ Run the database test suite (73 test cases covering schema validation, data extr
 ```bash
 cd database/
 source ../.venv/bin/activate
-python run_tests.py
+python tests/run_tests.py
 ```
 
 **Expected Output:**
@@ -1257,7 +1257,7 @@ Run the backend API test suite (20 endpoint tests):
 ```bash
 cd lineage-api/
 source ../.venv/bin/activate
-python run_api_tests.py
+python tests/run_api_tests.py
 ```
 
 **Expected Output:**
@@ -1388,11 +1388,11 @@ npm run dev
 # Database tests
 cd database/
 source ../.venv/bin/activate
-python run_tests.py
+python tests/run_tests.py
 
 # Backend API tests
 cd ../lineage-api/
-python run_api_tests.py
+python tests/run_api_tests.py
 
 # Frontend unit tests
 cd ../lineage-ui/
@@ -1444,13 +1444,13 @@ pip install teradatasql flask flask-cors requests
 
 # 2. Setup database schema and load test data
 cd database/
-python setup_lineage_schema.py --openlineage
-python setup_test_data.py
-python populate_lineage.py
-python insert_cte_test_data.py
+python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_test_data.py
+python scripts/populate/populate_lineage.py
+python scripts/utils/insert_cte_test_data.py
 
 # 3. Run database tests (optional)
-python run_tests.py
+python tests/run_tests.py
 
 # 4. Start backend API
 cd ../lineage-api/
@@ -1502,10 +1502,10 @@ The OpenLineage-aligned schema provides:
 ```bash
 # Create OpenLineage tables
 cd database
-python setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py --openlineage
 
 # Populate OpenLineage tables (now default behavior)
-python populate_lineage.py
+python scripts/populate/populate_lineage.py
 ```
 
 ### v2 API Endpoints

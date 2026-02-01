@@ -10,11 +10,16 @@ Tests verify:
 - TEST-05: Tests verify DBQL error handling scenarios
 """
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
 # Import the module under test
+sys.path.insert(0, str(Path(__file__).parent.parent / 'archive'))
 from extract_dbql_lineage import (
     DBQLLineageExtractor,
     ExtractionStats,

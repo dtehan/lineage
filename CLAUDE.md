@@ -45,10 +45,10 @@ cp .env.example .env
 # Edit .env with your Teradata credentials
 
 # 3. Setup database (creates OL_* tables)
-cd database && python setup_lineage_schema.py --openlineage && python setup_test_data.py
+cd database && python scripts/setup/setup_lineage_schema.py --openlineage && python scripts/setup/setup_test_data.py
 
 # 4. Populate OpenLineage tables
-python populate_lineage.py              # Manual mappings (demo/testing)
+python scripts/populate/populate_lineage.py              # Manual mappings (demo/testing)
 
 # 5. Start backend (Python Flask - recommended for testing)
 cd lineage-api && python python_server.py  # Runs on :8080
@@ -75,12 +75,12 @@ npx playwright test              # Run E2E tests
 
 # Database
 cd database
-python run_tests.py              # Run 73 database tests
-python populate_lineage.py       # Populate OpenLineage tables (manual mappings)
-python populate_lineage.py --dry-run  # Preview what would be populated
-python setup_lineage_schema.py --openlineage  # Create OL_* tables
-python insert_cte_test_data.py   # Insert test lineage patterns (cycles, diamonds, fans)
-python populate_test_metadata.py # Populate OL_* metadata for test tables (run after insert_cte_test_data.py)
+python tests/run_tests.py              # Run 73 database tests
+python scripts/populate/populate_lineage.py       # Populate OpenLineage tables (manual mappings)
+python scripts/populate/populate_lineage.py --dry-run  # Preview what would be populated
+python scripts/setup/setup_lineage_schema.py --openlineage  # Create OL_* tables
+python scripts/utils/insert_cte_test_data.py   # Insert test lineage patterns (cycles, diamonds, fans)
+python scripts/populate/populate_test_metadata.py # Populate OL_* metadata for test tables (run after insert_cte_test_data.py)
 ```
 
 ## Architecture
@@ -141,13 +141,25 @@ lineage-ui/
 
 ```
 database/
-├── db_config.py              # Connection config (uses TERADATA_* env vars, TD_* as fallback)
-├── setup_lineage_schema.py   # Creates OpenLineage tables (OL_*)
-├── setup_test_data.py        # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
-├── populate_lineage.py       # Populates OpenLineage tables from DBC views (manual mappings)
-├── insert_cte_test_data.py   # Inserts test lineage patterns into OL_COLUMN_LINEAGE
-├── populate_test_metadata.py # Populates OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD for test data
-└── run_tests.py              # 73 database tests
+├── db_config.py                                    # Connection config (uses TERADATA_* env vars, TD_* as fallback)
+├── scripts/
+│   ├── setup/
+│   │   ├── setup_lineage_schema.py                 # Creates OpenLineage tables (OL_*)
+│   │   └── setup_test_data.py                      # Creates medallion architecture test tables (SRC→STG→DIM→FACT)
+│   ├── populate/
+│   │   ├── populate_lineage.py                     # Populates OpenLineage tables from DBC views (manual mappings)
+│   │   └── populate_test_metadata.py               # Populates OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD for test data
+│   └── utils/
+│       ├── insert_cte_test_data.py                 # Inserts test lineage patterns into OL_COLUMN_LINEAGE
+│       └── benchmark_cte.py                        # Performance benchmarks
+├── tests/
+│   ├── run_tests.py                                # 73 database tests
+│   ├── test_correctness.py                         # CTE correctness validation
+│   ├── test_credential_validation.py               # Credential validation tests
+│   └── test_dbql_error_handling.py                 # DBQL error handling tests
+└── archive/
+    ├── extract_dbql_lineage.py                     # Experimental DBQL extraction (archived)
+    └── sql_parser.py                               # SQL parsing utilities (archived)
 ```
 
 ## OpenLineage Schema
@@ -163,7 +175,7 @@ Aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-m
 - `OL_COLUMN_LINEAGE` - Column-level lineage with OpenLineage transformation types
 - `OL_SCHEMA_VERSION` - Schema version tracking
 
-The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views.
+The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. For view columns, it uses Teradata's `HELP COLUMN` command to retrieve actual column types (since `DBC.ColumnsV` returns NULL for view column types), ensuring accurate type information for both tables and views.
 
 ## API Endpoints
 

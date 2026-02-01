@@ -10,9 +10,12 @@ Usage:
   python populate_lineage.py --dbql       # Extract from DBQL tables (future)
 """
 
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import argparse
 import teradatasql
-import sys
 import hashlib
 
 from db_config import CONFIG, get_openlineage_namespace
@@ -275,8 +278,16 @@ def update_view_column_types(cursor, namespace_id: str):
         print("  No views with UNKNOWN column types found")
         return 0
 
-    update_count = 0
+    # Create volatile table to hold type information
+    cursor.execute("""
+        CREATE VOLATILE TABLE vt_view_types (
+            field_id VARCHAR(512),
+            field_type VARCHAR(512)
+        ) ON COMMIT PRESERVE ROWS
+    """)
 
+    # Populate volatile table with HELP COLUMN results
+    insert_count = 0
     for view_name, dataset_id in views:
         view_name = view_name.strip()
         dataset_id = dataset_id.strip()
@@ -305,27 +316,34 @@ def update_view_column_types(cursor, namespace_id: str):
                 # Build field_id
                 field_id = f"{dataset_id}/{col_name}"
 
-                # Update the field type
+                # Insert into volatile table
                 cursor.execute("""
-                    UPDATE demo_user.OL_DATASET_FIELD
-                    SET field_type = ?
-                    WHERE field_id = ?
-                      AND field_type = 'UNKNOWN'
-                """, [field_type, field_id])
-
-                if cursor.rowcount > 0:
-                    update_count += 1
+                    INSERT INTO vt_view_types (field_id, field_type)
+                    VALUES (?, ?)
+                """, [field_id, field_type])
+                insert_count += 1
 
         except Exception as e:
             # Skip views that fail (e.g., system views with special permissions)
-            # Only show first line of error to reduce verbosity
             error_msg = str(e).split('\n')[0] if '\n' in str(e) else str(e)
-            if "3523" in error_msg:  # Permission error
-                pass  # Silently skip system views we can't access
-            else:
+            if "3523" not in error_msg:  # Only warn for non-permission errors
                 print(f"  Warning: Could not get column types for {view_name}: {error_msg}")
             continue
 
+    if insert_count == 0:
+        print("  No view column types collected")
+        return 0
+
+    # Bulk update using UPDATE...FROM with volatile table
+    cursor.execute("""
+        UPDATE demo_user.OL_DATASET_FIELD
+        FROM vt_view_types vt
+        SET field_type = vt.field_type
+        WHERE demo_user.OL_DATASET_FIELD.field_id = vt.field_id
+          AND demo_user.OL_DATASET_FIELD.field_type = 'UNKNOWN'
+    """)
+
+    update_count = cursor.rowcount
     print(f"  Updated {update_count} view column types")
     return update_count
 

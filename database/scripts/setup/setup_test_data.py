@@ -4,8 +4,11 @@ Setup Test Data for Lineage Testing
 Creates test tables and executes data movement to generate lineage.
 """
 
-import teradatasql
+from pathlib import Path
 import sys
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+import teradatasql
 
 from db_config import CONFIG
 
