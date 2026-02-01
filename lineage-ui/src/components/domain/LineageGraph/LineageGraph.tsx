@@ -29,7 +29,7 @@ import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
-import { LargeGraphWarning, LARGE_GRAPH_THRESHOLD } from './LargeGraphWarning';
+import { LargeGraphWarning } from './LargeGraphWarning';
 import {
   useLineageHighlight,
   useKeyboardShortcuts,

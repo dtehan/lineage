@@ -250,7 +250,8 @@ export async function layoutGraph(
   } = options;
 
   // Track timing for performance metrics (non-production only)
-  const collectMetrics = typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+  // Use import.meta.env for Vite compatibility in browser environments
+  const collectMetrics = import.meta.env?.MODE !== 'production';
   const startTime = collectMetrics ? performance.now() : 0;
   let prepEndTime = 0;
   let elkEndTime = 0;

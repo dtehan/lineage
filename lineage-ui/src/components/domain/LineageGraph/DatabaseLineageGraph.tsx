@@ -80,7 +80,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     nodes: storeNodes,
     edges: storeEdges,
     assetTypeFilter,
-    setAssetTypeFilter,
+    // Note: setAssetTypeFilter is available but not used in current implementation
   } = useLineageStore();
 
   // Fetch database lineage using OpenLineage API
@@ -459,160 +459,9 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   );
 }
 
-// Database Browser component for when there's no lineage data
-interface DatabaseBrowserProps {
-  databaseName: string;
-  navigate: ReturnType<typeof useNavigate>;
-}
-
-function DatabaseBrowser({ databaseName, navigate }: DatabaseBrowserProps) {
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
-  const { data: tablesResult, isLoading: tablesLoading } = useTables(databaseName);
-  const tables = tablesResult?.data;
-
-  const toggleTable = (tableName: string) => {
-    setExpandedTables((prev) => {
-      const next = new Set(prev);
-      if (next.has(tableName)) {
-        next.delete(tableName);
-      } else {
-        next.add(tableName);
-      }
-      return next;
-    });
-  };
-
-  if (tablesLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-3 bg-blue-50 border-b border-blue-200">
-        <Database className="w-5 h-5 text-blue-600" />
-        <span className="font-medium text-blue-800">Database: {databaseName}</span>
-        {tables && (
-          <span className="text-sm text-blue-600">
-            ({tables.length} tables)
-          </span>
-        )}
-      </div>
-
-      {/* Info banner */}
-      <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
-        <p className="text-sm text-amber-800">
-          No lineage relationships found for this database. Showing tables and columns below.
-        </p>
-      </div>
-
-      {/* Tables list */}
-      <div className="flex-1 overflow-auto p-4">
-        {tables && tables.length > 0 ? (
-          <ul className="space-y-2">
-            {tables.map((table) => (
-              <TableBrowserItem
-                key={table.id}
-                databaseName={databaseName}
-                table={table}
-                isExpanded={expandedTables.has(table.tableName)}
-                onToggle={() => toggleTable(table.tableName)}
-                navigate={navigate}
-              />
-            ))}
-          </ul>
-        ) : (
-          <div className="text-center py-8 text-slate-500">
-            No tables found in this database.
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Table browser item component
-interface TableBrowserItemProps {
-  databaseName: string;
-  table: { id: string; tableName: string; columnCount?: number };
-  isExpanded: boolean;
-  onToggle: () => void;
-  navigate: ReturnType<typeof useNavigate>;
-}
-
-function TableBrowserItem({ databaseName, table, isExpanded, onToggle, navigate }: TableBrowserItemProps) {
-  const { data: columnsResult, isLoading: columnsLoading } = useColumns(
-    isExpanded ? databaseName : '',
-    isExpanded ? table.tableName : ''
-  );
-  const columns = columnsResult?.data;
-
-  const handleTableClick = () => {
-    navigate(`/lineage/${encodeURIComponent(table.id)}`);
-  };
-
-  return (
-    <li className="border border-slate-200 rounded-lg overflow-hidden">
-      <div className="flex items-center bg-slate-50 hover:bg-slate-100">
-        <button
-          onClick={onToggle}
-          className="p-3 hover:bg-slate-200"
-          aria-label={isExpanded ? 'Collapse table' : 'Expand table'}
-        >
-          {isExpanded ? (
-            <ChevronDown className="w-4 h-4 text-slate-500" />
-          ) : (
-            <ChevronRight className="w-4 h-4 text-slate-500" />
-          )}
-        </button>
-        <button
-          onClick={handleTableClick}
-          className="flex items-center flex-1 py-3 pr-3 text-left hover:text-blue-600"
-        >
-          <Table className="w-4 h-4 mr-2 text-green-500" />
-          <span className="font-medium text-slate-700">{table.tableName}</span>
-          {table.columnCount !== undefined && (
-            <span className="ml-2 text-xs text-slate-400">
-              ({table.columnCount} columns)
-            </span>
-          )}
-        </button>
-      </div>
-
-      {isExpanded && (
-        <div className="border-t border-slate-200 bg-white">
-          {columnsLoading ? (
-            <div className="p-4 text-center">
-              <LoadingSpinner size="sm" />
-            </div>
-          ) : columns && columns.length > 0 ? (
-            <ul className="divide-y divide-slate-100">
-              {columns.map((column) => (
-                <li
-                  key={column.id}
-                  className="flex items-center px-4 py-2 hover:bg-slate-50 cursor-pointer"
-                  onClick={() => navigate(`/lineage/${encodeURIComponent(column.id)}`)}
-                >
-                  <Columns className="w-4 h-4 mr-2 text-purple-500" />
-                  <span className="text-sm text-slate-700">{column.columnName}</span>
-                  <span className="ml-2 text-xs text-slate-400">{column.columnType}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="p-4 text-center text-sm text-slate-500">
-              No columns found
-            </div>
-          )}
-        </div>
-      )}
-    </li>
-  );
-}
+// Note: DatabaseBrowser and TableBrowserItem components were removed as they
+// referenced non-existent hooks (useTables, useColumns) and components (LoadingSpinner,
+// ChevronRight, Table, Columns). They can be re-added when the dependencies are implemented.
 
 export interface DatabaseLineageGraphProps {
   databaseName: string;
