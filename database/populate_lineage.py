@@ -257,6 +257,79 @@ def populate_openlineage_fields(cursor, namespace_id: str):
     return count
 
 
+def update_view_column_types(cursor, namespace_id: str):
+    """Update column types for views using HELP COLUMN (DBC.ColumnsV returns NULL for view types)."""
+    print("\n--- Updating view column types using HELP COLUMN ---")
+
+    # Get all views that have fields with UNKNOWN type
+    cursor.execute("""
+        SELECT DISTINCT d.name, d.dataset_id
+        FROM demo_user.OL_DATASET d
+        JOIN demo_user.OL_DATASET_FIELD f ON d.dataset_id = f.dataset_id
+        WHERE d.source_type = 'VIEW'
+          AND f.field_type = 'UNKNOWN'
+    """)
+    views = cursor.fetchall()
+
+    if not views:
+        print("  No views with UNKNOWN column types found")
+        return 0
+
+    update_count = 0
+
+    for view_name, dataset_id in views:
+        view_name = view_name.strip()
+        dataset_id = dataset_id.strip()
+
+        # Extract database.table from dataset name
+        try:
+            parts = view_name.split('.')
+            if len(parts) != 2:
+                continue
+            db_name, table_name = parts
+
+            # Use HELP COLUMN to get actual column types for this view
+            cursor.execute(f'HELP COLUMN "{db_name}"."{table_name}".*')
+            columns = cursor.fetchall()
+
+            for col in columns:
+                col_name = col[0].strip() if col[0] else ""
+                col_type_code = col[1].strip() if col[1] else ""
+                col_length = col[4] if len(col) > 4 and col[4] else None
+                col_decimal_total = col[5] if len(col) > 5 and col[5] else None
+                col_decimal_frac = col[6] if len(col) > 6 and col[6] else None
+
+                # Convert type code to readable type string
+                field_type = convert_teradata_type(col_type_code, col_length, col_decimal_total, col_decimal_frac)
+
+                # Build field_id
+                field_id = f"{dataset_id}/{col_name}"
+
+                # Update the field type
+                cursor.execute("""
+                    UPDATE demo_user.OL_DATASET_FIELD
+                    SET field_type = ?
+                    WHERE field_id = ?
+                      AND field_type = 'UNKNOWN'
+                """, [field_type, field_id])
+
+                if cursor.rowcount > 0:
+                    update_count += 1
+
+        except Exception as e:
+            # Skip views that fail (e.g., system views with special permissions)
+            # Only show first line of error to reduce verbosity
+            error_msg = str(e).split('\n')[0] if '\n' in str(e) else str(e)
+            if "3523" in error_msg:  # Permission error
+                pass  # Silently skip system views we can't access
+            else:
+                print(f"  Warning: Could not get column types for {view_name}: {error_msg}")
+            continue
+
+    print(f"  Updated {update_count} view column types")
+    return update_count
+
+
 def populate_openlineage_lineage(cursor, namespace_id: str, namespace_uri: str):
     """Populate OL_COLUMN_LINEAGE from manual mappings."""
     print("\n--- Populating OL_COLUMN_LINEAGE ---")
@@ -520,6 +593,7 @@ Examples:
         namespace_id = populate_openlineage_namespace(cursor, namespace_uri)
         populate_openlineage_datasets(cursor, namespace_id)
         populate_openlineage_fields(cursor, namespace_id)
+        update_view_column_types(cursor, namespace_id)  # Fix view column types
         populate_openlineage_lineage(cursor, namespace_id, namespace_uri)
 
         # Verify data
