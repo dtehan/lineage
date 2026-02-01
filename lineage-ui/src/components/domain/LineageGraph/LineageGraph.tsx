@@ -29,12 +29,24 @@ import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
+import { LargeGraphWarning, LARGE_GRAPH_THRESHOLD } from './LargeGraphWarning';
 import {
   useLineageHighlight,
   useKeyboardShortcuts,
   useLineageExport,
   useSmartViewport,
 } from './hooks';
+
+/**
+ * Threshold for enabling React Flow's onlyRenderVisibleElements optimization.
+ *
+ * Based on Phase 18 benchmarks (18-01-SUMMARY.md):
+ * - Render time scales roughly linearly up to 100 nodes (~14ms)
+ * - Render time grows super-linearly 100->200 nodes (2.90x increase to ~42ms)
+ * - Keeping threshold at 50 provides a buffer before render time becomes noticeable
+ * - Virtualization has minimal overhead for small graphs but helps significantly for large ones
+ */
+const VIRTUALIZATION_THRESHOLD = 50;
 
 const nodeTypes = {
   tableNode: TableNode,
@@ -54,6 +66,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const navigate = useNavigate();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [isWarningDismissed, setIsWarningDismissed] = useState(false);
 
   const {
     direction,
@@ -105,7 +118,16 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   });
 
   // Use loading progress hook
-  const { stage, progress, message, setStage, setProgress, reset } = useLoadingProgress();
+  const {
+    stage,
+    progress,
+    message,
+    elapsedTime,
+    estimatedTimeRemaining,
+    setStage,
+    setProgress,
+    reset,
+  } = useLoadingProgress();
 
   // Use smart viewport hook for size-aware positioning
   const { applySmartViewport } = useSmartViewport();
@@ -338,13 +360,43 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     [setSelectedEdge, openPanel, setViewMode]
   );
 
+  // Calculate suggested depth for large graphs
+  // Simple heuristic: reduce depth by 2, minimum of 3
+  const suggestedDepth = useMemo(() => {
+    return Math.max(3, maxDepth - 2);
+  }, [maxDepth]);
+
+  // Handle accepting depth suggestion from large graph warning
+  const handleAcceptDepthSuggestion = useCallback(() => {
+    setMaxDepth(suggestedDepth);
+  }, [setMaxDepth, suggestedDepth]);
+
+  // Handle dismissing large graph warning
+  const handleDismissWarning = useCallback(() => {
+    setIsWarningDismissed(true);
+  }, []);
+
+  // Get current node count for warning display
+  const nodeCount = filteredNodesAndEdges.filteredNodes.length;
+
   // Show progress during any loading stage (fetching, layout, or rendering)
   const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
+
+  // Show timing during layout stage (when ELK is running) for larger graphs
+  // Layout is the main bottleneck per Phase 18 benchmarks
+  const showTiming = stage === 'layout' || stage === 'rendering';
 
   if (showProgress) {
     return (
       <div className="flex items-center justify-center h-full">
-        <LoadingProgress progress={progress} message={message} size="lg" />
+        <LoadingProgress
+          progress={progress}
+          message={message}
+          size="lg"
+          elapsedTime={elapsedTime}
+          estimatedTimeRemaining={estimatedTimeRemaining}
+          showTiming={showTiming}
+        />
       </div>
     );
   }
@@ -414,6 +466,17 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         onAssetTypeFilterChange={setAssetTypeFilter}
       />
 
+      {/* Large Graph Warning */}
+      {!isWarningDismissed && (
+        <LargeGraphWarning
+          nodeCount={nodeCount}
+          currentDepth={maxDepth}
+          suggestedDepth={suggestedDepth}
+          onAcceptSuggestion={handleAcceptDepthSuggestion}
+          onDismiss={handleDismissWarning}
+        />
+      )}
+
       {/* Graph View */}
       {viewMode === 'graph' && (
         <div className="flex-1 relative">
@@ -430,7 +493,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
             connectionMode={ConnectionMode.Loose}
             minZoom={0.1}
             maxZoom={2}
-            onlyRenderVisibleElements={filteredNodesAndEdges.filteredNodes.length > 50}
+            onlyRenderVisibleElements={filteredNodesAndEdges.filteredNodes.length > VIRTUALIZATION_THRESHOLD}
             proOptions={{ hideAttribution: true }}
           >
             {/* Database cluster backgrounds - rendered with viewport transform */}
