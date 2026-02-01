@@ -68,6 +68,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const [showMinimap, setShowMinimap] = useState(false);
   const [isWarningDismissed, setIsWarningDismissed] = useState(false);
   const hasAppliedViewportRef = useRef(false);
+  const hasUserInteractedRef = useRef(false);
 
   const {
     direction,
@@ -167,10 +168,11 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Create database clusters from filtered nodes
   const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
 
-  // Reset loading state and viewport flag when datasetId changes
+  // Reset loading state and viewport flags when datasetId changes
   useEffect(() => {
     reset();
     hasAppliedViewportRef.current = false;
+    hasUserInteractedRef.current = false;
   }, [datasetId, reset]);
 
   // Sync data fetch stage with TanStack Query loading state
@@ -216,14 +218,17 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     }
   }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
 
-  // Apply smart viewport after layout completes (only once per data load)
+  // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
-    if (nodes.length > 0 && stage === 'complete' && !hasAppliedViewportRef.current) {
+    if (nodes.length > 0 && stage === 'complete' && !hasAppliedViewportRef.current && !hasUserInteractedRef.current) {
       console.log('[LineageGraph] Applying smart viewport - nodes:', nodes.length, 'stage:', stage);
       // Delay to ensure React Flow has measured node dimensions (longer for large graphs)
       const timeoutId = setTimeout(() => {
-        applySmartViewport(nodes);
-        hasAppliedViewportRef.current = true;
+        // Double-check user hasn't interacted during the timeout
+        if (!hasUserInteractedRef.current) {
+          applySmartViewport(nodes);
+          hasAppliedViewportRef.current = true;
+        }
       }, 150);
       return () => clearTimeout(timeoutId);
     }
@@ -283,6 +288,11 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     clearHighlight();
     closePanel();
   }, [clearHighlight, closePanel]);
+
+  // Handle node drag start - mark that user has interacted
+  const onNodeDragStart = useCallback(() => {
+    hasUserInteractedRef.current = true;
+  }, []);
 
   // Handle fit view
   const handleFitView = useCallback(() => {
@@ -499,6 +509,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
             onNodeClick={onNodeClick}
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            onNodeDragStart={onNodeDragStart}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
