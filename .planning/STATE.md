@@ -66,7 +66,7 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None - all planned work complete.
+1. Views not showing their column types (2026-01-31, area: ui)
 
 ### Blockers/Concerns
 
