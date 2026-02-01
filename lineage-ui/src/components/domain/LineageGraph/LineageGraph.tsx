@@ -104,6 +104,13 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  // Debug: Log when nodes change
+  useEffect(() => {
+    if (nodes.length > 0) {
+      console.log('[LineageGraph] Nodes changed - length:', nodes.length, 'hasAppliedViewport:', hasAppliedViewportRef.current);
+    }
+  }, [nodes]);
+
   // Use the lineage highlight hook
   const { highlightPath } = useLineageHighlight({ nodes, edges });
 
@@ -212,6 +219,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Apply smart viewport after layout completes (only once per data load)
   useEffect(() => {
     if (nodes.length > 0 && stage === 'complete' && !hasAppliedViewportRef.current) {
+      console.log('[LineageGraph] Applying smart viewport - nodes:', nodes.length, 'stage:', stage);
       // Delay to ensure React Flow has measured node dimensions (longer for large graphs)
       const timeoutId = setTimeout(() => {
         applySmartViewport(nodes);
@@ -237,7 +245,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         setSelectedAssetId(matchingColumn.id);
       }
     }
-  }, [fieldName, nodes, storeNodes, setSelectedAssetId]);
+  }, [fieldName, nodes.length, storeNodes, setSelectedAssetId]);
 
   // Handle column selection from TableNode/ColumnRow
   // This is called when a column row is clicked inside a table node
