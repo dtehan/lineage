@@ -1,3 +1,5 @@
+import { formatDuration } from '../../hooks/useLoadingProgress';
+
 /**
  * Size variants for the LoadingProgress component
  */
@@ -13,6 +15,12 @@ interface LoadingProgressProps {
   message: string;
   /** Size variant */
   size?: LoadingProgressSize;
+  /** Elapsed time in milliseconds */
+  elapsedTime?: number;
+  /** Estimated time remaining in milliseconds */
+  estimatedTimeRemaining?: number | null;
+  /** Whether to show timing information */
+  showTiming?: boolean;
 }
 
 /**
@@ -43,11 +51,21 @@ const textClasses: Record<LoadingProgressSize, string> = {
 };
 
 /**
+ * Text size classes for timing display (one step smaller than message)
+ */
+const timingTextClasses: Record<LoadingProgressSize, string> = {
+  sm: 'text-[10px]',
+  md: 'text-xs',
+  lg: 'text-sm',
+};
+
+/**
  * LoadingProgress component displays a progress bar with stage text
  *
  * Features:
  * - Visual progress bar showing 0-100% completion
  * - Stage message text below the bar
+ * - Optional timing display (elapsed time and ETA)
  * - Three size variants (sm, md, lg)
  * - Smooth progress animation via CSS transitions
  * - Proper ARIA attributes for accessibility
@@ -56,9 +74,24 @@ export function LoadingProgress({
   progress,
   message,
   size = 'md',
+  elapsedTime,
+  estimatedTimeRemaining,
+  showTiming = false,
 }: LoadingProgressProps) {
   // Clamp progress between 0 and 100
   const clampedProgress = Math.max(0, Math.min(100, progress));
+
+  // Build timing display string
+  const timingDisplay = showTiming && elapsedTime !== undefined && elapsedTime > 0
+    ? (() => {
+        const parts: string[] = [];
+        parts.push(`Elapsed: ${formatDuration(elapsedTime)}`);
+        if (estimatedTimeRemaining !== undefined && estimatedTimeRemaining !== null) {
+          parts.push(`ETA: ~${formatDuration(estimatedTimeRemaining)}`);
+        }
+        return parts.join(' | ');
+      })()
+    : null;
 
   return (
     <div className="flex flex-col items-center justify-center gap-2">
@@ -77,6 +110,9 @@ export function LoadingProgress({
       </div>
       {message && (
         <span className={`${textClasses[size]} text-slate-600`}>{message}</span>
+      )}
+      {timingDisplay && (
+        <span className={`${timingTextClasses[size]} text-slate-400`}>{timingDisplay}</span>
       )}
     </div>
   );

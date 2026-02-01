@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 
 /**
  * Loading stages for graph visualization
@@ -24,6 +24,26 @@ interface StageConfig {
 }
 
 /**
+ * Formats a duration in milliseconds to a human-readable string
+ * Examples: "5s", "1m 30s", "2m"
+ */
+export function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return '<1s';
+  }
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) {
+    return `${seconds}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (remainingSeconds === 0) {
+    return `${minutes}m`;
+  }
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+/**
  * Stage configuration mapping with progress ranges and messages
  */
 export const STAGE_CONFIG: Record<LoadingStage, StageConfig> = {
@@ -46,6 +66,10 @@ export interface UseLoadingProgressReturn {
   message: string;
   /** Whether loading is in progress (not idle and not complete) */
   isLoading: boolean;
+  /** Elapsed time in milliseconds since loading started */
+  elapsedTime: number;
+  /** Estimated time remaining in milliseconds, null if cannot estimate yet */
+  estimatedTimeRemaining: number | null;
   /** Set the current loading stage */
   setStage: (stage: LoadingStage) => void;
   /** Set exact progress within current stage range */
@@ -67,6 +91,9 @@ export interface UseLoadingProgressReturn {
 export function useLoadingProgress(): UseLoadingProgressReturn {
   const [stage, setStageState] = useState<LoadingStage>('idle');
   const [progress, setProgressState] = useState<number>(0);
+  const [startTime, setStartTime] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const prevStageRef = useRef<LoadingStage>('idle');
 
   const message = useMemo(() => STAGE_CONFIG[stage].message, [stage]);
 
@@ -75,8 +102,35 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
     [stage]
   );
 
+  // Calculate estimated time remaining based on progress and elapsed time
+  const estimatedTimeRemaining = useMemo(() => {
+    if (!isLoading || !startTime || elapsedTime === 0) {
+      return null;
+    }
+    const progressFraction = progress / 100;
+    // Don't estimate until we have at least 10% progress to avoid wild estimates
+    if (progressFraction < 0.1) {
+      return null;
+    }
+    const estimatedTotal = elapsedTime / progressFraction;
+    return Math.max(0, Math.round(estimatedTotal - elapsedTime));
+  }, [isLoading, startTime, elapsedTime, progress]);
+
   const setStage = useCallback((newStage: LoadingStage) => {
-    setStageState(newStage);
+    setStageState((prevStage) => {
+      // Track when loading begins (transition from idle to non-idle)
+      if (prevStage === 'idle' && newStage !== 'idle') {
+        setStartTime(Date.now());
+        setElapsedTime(0);
+      }
+      // Clear timing when loading completes or resets
+      if (newStage === 'complete' || newStage === 'idle') {
+        setStartTime(null);
+        setElapsedTime(0);
+      }
+      prevStageRef.current = prevStage;
+      return newStage;
+    });
     // Set progress to the minimum of the new stage
     setProgressState(STAGE_CONFIG[newStage].min);
   }, []);
@@ -89,7 +143,23 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
   const reset = useCallback(() => {
     setStageState('idle');
     setProgressState(0);
+    setStartTime(null);
+    setElapsedTime(0);
   }, []);
+
+  // Update elapsed time while loading
+  useEffect(() => {
+    if (!isLoading || !startTime) {
+      return;
+    }
+
+    // Update elapsed time every 100ms for smooth display
+    const timer = setInterval(() => {
+      setElapsedTime(Date.now() - startTime);
+    }, 100);
+
+    return () => clearInterval(timer);
+  }, [isLoading, startTime]);
 
   // Auto-advance progress during fetching stage (simulated progress)
   useEffect(() => {
@@ -121,6 +191,8 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
     progress,
     message,
     isLoading,
+    elapsedTime,
+    estimatedTimeRemaining,
     setStage,
     setProgress,
     reset,

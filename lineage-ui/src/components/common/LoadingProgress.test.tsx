@@ -187,4 +187,157 @@ describe('LoadingProgress', () => {
       expect(outerContainer).toHaveClass('justify-center');
     });
   });
+
+  describe('timing display', () => {
+    it('does not show timing when showTiming is false', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={5000}
+          estimatedTimeRemaining={10000}
+          showTiming={false}
+        />
+      );
+
+      expect(screen.queryByText(/Elapsed/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/ETA/)).not.toBeInTheDocument();
+    });
+
+    it('does not show timing when showTiming is true but elapsedTime is 0', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={0}
+          estimatedTimeRemaining={null}
+          showTiming={true}
+        />
+      );
+
+      expect(screen.queryByText(/Elapsed/)).not.toBeInTheDocument();
+    });
+
+    it('shows elapsed time when showTiming is true and elapsedTime > 0', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={5000}
+          estimatedTimeRemaining={null}
+          showTiming={true}
+        />
+      );
+
+      expect(screen.getByText(/Elapsed: 5s/)).toBeInTheDocument();
+    });
+
+    it('shows both elapsed time and ETA when available', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={5000}
+          estimatedTimeRemaining={10000}
+          showTiming={true}
+        />
+      );
+
+      expect(screen.getByText(/Elapsed: 5s/)).toBeInTheDocument();
+      expect(screen.getByText(/ETA: ~10s/)).toBeInTheDocument();
+    });
+
+    it('uses tilde prefix for ETA to indicate estimate', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={5000}
+          estimatedTimeRemaining={30000}
+          showTiming={true}
+        />
+      );
+
+      expect(screen.getByText(/ETA: ~30s/)).toBeInTheDocument();
+    });
+
+    it('formats longer durations correctly', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={90000}
+          estimatedTimeRemaining={120000}
+          showTiming={true}
+        />
+      );
+
+      expect(screen.getByText(/Elapsed: 1m 30s/)).toBeInTheDocument();
+      expect(screen.getByText(/ETA: ~2m/)).toBeInTheDocument();
+    });
+
+    it('has muted styling for timing text', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          elapsedTime={5000}
+          estimatedTimeRemaining={10000}
+          showTiming={true}
+        />
+      );
+
+      const timingText = screen.getByText(/Elapsed: 5s/);
+      expect(timingText).toHaveClass('text-slate-400');
+    });
+
+    it('has smaller text size for timing than message', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          size="md"
+          elapsedTime={5000}
+          estimatedTimeRemaining={10000}
+          showTiming={true}
+        />
+      );
+
+      // Message should be text-sm, timing should be text-xs
+      expect(screen.getByText('Loading...')).toHaveClass('text-sm');
+      expect(screen.getByText(/Elapsed/)).toHaveClass('text-xs');
+    });
+
+    it('applies correct timing text size for small variant', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          size="sm"
+          elapsedTime={5000}
+          estimatedTimeRemaining={10000}
+          showTiming={true}
+        />
+      );
+
+      // Timing text should be even smaller for sm size
+      expect(screen.getByText(/Elapsed/)).toHaveClass('text-[10px]');
+    });
+
+    it('applies correct timing text size for large variant', () => {
+      render(
+        <LoadingProgress
+          progress={50}
+          message="Loading..."
+          size="lg"
+          elapsedTime={5000}
+          estimatedTimeRemaining={10000}
+          showTiming={true}
+        />
+      );
+
+      // Timing text should be text-sm for lg size
+      expect(screen.getByText(/Elapsed/)).toHaveClass('text-sm');
+    });
+  });
 });
