@@ -67,6 +67,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
   const [isWarningDismissed, setIsWarningDismissed] = useState(false);
+  const hasAppliedViewportRef = useRef(false);
 
   const {
     direction,
@@ -159,9 +160,10 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Create database clusters from filtered nodes
   const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
 
-  // Reset loading state when datasetId changes
+  // Reset loading state and viewport flag when datasetId changes
   useEffect(() => {
     reset();
+    hasAppliedViewportRef.current = false;
   }, [datasetId, reset]);
 
   // Sync data fetch stage with TanStack Query loading state
@@ -207,16 +209,17 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     }
   }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
 
-  // Apply smart viewport after layout completes
+  // Apply smart viewport after layout completes (only once per data load)
   useEffect(() => {
-    if (nodes.length > 0 && stage === 'complete') {
+    if (nodes.length > 0 && stage === 'complete' && !hasAppliedViewportRef.current) {
       // Delay to ensure React Flow has measured node dimensions (longer for large graphs)
       const timeoutId = setTimeout(() => {
         applySmartViewport(nodes);
+        hasAppliedViewportRef.current = true;
       }, 150);
       return () => clearTimeout(timeoutId);
     }
-  }, [nodes, stage, applySmartViewport]);
+  }, [nodes.length, stage, applySmartViewport]);
 
   // Auto-highlight the specified field when component mounts (if not '_all')
   useEffect(() => {
