@@ -480,6 +480,11 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
       ref={wrapperRef}
       className={`flex flex-col h-full ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
     >
+      {/* DEBUG: Visual indicator that new code is loaded */}
+      <div style={{ position: 'fixed', top: 0, left: 0, background: 'red', color: 'white', padding: '4px 8px', zIndex: 9999, fontSize: '12px' }}>
+        NEW CODE LOADED ✓
+      </div>
+
       {/* Toolbar */}
       <Toolbar
         viewMode={viewMode}
