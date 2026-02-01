@@ -320,10 +320,15 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   // Show progress during any loading stage (fetching, layout, or rendering)
   const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
 
+  // Compute display values: when isLoading is true but stage is still 'idle' (effects haven't run yet),
+  // show the fetching state values to avoid appearing frozen
+  const displayProgress = (isLoading && stage === 'idle') ? 15 : progress;
+  const displayMessage = (isLoading && stage === 'idle') ? 'Loading data...' : message;
+
   if (showProgress) {
     return (
       <div className="flex items-center justify-center h-full">
-        <LoadingProgress progress={progress} message={message} size="lg" />
+        <LoadingProgress progress={displayProgress} message={displayMessage} size="lg" />
       </div>
     );
   }

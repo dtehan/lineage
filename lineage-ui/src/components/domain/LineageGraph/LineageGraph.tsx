@@ -395,6 +395,11 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Show progress during any loading stage (fetching, layout, or rendering)
   const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
 
+  // Compute display values: when isLoading is true but stage is still 'idle' (effects haven't run yet),
+  // show the fetching state values to avoid appearing frozen
+  const displayProgress = (isLoading && stage === 'idle') ? 15 : progress;
+  const displayMessage = (isLoading && stage === 'idle') ? 'Loading data...' : message;
+
   // Show timing during layout stage (when ELK is running) for larger graphs
   // Layout is the main bottleneck per Phase 18 benchmarks
   const showTiming = stage === 'layout' || stage === 'rendering';
@@ -403,8 +408,8 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     return (
       <div className="flex items-center justify-center h-full">
         <LoadingProgress
-          progress={progress}
-          message={message}
+          progress={displayProgress}
+          message={displayMessage}
           size="lg"
           elapsedTime={elapsedTime}
           estimatedTimeRemaining={estimatedTimeRemaining}
