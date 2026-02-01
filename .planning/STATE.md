@@ -57,6 +57,7 @@ v3.0 milestone successfully delivered:
 
 1. Views not showing their column types (2026-01-31, area: ui)
 2. Make database name configurable in database scripts (2026-02-01, area: database)
+3. Optimize view column type extraction to in-database process (2026-02-01, area: database)
 
 ### Next Milestone Priorities
 
