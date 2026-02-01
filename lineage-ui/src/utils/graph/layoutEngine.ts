@@ -24,6 +24,28 @@ interface LayoutOptions {
   onProgress?: (progress: number) => void;
 }
 
+/**
+ * Layout performance metrics for benchmarking and profiling.
+ * Only populated when NODE_ENV !== 'production'.
+ */
+export interface LayoutMetrics {
+  /** Time spent grouping columns and transforming to table nodes (ms) */
+  prepTime: number;
+  /** Time spent in ELK.js layout algorithm (ms) */
+  elkTime: number;
+  /** Time spent mapping ELK results to React Flow format (ms) */
+  transformTime: number;
+  /** Total layout time (ms) */
+  totalTime: number;
+}
+
+/** Result type for layoutGraph with optional metrics */
+export interface LayoutResult {
+  nodes: Node[];
+  edges: Edge[];
+  metrics?: LayoutMetrics;
+}
+
 // Constants for node sizing
 const HEADER_HEIGHT = 40;
 const COLUMN_ROW_HEIGHT = 28;
@@ -212,12 +234,14 @@ function groupTablesByDatabase(tableNodes: TableNodeData[]): Map<string, TableNo
  * Main layout function - transforms LineageNodes/Edges to React Flow format
  * with table-grouped nodes and column-level edge routing.
  * Uses ELK compound nodes to ensure tables stay within their database boundaries.
+ *
+ * Returns timing metrics when NODE_ENV !== 'production' for performance profiling.
  */
 export async function layoutGraph(
   rawNodes: LineageNode[],
   rawEdges: LineageEdge[],
   options: LayoutOptions = {}
-): Promise<{ nodes: Node[]; edges: Edge[] }> {
+): Promise<LayoutResult> {
   const {
     direction = 'RIGHT',
     nodeSpacing = 40,
@@ -225,18 +249,29 @@ export async function layoutGraph(
     onProgress,
   } = options;
 
+  // Track timing for performance metrics (non-production only)
+  const collectMetrics = typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production';
+  const startTime = collectMetrics ? performance.now() : 0;
+  let prepEndTime = 0;
+  let elkEndTime = 0;
+
   // Group columns by table
   const tableGroups = groupColumnsByTable(rawNodes);
   onProgress?.(35); // Entered layout stage
 
   // If no column nodes, fall back to simple layout
   if (tableGroups.size === 0) {
-    return layoutSimpleNodes(rawNodes, rawEdges, options);
+    return layoutSimpleNodes(rawNodes, rawEdges, options, collectMetrics ? startTime : undefined);
   }
 
   // Transform to table node format
   const { nodes: tableNodeData, columnToTableMap } = transformToTableNodes(tableGroups, rawEdges);
   onProgress?.(45); // Data transformed
+
+  // Record prep phase completion
+  if (collectMetrics) {
+    prepEndTime = performance.now();
+  }
 
   // Group tables by database for compound node layout
   const databaseGroups = groupTablesByDatabase(tableNodeData);
@@ -306,6 +341,12 @@ export async function layoutGraph(
 
     onProgress?.(55); // Graph built, starting ELK layout
     const layoutedGraph = await elk.layout(elkGraph);
+
+    // Record ELK completion time
+    if (collectMetrics) {
+      elkEndTime = performance.now();
+    }
+
     onProgress?.(70); // Layout complete, entering render
 
     // Transform to React Flow nodes
@@ -360,7 +401,18 @@ export async function layoutGraph(
       })
       .filter((edge): edge is Edge => edge !== null);
 
-        return { nodes: layoutedNodes, edges: layoutedEdges };
+    // Calculate and return metrics
+    const endTime = collectMetrics ? performance.now() : 0;
+    const metrics: LayoutMetrics | undefined = collectMetrics
+      ? {
+          prepTime: prepEndTime - startTime,
+          elkTime: elkEndTime - prepEndTime,
+          transformTime: endTime - elkEndTime,
+          totalTime: endTime - startTime,
+        }
+      : undefined;
+
+    return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
   }
 
   // No cross-database edges - use compound node layout for database clustering
@@ -459,6 +511,12 @@ export async function layoutGraph(
 
   onProgress?.(55); // Graph built, starting ELK layout
   const layoutedGraph = await elk.layout(elkGraph);
+
+  // Record ELK completion time
+  if (collectMetrics) {
+    elkEndTime = performance.now();
+  }
+
   onProgress?.(70); // Layout complete, entering render
 
   // Transform to React Flow nodes - extract table positions from within database compound nodes
@@ -523,7 +581,18 @@ export async function layoutGraph(
     })
     .filter((edge): edge is Edge => edge !== null);
 
-    return { nodes: layoutedNodes, edges: layoutedEdges };
+  // Calculate and return metrics
+  const endTime = collectMetrics ? performance.now() : 0;
+  const metrics: LayoutMetrics | undefined = collectMetrics
+    ? {
+        prepTime: prepEndTime - startTime,
+        elkTime: elkEndTime - prepEndTime,
+        transformTime: endTime - elkEndTime,
+        totalTime: endTime - startTime,
+      }
+    : undefined;
+
+  return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
 }
 
 /**
@@ -532,8 +601,9 @@ export async function layoutGraph(
 async function layoutSimpleNodes(
   nodes: LineageNode[],
   edges: LineageEdge[],
-  options: LayoutOptions
-): Promise<{ nodes: Node[]; edges: Edge[] }> {
+  options: LayoutOptions,
+  startTime?: number
+): Promise<LayoutResult> {
   const {
     direction = 'RIGHT',
     nodeSpacing = 40,
@@ -541,12 +611,21 @@ async function layoutSimpleNodes(
     onProgress,
   } = options;
 
+  const collectMetrics = startTime !== undefined;
+  let prepEndTime = 0;
+  let elkEndTime = 0;
+
   const elkNodes: ElkNode[] = nodes.map((node) => ({
     id: node.id,
     width: getNodeWidth(node),
     height: getNodeHeight(node),
     labels: [{ text: getNodeLabel(node) }],
   }));
+
+  if (collectMetrics) {
+    prepEndTime = performance.now();
+  }
+
   onProgress?.(45); // ELK nodes built
 
   const elkEdges: ElkExtendedEdge[] = edges.map((edge) => ({
@@ -571,6 +650,11 @@ async function layoutSimpleNodes(
 
   onProgress?.(55); // Graph built, starting ELK layout
   const layoutedGraph = await elk.layout(elkGraph);
+
+  if (collectMetrics) {
+    elkEndTime = performance.now();
+  }
+
   onProgress?.(70); // Layout complete, entering render
 
   const layoutedNodes: Node[] = (layoutedGraph.children || []).map((elkNode) => {
@@ -626,7 +710,18 @@ async function layoutSimpleNodes(
     },
   }));
 
-  return { nodes: layoutedNodes, edges: layoutedEdges };
+  // Calculate and return metrics
+  const endTime = collectMetrics ? performance.now() : 0;
+  const metrics: LayoutMetrics | undefined = collectMetrics && startTime !== undefined
+    ? {
+        prepTime: prepEndTime - startTime,
+        elkTime: elkEndTime - prepEndTime,
+        transformTime: endTime - elkEndTime,
+        totalTime: endTime - startTime,
+      }
+    : undefined;
+
+  return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
 }
 
 // Legacy helper functions for backward compatibility
