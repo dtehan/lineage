@@ -76,11 +76,15 @@ npx playwright test              # Run E2E tests
 # Database
 cd database
 python tests/run_tests.py              # Run 73 database tests
-python scripts/populate/populate_lineage.py       # Populate OpenLineage tables (manual mappings)
-python scripts/populate/populate_lineage.py --dry-run  # Preview what would be populated
 python scripts/setup/setup_lineage_schema.py --openlineage  # Create OL_* tables
 python scripts/utils/insert_cte_test_data.py   # Insert test lineage patterns (cycles, diamonds, fans)
 python scripts/populate/populate_test_metadata.py # Populate OL_* metadata for test tables (run after insert_cte_test_data.py)
+
+# Populate lineage (two modes available)
+python scripts/populate/populate_lineage.py                # Fixtures mode (default) - uses hardcoded mappings for demo/testing
+python scripts/populate/populate_lineage.py --dbql         # DBQL mode - extracts lineage from executed SQL in query logs
+python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"  # DBQL since specific date
+python scripts/populate/populate_lineage.py --dry-run      # Preview what would be populated
 ```
 
 ## Architecture
@@ -175,7 +179,61 @@ Aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-m
 - `OL_COLUMN_LINEAGE` - Column-level lineage with OpenLineage transformation types
 - `OL_SCHEMA_VERSION` - Schema version tracking
 
-The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. For view columns, it uses Teradata's `HELP COLUMN` command to retrieve actual column types (since `DBC.ColumnsV` returns NULL for view column types), ensuring accurate type information for both tables and views.
+The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. It uses `DBC.ColumnsJQV` instead of `DBC.ColumnsV` because ColumnsJQV provides complete column type information for both tables AND views (ColumnsV returns NULL for view column types).
+
+## Teradata QVCI Requirements
+
+### What is QVCI?
+
+QVCI (Queryable View Column Index) is a Teradata Database feature introduced in TD16.0 that enables efficient retrieval of view column information via `DBC.ColumnsQV` and `DBC.ColumnsJQV` views. This application requires QVCI to be enabled because we use `DBC.ColumnsJQV` to extract complete column metadata (including types) for both tables and views.
+
+### Checking QVCI Status
+
+To check if QVCI is enabled on your Teradata system:
+
+```sql
+-- Check dbscontrol setting (option 551 is DisableQVCI)
+-- If false, QVCI is enabled; if true, QVCI is disabled
+SELECT * FROM DBC.DBCInfoV WHERE InfoKey = 'VERSION';
+```
+
+Alternatively, try querying `DBC.ColumnsJQV`. If you receive error 9719 ("QVCI feature is disabled"), QVCI needs to be enabled.
+
+### Enabling QVCI
+
+QVCI must be enabled by a Teradata DBA using the `dbscontrol` utility:
+
+```bash
+# Connect to your Teradata system as a DBA
+# Option 551 is DisableQVCI - setting it to false enables QVCI
+
+dbscontrol << EOF
+M internal 551=false
+W
+EOF
+```
+
+After running this command, **restart the Teradata Database** for the change to take effect.
+
+**Important:** This is a system-level configuration change that requires:
+- DBA privileges
+- Database restart (plan for maintenance window)
+- Coordination with your Teradata administrator
+
+### If QVCI Cannot be Enabled
+
+If QVCI cannot be enabled on your Teradata system (due to stability concerns or administrative policies), you will need to modify `populate_lineage.py` to fall back to the legacy approach:
+
+1. Change `DBC.ColumnsJQV` back to `DBC.ColumnsV` in the `populate_openlineage_fields()` function
+2. Restore the `update_view_column_types()` function (see git history)
+3. Re-enable the call to `update_view_column_types()` in `main()`
+
+This fallback uses `HELP COLUMN` commands for each view column, which is slower but works without QVCI.
+
+### References
+
+- [Applications encounter "QVCI feature is disabled" error - Teradata Knowledge Portal](https://support.teradata.com/knowledge?id=kb_article_view&sysparm_article=KB0026034)
+- [Getting View Column Information - Teradata Vantage](https://docs.teradata.com/r/Teradata-VantageCloud-Lake/Database-Reference/Database-Administration/Working-with-Tables-and-Views-Application-DBAs/Working-with-Views/Getting-View-Column-Information)
 
 ## API Endpoints
 

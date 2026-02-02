@@ -7,21 +7,45 @@ Scripts that populate the OpenLineage tables with metadata and lineage informati
 ### populate_lineage.py
 Extracts metadata from DBC views and populates OpenLineage tables.
 
+**Lineage Modes:**
+
+| Mode | Command | Use Case |
+|------|---------|----------|
+| Fixtures (default) | `python populate_lineage.py` | Demo, testing, development |
+| DBQL extraction | `python populate_lineage.py --dbql` | Production - extracts from query logs |
+
 **Usage:**
 ```bash
-python scripts/populate/populate_lineage.py              # Use manual mappings
+# Fixtures mode (default) - uses hardcoded test mappings
+python scripts/populate/populate_lineage.py
+python scripts/populate/populate_lineage.py --fixtures   # Explicit fixtures mode
+
+# DBQL mode - extracts lineage from executed SQL in query logs
+python scripts/populate/populate_lineage.py --dbql                    # Last 30 days
+python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"  # Since date
+python scripts/populate/populate_lineage.py --dbql --full             # All history
+
+# Common options
 python scripts/populate/populate_lineage.py --dry-run    # Preview changes
-python scripts/populate/populate_lineage.py --manual     # Explicit manual mode
-python scripts/populate/populate_lineage.py --dbql       # Extract from DBQL (future)
+python scripts/populate/populate_lineage.py --verbose    # Detailed output
+python scripts/populate/populate_lineage.py --skip-clear # Append mode
 ```
 
 **What it does:**
-- Extracts namespaces, datasets, and fields from DBC.DatabasesV, DBC.TablesV, DBC.ColumnsV
-- Uses HELP COLUMN to derive accurate view column types (DBC.ColumnsV returns NULL for views)
-- Creates lineage relationships based on manual mappings
-- Populates OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD, OL_JOB, OL_RUN, OL_COLUMN_LINEAGE
+- Extracts namespaces, datasets, and fields from DBC.TablesV, DBC.ColumnsV
+- In fixtures mode: Creates lineage from predefined mappings in `database/fixtures/`
+- In DBQL mode: Parses executed SQL (INSERT SELECT, MERGE, CREATE VIEW, etc.) to discover lineage
+- Populates OL_NAMESPACE, OL_DATASET, OL_DATASET_FIELD, OL_COLUMN_LINEAGE
 
-**Note:** For view columns, the script automatically uses Teradata's HELP COLUMN command to retrieve actual column types, since DBC.ColumnsV does not provide type information for views.
+**DBQL Mode Requirements:**
+- SELECT access on DBC.DBQLogTbl and DBC.DBQLSQLTbl
+- Query logging enabled: `BEGIN QUERY LOGGING WITH SQL, OBJECTS ON ALL`
+- sqlglot library: `pip install sqlglot>=25.0.0`
+
+**General Requirements:**
+- QVCI (Queryable View Column Index) must be enabled on your Teradata system
+- If you receive error 9719 ("QVCI feature is disabled"), contact your DBA to enable QVCI
+- See `CLAUDE.md` for QVCI setup instructions and fallback options
 
 Run this after creating test data to populate lineage metadata.
 

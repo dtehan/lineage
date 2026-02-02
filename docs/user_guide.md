@@ -143,8 +143,12 @@ python3 scripts/populate/populate_lineage.py --skip-clear
 
 This populates OpenLineage tables with:
 - Databases and tables from `DBC.TablesV`
-- Columns and their types from `DBC.ColumnsV`
+- Columns and their types from `DBC.ColumnsJQV` (provides complete type information for both tables and views)
 - 93 predefined column-level lineage relationships with OpenLineage transformation types (DIRECT/IDENTITY, DIRECT/TRANSFORMATION, DIRECT/AGGREGATION, INDIRECT/JOIN, INDIRECT/FILTER)
+
+**Requirements:**
+- QVCI (Queryable View Column Index) must be enabled on your Teradata system
+- If you receive error 9719 ("QVCI feature is disabled"), see the [QVCI Troubleshooting](#qvci-disabled-error) section below
 
 **Use for:**
 - Initial setup and testing
@@ -999,6 +1003,41 @@ Searches for assets by name.
 3. Use zoom and pan to navigate
 4. Double-click to fit view
 
+### QVCI Disabled Error
+
+**Problem:** Error 9719: "QVCI feature is disabled" when running `populate_lineage.py`
+
+**Cause:** The script uses `DBC.ColumnsJQV` to extract column metadata, which requires QVCI (Queryable View Column Index) to be enabled on your Teradata system.
+
+**Solutions:**
+
+**Option 1: Enable QVCI (recommended)**
+
+Contact your Teradata DBA to enable QVCI using the `dbscontrol` utility:
+
+```bash
+dbscontrol << EOF
+M internal 551=false
+W
+EOF
+```
+
+**Note:** This requires a database restart. Plan for a maintenance window.
+
+**Option 2: Use fallback approach**
+
+If QVCI cannot be enabled (due to stability concerns or administrative policies), modify `populate_lineage.py`:
+
+1. Change `DBC.ColumnsJQV` to `DBC.ColumnsV` in the `populate_openlineage_fields()` function
+2. Restore the `update_view_column_types()` function from git history
+3. Re-enable the call to `update_view_column_types()` in `main()`
+
+This fallback uses `HELP COLUMN` commands for each view column, which is slower but works without QVCI.
+
+**For more details:**
+- See `CLAUDE.md` for complete QVCI documentation
+- [Teradata QVCI Knowledge Article](https://support.teradata.com/knowledge?id=kb_article_view&sysparm_article=KB0026034)
+
 ---
 
 ## Glossary
@@ -1571,15 +1610,103 @@ Response includes OpenLineage-structured graph with transformation type/subtype:
 
 ---
 
-## Future Lineage Extraction Options
+## DBQL-Based Lineage Extraction
 
-Currently, lineage is populated using manual mappings. Future options for automated lineage discovery:
+The application supports extracting column-level lineage automatically from Teradata's Database Query Log (DBQL). This captures lineage from actual executed SQL statements like INSERT SELECT, MERGE, CREATE TABLE AS, and CREATE VIEW.
 
-1. **DBQL Integration**: Extract lineage from Teradata Query Log
-2. **SQL File Ingestion**: Parse ETL script files directly
-3. **DDL-Based Lineage**: Extract from view definitions
-4. **API Registration**: Applications register lineage at runtime
-5. **Metadata Import**: Import from dbt, DataHub, etc.
+### When to Use DBQL Extraction
+
+| Mode | Use Case | Command |
+|------|----------|---------|
+| **Fixtures** (default) | Demo, testing, development | `python populate_lineage.py` |
+| **DBQL** | Production, real lineage from executed queries | `python populate_lineage.py --dbql` |
+
+### DBQL Prerequisites
+
+Before using DBQL extraction, ensure these requirements are met:
+
+1. **Query Logging Enabled**: Your DBA must enable query logging with SQL text capture:
+   ```sql
+   BEGIN QUERY LOGGING WITH SQL, OBJECTS ON ALL;
+   ```
+
+2. **DBQL Access**: Your user needs SELECT privileges on DBQL tables:
+   ```sql
+   GRANT SELECT ON DBC.DBQLogTbl TO your_user;
+   GRANT SELECT ON DBC.DBQLSQLTbl TO your_user;
+   ```
+
+3. **SQLGlot Library**: Install the SQL parsing library:
+   ```bash
+   pip install sqlglot>=25.0.0
+   ```
+
+### Using DBQL Extraction
+
+```bash
+cd database/
+
+# Extract lineage from last 30 days (default)
+python scripts/populate/populate_lineage.py --dbql
+
+# Extract lineage since a specific date
+python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"
+
+# Extract all available history
+python scripts/populate/populate_lineage.py --dbql --full
+
+# Preview what would be extracted (dry run)
+python scripts/populate/populate_lineage.py --dbql --dry-run
+
+# Verbose output for debugging
+python scripts/populate/populate_lineage.py --dbql --verbose
+```
+
+### What DBQL Extraction Captures
+
+The extractor parses the following statement types from DBQL:
+- `INSERT INTO ... SELECT` statements
+- `MERGE INTO` statements
+- `CREATE TABLE ... AS SELECT` statements
+- `CREATE VIEW` statements
+- `UPDATE` statements
+
+For each statement, it extracts column-level lineage by parsing the SQL using SQLGlot with Teradata dialect support.
+
+### DBQL Extraction Limitations
+
+- **Query text truncation**: DBQL may truncate very long SQL statements
+- **Dynamic SQL**: Dynamically generated SQL may not be fully captured
+- **Complex expressions**: Some complex column expressions may not parse correctly
+- **Parse failures**: The extractor gracefully handles parse failures and continues
+
+### Troubleshooting DBQL
+
+**"No access to DBQL tables" error:**
+- DBQL logging may not be enabled on your Teradata system
+- Your user may lack SELECT privileges on DBC.DBQLogTbl
+- Contact your DBA to enable logging and grant access
+
+**No lineage records found:**
+- Check that queries have been executed since the `--since` date
+- Verify query logging is capturing SQL text (not just metadata)
+- Use `--verbose` flag to see detailed processing information
+
+**Parse errors:**
+- Some Teradata-specific SQL syntax may not parse correctly
+- The extractor logs failures and continues with other queries
+- Use `--verbose` to see which queries failed
+
+---
+
+## Future Lineage Options
+
+Additional lineage discovery methods planned for future releases:
+
+1. **SQL File Ingestion**: Parse ETL script files directly
+2. **DDL-Based Lineage**: Extract from view definitions automatically
+3. **API Registration**: Applications register lineage at runtime
+4. **Metadata Import**: Import from dbt, DataHub, OpenLineage producers
 
 ---
 
