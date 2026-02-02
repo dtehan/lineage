@@ -53,10 +53,10 @@ See [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md) for full details. 6
   2. Unrelated nodes dim smoothly when selection active (200-300ms transition)
   3. Detail panel slides in/out with animation (not instant appear/disappear)
   4. All transitions feel natural with consistent ease-out timing
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 19-01: TBD
+- [ ] 19-01-PLAN.md - Add CSS transitions to nodes and slide animation to DetailPanel
 
 #### Phase 20: Backend Statistics & DDL API
 **Goal**: Provide backend endpoints that supply table/view metadata for the enhanced detail panel
@@ -127,7 +127,7 @@ Plans:
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
-| 19. Animation & Transitions | v4.0 | 0/TBD | Not started | - |
+| 19. Animation & Transitions | v4.0 | 0/1 | Planned | - |
 | 20. Backend Statistics & DDL API | v4.0 | 0/TBD | Not started | - |
 | 21. Detail Panel Enhancement | v4.0 | 0/TBD | Not started | - |
 | 22. Selection Features | v4.0 | 0/TBD | Not started | - |
@@ -135,4 +135,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-01 (v4.0 roadmap added)*
+*Last updated: 2026-02-01 (Phase 19 planned)*
