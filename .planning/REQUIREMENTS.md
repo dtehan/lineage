@@ -84,41 +84,41 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ANIM-01 | TBD | Pending |
-| ANIM-02 | TBD | Pending |
-| ANIM-03 | TBD | Pending |
-| ANIM-04 | TBD | Pending |
-| SELECT-01 | TBD | Pending |
-| SELECT-02 | TBD | Pending |
-| SELECT-03 | TBD | Pending |
-| SELECT-04 | TBD | Pending |
-| SELECT-05 | TBD | Pending |
-| API-01 | TBD | Pending |
-| API-02 | TBD | Pending |
-| API-03 | TBD | Pending |
-| API-04 | TBD | Pending |
-| API-05 | TBD | Pending |
-| API-06 | TBD | Pending |
-| PANEL-01 | TBD | Pending |
-| PANEL-02 | TBD | Pending |
-| PANEL-03 | TBD | Pending |
-| PANEL-04 | TBD | Pending |
-| PANEL-05 | TBD | Pending |
-| PANEL-06 | TBD | Pending |
-| PANEL-07 | TBD | Pending |
-| PANEL-08 | TBD | Pending |
-| TEST-01 | TBD | Pending |
-| TEST-02 | TBD | Pending |
-| TEST-03 | TBD | Pending |
-| TEST-04 | TBD | Pending |
-| TEST-05 | TBD | Pending |
-| TEST-06 | TBD | Pending |
+| ANIM-01 | Phase 19 | Pending |
+| ANIM-02 | Phase 19 | Pending |
+| ANIM-03 | Phase 19 | Pending |
+| ANIM-04 | Phase 19 | Pending |
+| SELECT-01 | Phase 22 | Pending |
+| SELECT-02 | Phase 22 | Pending |
+| SELECT-03 | Phase 22 | Pending |
+| SELECT-04 | Phase 22 | Pending |
+| SELECT-05 | Phase 22 | Pending |
+| API-01 | Phase 20 | Pending |
+| API-02 | Phase 20 | Pending |
+| API-03 | Phase 20 | Pending |
+| API-04 | Phase 20 | Pending |
+| API-05 | Phase 20 | Pending |
+| API-06 | Phase 20 | Pending |
+| PANEL-01 | Phase 21 | Pending |
+| PANEL-02 | Phase 21 | Pending |
+| PANEL-03 | Phase 21 | Pending |
+| PANEL-04 | Phase 21 | Pending |
+| PANEL-05 | Phase 21 | Pending |
+| PANEL-06 | Phase 21 | Pending |
+| PANEL-07 | Phase 21 | Pending |
+| PANEL-08 | Phase 21 | Pending |
+| TEST-01 | Phase 23 | Pending |
+| TEST-02 | Phase 23 | Pending |
+| TEST-03 | Phase 23 | Pending |
+| TEST-04 | Phase 23 | Pending |
+| TEST-05 | Phase 23 | Pending |
+| TEST-06 | Phase 23 | Pending |
 
 **Coverage:**
 - v4.0 requirements: 29 total
-- Mapped to phases: 0
-- Unmapped: 29 ⚠️
+- Mapped to phases: 29
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-01 after initial definition*
+*Last updated: 2026-02-01 after roadmap creation (traceability complete)*
