@@ -1,0 +1,124 @@
+# Requirements: Lineage Application v4.0
+
+**Defined:** 2026-02-01
+**Core Value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
+
+## v4.0 Requirements
+
+Requirements for Interactive Graph Experience milestone. Focus on animation polish and detail panel enhancement.
+
+### Animation & Transitions
+
+- [ ] **ANIM-01**: Smooth opacity transitions (200-300ms) when highlighting/unhighlighting nodes
+- [ ] **ANIM-02**: Smooth transitions (200-300ms) when dimming unrelated nodes during selection
+- [ ] **ANIM-03**: Panel slides in/out with smooth animation (not instant)
+- [ ] **ANIM-04**: Transition timing feels natural (ease-out curve, no jarring jumps)
+
+### Selection Enhancement
+
+- [ ] **SELECT-01**: "Fit to selection" button centers viewport on highlighted path
+- [ ] **SELECT-02**: Fit-to-selection uses React Flow fitBounds API with padding
+- [ ] **SELECT-03**: Breadcrumb shows selection hierarchy (database > table > column) in panel header
+- [ ] **SELECT-04**: Breadcrumb updates immediately on selection change
+- [ ] **SELECT-05**: Selection state persists when changing graph depth (if possible)
+
+### Detail Panel - Backend API
+
+- [ ] **API-01**: GET /api/v2/openlineage/datasets/{id}/statistics returns row count, size, last modified
+- [ ] **API-02**: Statistics endpoint returns owner, table/view type, created date
+- [ ] **API-03**: GET /api/v2/openlineage/datasets/{id}/ddl returns view definition SQL
+- [ ] **API-04**: DDL endpoint returns table comments, column comments
+- [ ] **API-05**: Endpoints return 404 for missing datasets, 500 with generic errors (security)
+- [ ] **API-06**: Endpoints support both table and view dataset types
+
+### Detail Panel - Frontend
+
+- [ ] **PANEL-01**: Tabbed interface with "Columns", "Statistics", "DDL" tabs
+- [ ] **PANEL-02**: Statistics tab shows table metadata (row count, size, dates, owner, type)
+- [ ] **PANEL-03**: DDL tab shows view SQL with syntax highlighting
+- [ ] **PANEL-04**: DDL tab shows table/column comments if available
+- [ ] **PANEL-05**: Column list: click column name navigates to that column's lineage graph
+- [ ] **PANEL-06**: Loading states for statistics and DDL tabs (separate from main panel)
+- [ ] **PANEL-07**: Error states if statistics/DDL fetch fails (graceful degradation)
+- [ ] **PANEL-08**: Panel scrollable independently per tab (large SQL, many columns)
+
+### Testing
+
+- [ ] **TEST-01**: Unit tests for hover tooltip with different node types
+- [ ] **TEST-02**: Integration tests for fit-to-selection viewport calculations
+- [ ] **TEST-03**: E2E tests for panel navigation (column click → new lineage)
+- [ ] **TEST-04**: Performance tests for hover on 100+ node graphs
+- [ ] **TEST-05**: API tests for statistics and DDL endpoints
+- [ ] **TEST-06**: Frontend tests for panel tab switching and error states
+
+## Future Requirements
+
+Deferred to v4.1 or later milestones.
+
+### Advanced Features (v4.1+)
+
+- **FUTURE-01**: Hover preview tooltip with lineage counts ("X upstream, Y downstream")
+- **FUTURE-02**: Edge flow animation with CSS stroke-dasharray
+- **FUTURE-03**: Selection history navigation (back/forward buttons)
+- **FUTURE-04**: Column-level keyboard navigation (arrow keys, Tab)
+- **FUTURE-05**: Contextual actions menu (right-click)
+- **FUTURE-06**: Multi-column selection with Shift+click
+- **FUTURE-07**: Smart zoom on selection (optimize readability)
+
+## Out of Scope
+
+Explicitly excluded from v4.0. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Arbitrary multi-select | Creates confusing non-contiguous highlighting; unclear semantics |
+| Node editing from UI | Lineage data should be authoritative from source; UI edits create drift |
+| Real-time lineage updates | Complex infrastructure; most changes happen during ETL, not real-time |
+| Auto-open panel on every selection | Disrupts exploration flow; current manual open is better UX |
+| Full-text search in panel | Search belongs in main search bar; panel is for quick reference |
+| Mini-map selection sync | Nice-to-have; defer to later milestone |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ANIM-01 | TBD | Pending |
+| ANIM-02 | TBD | Pending |
+| ANIM-03 | TBD | Pending |
+| ANIM-04 | TBD | Pending |
+| SELECT-01 | TBD | Pending |
+| SELECT-02 | TBD | Pending |
+| SELECT-03 | TBD | Pending |
+| SELECT-04 | TBD | Pending |
+| SELECT-05 | TBD | Pending |
+| API-01 | TBD | Pending |
+| API-02 | TBD | Pending |
+| API-03 | TBD | Pending |
+| API-04 | TBD | Pending |
+| API-05 | TBD | Pending |
+| API-06 | TBD | Pending |
+| PANEL-01 | TBD | Pending |
+| PANEL-02 | TBD | Pending |
+| PANEL-03 | TBD | Pending |
+| PANEL-04 | TBD | Pending |
+| PANEL-05 | TBD | Pending |
+| PANEL-06 | TBD | Pending |
+| PANEL-07 | TBD | Pending |
+| PANEL-08 | TBD | Pending |
+| TEST-01 | TBD | Pending |
+| TEST-02 | TBD | Pending |
+| TEST-03 | TBD | Pending |
+| TEST-04 | TBD | Pending |
+| TEST-05 | TBD | Pending |
+| TEST-06 | TBD | Pending |
+
+**Coverage:**
+- v4.0 requirements: 29 total
+- Mapped to phases: 0
+- Unmapped: 29 ⚠️
+
+---
+*Requirements defined: 2026-02-01*
+*Last updated: 2026-02-01 after initial definition*
