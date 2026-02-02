@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A production-ready Teradata column-level data lineage application with enhanced graph usability, correctness validation, and performance optimization. The application visualizes data flow between database columns with loading progress feedback, optimized viewport positioning, comprehensive test coverage for complex graph patterns, and performance benchmarks for deep lineage traversals.
+A production-ready Teradata column-level data lineage application with interactive graph visualization, node selection, and detailed metadata panels. The application visualizes data flow between database columns with loading progress feedback, optimized viewport positioning, bidirectional path highlighting, and comprehensive table/view detail inspection capabilities.
 
 ## Core Value
 
@@ -149,22 +149,52 @@ The lineage application must be secure and stable for production use - no data e
 - ✓ **PERF-RENDER-05**: Test zoom/pan responsiveness with large graphs (target <100ms) — v3.0
 - ✓ **PERF-RENDER-06**: Performance tests automated and repeatable — v3.0
 
+## Current Milestone: v4.0 Interactive Graph Experience
+
+**Goal:** Enable users to interact with graph nodes and view detailed metadata about tables and views.
+
+**Target features:**
+- Node selection with click interaction
+- Bidirectional path highlighting (upstream + downstream lineage)
+- Detail panel showing table/view metadata (columns, statistics, DDL)
+- Column-level navigation from detail panel to lineage graph
+
 ### Active
 
-<!-- Requirements for next milestone -->
+<!-- Requirements for v4.0 milestone -->
 
-**High Priority Concerns:**
-- [ ] **REDIS-01**: Integrate Redis caching or remove dead code
-- [ ] **PARSER-01**: Improve SQL parser with confidence tracking and fallback visibility
-- [ ] **EXTRACT-01**: Harden database extraction logic against Teradata version changes
-- [ ] **E2E-01**: End-to-end lineage validation testing through multiple hops
-- [ ] **CREDS-01**: Integrate with secrets vault (HashiCorp Vault, AWS Secrets Manager)
+**Graph Interaction:**
+- [ ] **SELECT-01**: User can click table/view nodes to select them
+- [ ] **SELECT-02**: Selected node highlighted with distinct visual style
+- [ ] **SELECT-03**: User can deselect by clicking elsewhere or pressing ESC
+- [ ] **SELECT-04**: Multi-select with ctrl/shift key support
 
-**Medium Priority Concerns:**
-- [ ] **SEARCH-01**: Add secondary indexes for search performance
-- [ ] **POOL-01**: Configure connection pooling (MaxOpenConns, MaxIdleConns, ConnMaxLifetime)
-- [ ] **DEP-01**: Pin SQLGlot version with compatibility tests
-- [ ] **REFRESH-01**: Implement selective lineage refresh from DBQL
+**Path Highlighting:**
+- [ ] **HIGHLIGHT-01**: Selected node emphasizes entire lineage tree (upstream + downstream)
+- [ ] **HIGHLIGHT-02**: Unrelated nodes dimmed/muted during selection
+- [ ] **HIGHLIGHT-03**: Connected edges highlighted along with nodes
+- [ ] **HIGHLIGHT-04**: Smooth transition animation when selecting/deselecting
+
+**Detail Panel:**
+- [ ] **PANEL-01**: Detail panel slides in from right when node selected
+- [ ] **PANEL-02**: Panel shows table/view name, type, database context
+- [ ] **PANEL-03**: Column list with names, types, nullable indicators
+- [ ] **PANEL-04**: Statistics section (row count, size, last modified, owner)
+- [ ] **PANEL-05**: DDL section showing view definition SQL and comments
+- [ ] **PANEL-06**: Click column in panel navigates to that column's lineage
+- [ ] **PANEL-07**: Panel closes when node deselected
+- [ ] **PANEL-08**: Panel scrollable for tables with many columns
+
+**Deferred Concerns (Future Milestones):**
+- Redis integration or dead code removal
+- SQL parser improvements with confidence tracking
+- Database extraction hardening
+- E2E validation testing
+- Secrets vault integration
+- Search performance indexes
+- Connection pooling configuration
+- SQLGlot version pinning
+- Selective lineage refresh
 
 ### Out of Scope
 
@@ -266,4 +296,4 @@ The lineage application must be secure and stable for production use - no data e
 | Comprehensive test patterns (v3.0) | Validate correctness with cycles, diamonds, fans, combined scenarios | ✓ Complete - 89 TEST_* records, 48 passing correctness tests |
 
 ---
-*Last updated: 2026-01-31 after v3.0 milestone completion*
+*Last updated: 2026-02-01 after v4.0 milestone initialization*

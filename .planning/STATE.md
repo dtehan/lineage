@@ -2,19 +2,20 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-01-31)
+See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v3.0 milestone complete - Planning next milestone
+**Current focus:** v4.0 Interactive Graph Experience - Defining requirements
 
 ## Current Position
 
-Milestone: v3.0 complete
-Phase: 18 of 18 (all phases complete)
-Status: Ready for next milestone planning
-Last activity: 2026-01-31 - v3.0 milestone completed and archived
+Milestone: v4.0 Interactive Graph Experience
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-01 - Milestone v4.0 started
 
-Progress: [██████████] 100% (all milestones: v1.0, v2.0, v2.1, v3.0 complete)
+Progress: [          ] 0% (defining requirements)
 
 ## Performance Metrics
 
@@ -56,9 +57,8 @@ v3.0 milestone successfully delivered:
 ### Pending Todos
 
 1. Views not showing their column types (2026-01-31, area: ui)
-2. Make database name configurable in database scripts (2026-02-01, area: database)
-3. Optimize view column type extraction to in-database process (2026-02-01, area: database)
-4. Refactor COLUMN_LINEAGE_MAPPINGS to test fixtures (2026-02-01, area: database)
+2. Optimize view column type extraction to in-database process (2026-02-01, area: database)
+3. Refactor COLUMN_LINEAGE_MAPPINGS to test fixtures (2026-02-01, area: database)
 
 ### Next Milestone Priorities
 
