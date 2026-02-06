@@ -152,6 +152,79 @@ func (s *OpenLineageService) GetLineageGraph(ctx context.Context, datasetID, fie
 	return response, nil
 }
 
+// GetDatasetStatistics returns statistics for a dataset
+func (s *OpenLineageService) GetDatasetStatistics(ctx context.Context, datasetID string) (*DatasetStatisticsResponse, error) {
+	// Verify dataset exists in OL_DATASET
+	ds, err := s.repo.GetDataset(ctx, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	if ds == nil {
+		return nil, nil
+	}
+
+	stats, err := s.repo.GetDatasetStatistics(ctx, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	if stats == nil {
+		return nil, nil
+	}
+
+	response := &DatasetStatisticsResponse{
+		DatasetID:    stats.DatasetID,
+		DatabaseName: stats.DatabaseName,
+		TableName:    stats.TableName,
+		SourceType:   stats.SourceType,
+		CreatorName:  stats.CreatorName,
+		RowCount:     stats.RowCount,
+		SizeBytes:    stats.SizeBytes,
+		TableComment: stats.TableComment,
+	}
+
+	if stats.CreateTimestamp != nil {
+		ts := stats.CreateTimestamp.Format("2006-01-02T15:04:05Z")
+		response.CreateTimestamp = &ts
+	}
+	if stats.LastAlterTimestamp != nil {
+		ts := stats.LastAlterTimestamp.Format("2006-01-02T15:04:05Z")
+		response.LastAlterTimestamp = &ts
+	}
+
+	return response, nil
+}
+
+// GetDatasetDDL returns DDL information for a dataset
+func (s *OpenLineageService) GetDatasetDDL(ctx context.Context, datasetID string) (*DatasetDDLResponse, error) {
+	// Verify dataset exists in OL_DATASET
+	ds, err := s.repo.GetDataset(ctx, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	if ds == nil {
+		return nil, nil
+	}
+
+	ddl, err := s.repo.GetDatasetDDL(ctx, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	if ddl == nil {
+		return nil, nil
+	}
+
+	return &DatasetDDLResponse{
+		DatasetID:      ddl.DatasetID,
+		DatabaseName:   ddl.DatabaseName,
+		TableName:      ddl.TableName,
+		SourceType:     ddl.SourceType,
+		ViewSQL:        ddl.ViewSQL,
+		Truncated:      ddl.Truncated,
+		TableComment:   ddl.TableComment,
+		ColumnComments: ddl.ColumnComments,
+	}, nil
+}
+
 // Helper methods
 
 func (s *OpenLineageService) datasetToResponse(ds domain.OpenLineageDataset) OpenLineageDatasetResponse {

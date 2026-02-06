@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"github.com/lineage-api/internal/domain"
 )
@@ -771,4 +773,241 @@ func (r *OpenLineageRepository) GetColumnLineageGraph(ctx context.Context, datas
 	}
 
 	return graph, nil
+}
+
+// parseDatasetName extracts database and table names from a datasetID.
+// The datasetID format is "namespace_id/database.table".
+func parseDatasetName(datasetID string) (database, table string, err error) {
+	slashIdx := strings.LastIndex(datasetID, "/")
+	if slashIdx < 0 {
+		return "", "", fmt.Errorf("invalid dataset ID format: missing '/'")
+	}
+	name := datasetID[slashIdx+1:]
+
+	dotIdx := strings.Index(name, ".")
+	if dotIdx < 0 {
+		return "", "", fmt.Errorf("invalid dataset name format: missing '.'")
+	}
+
+	database = strings.TrimSpace(name[:dotIdx])
+	table = strings.TrimSpace(name[dotIdx+1:])
+	if database == "" || table == "" {
+		return "", "", fmt.Errorf("invalid dataset name: empty database or table")
+	}
+	return database, table, nil
+}
+
+// mapTableKind maps a Teradata TableKind code to a human-readable source type.
+func mapTableKind(kind string) string {
+	kind = strings.TrimSpace(kind)
+	switch kind {
+	case "V":
+		return "VIEW"
+	case "T", "O":
+		return "TABLE"
+	default:
+		return "TABLE"
+	}
+}
+
+// GetDatasetStatistics retrieves statistics for a dataset from DBC system views.
+func (r *OpenLineageRepository) GetDatasetStatistics(ctx context.Context, datasetID string) (*domain.DatasetStatistics, error) {
+	// Verify dataset exists in OL_DATASET
+	existsQuery := `SELECT dataset_id FROM demo_user.OL_DATASET WHERE dataset_id = ?`
+	var exists string
+	err := r.db.QueryRowContext(ctx, existsQuery, datasetID).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("check dataset exists: %w", err)
+	}
+
+	// Parse database and table from datasetID
+	dbName, tableName, err := parseDatasetName(datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("parse dataset name: %w", err)
+	}
+
+	stats := &domain.DatasetStatistics{
+		DatasetID:    datasetID,
+		DatabaseName: dbName,
+		TableName:    tableName,
+	}
+
+	// Query DBC.TablesV for metadata
+	tablesQuery := `
+		SELECT TRIM(t.TableName), t.TableKind, TRIM(t.CreatorName),
+		       t.CreateTimeStamp, t.LastAlterTimeStamp, TRIM(t.CommentString)
+		FROM DBC.TablesV t
+		WHERE t.DatabaseName = ? AND t.TableName = ?`
+
+	var tableNameResult, tableKind, creatorName, commentString sql.NullString
+	var createTS, alterTS sql.NullTime
+
+	err = r.db.QueryRowContext(ctx, tablesQuery, dbName, tableName).Scan(
+		&tableNameResult, &tableKind, &creatorName,
+		&createTS, &alterTS, &commentString,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get table metadata: %w", err)
+	}
+
+	stats.SourceType = mapTableKind(tableKind.String)
+	stats.CreatorName = strings.TrimSpace(creatorName.String)
+	stats.TableComment = strings.TrimSpace(commentString.String)
+	if createTS.Valid {
+		stats.CreateTimestamp = &createTS.Time
+	}
+	if alterTS.Valid {
+		stats.LastAlterTimestamp = &alterTS.Time
+	}
+
+	// Query DBC.TableStatsV for row count (handle permission errors gracefully)
+	statsQuery := `
+		SELECT RowCount FROM DBC.TableStatsV
+		WHERE DatabaseName = ? AND TableName = ? AND IndexNumber = 1`
+
+	var rowCount sql.NullInt64
+	err = r.db.QueryRowContext(ctx, statsQuery, dbName, tableName).Scan(&rowCount)
+	if err != nil && err != sql.ErrNoRows {
+		// Log but don't fail - permission issues are expected
+		slog.WarnContext(ctx, "failed to query table statistics",
+			"database", dbName, "table", tableName, "error", err)
+	}
+	if rowCount.Valid {
+		stats.RowCount = &rowCount.Int64
+	}
+
+	// Query DBC.TableSizeV for size (only for tables, skip for views)
+	if stats.SourceType == "TABLE" {
+		sizeQuery := `
+			SELECT SUM(CurrentPerm) FROM DBC.TableSizeV
+			WHERE DatabaseName = ? AND TableName = ?`
+
+		var sizeBytes sql.NullFloat64
+		err = r.db.QueryRowContext(ctx, sizeQuery, dbName, tableName).Scan(&sizeBytes)
+		if err != nil && err != sql.ErrNoRows {
+			// Log but don't fail
+			slog.WarnContext(ctx, "failed to query table size",
+				"database", dbName, "table", tableName, "error", err)
+		}
+		if sizeBytes.Valid {
+			size := int64(sizeBytes.Float64)
+			stats.SizeBytes = &size
+		}
+	}
+
+	return stats, nil
+}
+
+// GetDatasetDDL retrieves DDL information for a dataset from DBC system views.
+func (r *OpenLineageRepository) GetDatasetDDL(ctx context.Context, datasetID string) (*domain.DatasetDDL, error) {
+	// Verify dataset exists in OL_DATASET
+	existsQuery := `SELECT dataset_id FROM demo_user.OL_DATASET WHERE dataset_id = ?`
+	var exists string
+	err := r.db.QueryRowContext(ctx, existsQuery, datasetID).Scan(&exists)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("check dataset exists: %w", err)
+	}
+
+	// Parse database and table from datasetID
+	dbName, tableName, err := parseDatasetName(datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("parse dataset name: %w", err)
+	}
+
+	ddl := &domain.DatasetDDL{
+		DatasetID:      datasetID,
+		DatabaseName:   dbName,
+		TableName:      tableName,
+		ColumnComments: make(map[string]string),
+	}
+
+	// Query DBC.TablesV for view SQL, table comment, and table kind
+	// Try with RequestTxtOverFlow first, fall back without it
+	tablesQuery := `
+		SELECT t.TableKind, TRIM(t.CommentString), t.RequestText, t.RequestTxtOverFlow
+		FROM DBC.TablesV t
+		WHERE t.DatabaseName = ? AND t.TableName = ?`
+
+	var tableKind, commentString, requestText sql.NullString
+	var requestTxtOverFlow sql.NullString
+	hasOverFlowColumn := true
+
+	err = r.db.QueryRowContext(ctx, tablesQuery, dbName, tableName).Scan(
+		&tableKind, &commentString, &requestText, &requestTxtOverFlow,
+	)
+	if err != nil {
+		// If query fails, try without RequestTxtOverFlow column
+		tablesQueryFallback := `
+			SELECT t.TableKind, TRIM(t.CommentString), t.RequestText
+			FROM DBC.TablesV t
+			WHERE t.DatabaseName = ? AND t.TableName = ?`
+
+		err = r.db.QueryRowContext(ctx, tablesQueryFallback, dbName, tableName).Scan(
+			&tableKind, &commentString, &requestText,
+		)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("get table DDL: %w", err)
+		}
+		hasOverFlowColumn = false
+	}
+
+	ddl.SourceType = mapTableKind(tableKind.String)
+	ddl.TableComment = strings.TrimSpace(commentString.String)
+
+	// For views, set ViewSQL from RequestText
+	if strings.TrimSpace(tableKind.String) == "V" && requestText.Valid {
+		ddl.ViewSQL = strings.TrimSpace(requestText.String)
+
+		// Determine truncation
+		if hasOverFlowColumn && requestTxtOverFlow.Valid && strings.TrimSpace(requestTxtOverFlow.String) == "Y" {
+			ddl.Truncated = true
+		} else if !hasOverFlowColumn && len(requestText.String) >= 12500 {
+			ddl.Truncated = true
+		}
+	}
+
+	// Query DBC.ColumnsJQV for column comments
+	columnsQuery := `
+		SELECT TRIM(ColumnName), TRIM(CommentString)
+		FROM DBC.ColumnsJQV
+		WHERE DatabaseName = ? AND TableName = ?
+		  AND CommentString IS NOT NULL AND TRIM(CommentString) <> ''
+		ORDER BY ColumnId`
+
+	rows, err := r.db.QueryContext(ctx, columnsQuery, dbName, tableName)
+	if err != nil {
+		// Log but don't fail - permission issues are possible
+		slog.WarnContext(ctx, "failed to query column comments",
+			"database", dbName, "table", tableName, "error", err)
+		return ddl, nil
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var colName, colComment string
+		if err := rows.Scan(&colName, &colComment); err != nil {
+			slog.WarnContext(ctx, "failed to scan column comment",
+				"database", dbName, "table", tableName, "error", err)
+			continue
+		}
+		ddl.ColumnComments[colName] = colComment
+	}
+	if err := rows.Err(); err != nil {
+		slog.WarnContext(ctx, "error iterating column comments",
+			"database", dbName, "table", tableName, "error", err)
+	}
+
+	return ddl, nil
 }

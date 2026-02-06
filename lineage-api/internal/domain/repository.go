@@ -62,4 +62,8 @@ type OpenLineageRepository interface {
 	// Lineage operations (core)
 	GetColumnLineage(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) ([]OpenLineageColumnLineage, error)
 	GetColumnLineageGraph(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) (*OpenLineageGraph, error)
+
+	// Dataset metadata operations
+	GetDatasetStatistics(ctx context.Context, datasetID string) (*DatasetStatistics, error)
+	GetDatasetDDL(ctx context.Context, datasetID string) (*DatasetDDL, error)
 }

@@ -156,3 +156,29 @@ type PaginatedDatasetsResponse struct {
 	Total      int                          `json:"total"`
 	Pagination *PaginationMeta              `json:"pagination,omitempty"`
 }
+
+// DatasetStatisticsResponse represents statistics in API responses
+type DatasetStatisticsResponse struct {
+	DatasetID          string `json:"datasetId"`
+	DatabaseName       string `json:"databaseName"`
+	TableName          string `json:"tableName"`
+	SourceType         string `json:"sourceType"`
+	CreatorName        string `json:"creatorName,omitempty"`
+	CreateTimestamp    *string `json:"createTimestamp,omitempty"`
+	LastAlterTimestamp *string `json:"lastAlterTimestamp,omitempty"`
+	RowCount           *int64  `json:"rowCount,omitempty"`
+	SizeBytes          *int64  `json:"sizeBytes,omitempty"`
+	TableComment       string `json:"tableComment,omitempty"`
+}
+
+// DatasetDDLResponse represents DDL info in API responses
+type DatasetDDLResponse struct {
+	DatasetID      string            `json:"datasetId"`
+	DatabaseName   string            `json:"databaseName"`
+	TableName      string            `json:"tableName"`
+	SourceType     string            `json:"sourceType"`
+	ViewSQL        string            `json:"viewSql,omitempty"`
+	Truncated      bool              `json:"truncated"`
+	TableComment   string            `json:"tableComment,omitempty"`
+	ColumnComments map[string]string `json:"columnComments,omitempty"`
+}

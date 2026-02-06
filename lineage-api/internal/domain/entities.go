@@ -212,3 +212,29 @@ type OpenLineageEdge struct {
 	TransformationSubtype TransformationSubtype `json:"transformationSubtype"`
 	ConfidenceScore       float64               `json:"confidenceScore,omitempty"`
 }
+
+// DatasetStatistics represents metadata about a dataset's physical properties.
+type DatasetStatistics struct {
+	DatasetID          string     `json:"datasetId"`
+	DatabaseName       string     `json:"databaseName"`
+	TableName          string     `json:"tableName"`
+	SourceType         string     `json:"sourceType"`
+	CreatorName        string     `json:"creatorName,omitempty"`
+	CreateTimestamp    *time.Time `json:"createTimestamp,omitempty"`
+	LastAlterTimestamp *time.Time `json:"lastAlterTimestamp,omitempty"`
+	RowCount           *int64     `json:"rowCount,omitempty"`
+	SizeBytes          *int64     `json:"sizeBytes,omitempty"`
+	TableComment       string     `json:"tableComment,omitempty"`
+}
+
+// DatasetDDL represents the definition and comments for a dataset.
+type DatasetDDL struct {
+	DatasetID      string            `json:"datasetId"`
+	DatabaseName   string            `json:"databaseName"`
+	TableName      string            `json:"tableName"`
+	SourceType     string            `json:"sourceType"`
+	ViewSQL        string            `json:"viewSql,omitempty"`
+	Truncated      bool              `json:"truncated"`
+	TableComment   string            `json:"tableComment,omitempty"`
+	ColumnComments map[string]string `json:"columnComments,omitempty"`
+}
