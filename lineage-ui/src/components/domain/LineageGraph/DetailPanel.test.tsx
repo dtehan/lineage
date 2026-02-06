@@ -38,7 +38,7 @@ describe('DetailPanel', () => {
       expect(screen.getByTestId('detail-panel')).toBeInTheDocument();
     });
 
-    it('does not render when isOpen is false', () => {
+    it('is hidden off-screen when isOpen is false', () => {
       render(
         <DetailPanel
           isOpen={false}
@@ -47,7 +47,10 @@ describe('DetailPanel', () => {
         />
       );
 
-      expect(screen.queryByTestId('detail-panel')).not.toBeInTheDocument();
+      const panel = screen.getByTestId('detail-panel');
+      expect(panel).toBeInTheDocument();
+      expect(panel).toHaveAttribute('aria-hidden', 'true');
+      expect(panel.className).toContain('translate-x-full');
     });
   });
 

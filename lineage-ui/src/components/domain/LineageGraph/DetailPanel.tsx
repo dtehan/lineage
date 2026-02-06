@@ -76,8 +76,6 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
   onViewFullLineage,
   onViewImpactAnalysis,
 }) => {
-  if (!isOpen) return null;
-
   const renderColumnDetails = () => {
     if (!selectedColumn) return null;
 
@@ -234,9 +232,17 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
   return (
     <div
       data-testid="detail-panel"
-      className="fixed right-0 top-0 h-full w-96 bg-white shadow-xl border-l border-slate-200 z-50 overflow-y-auto"
+      className={`
+        fixed right-0 top-0 h-full w-96
+        bg-white shadow-xl border-l border-slate-200 z-50
+        overflow-y-auto
+        transition-transform duration-300 ease-out
+        motion-reduce:transition-none
+        ${isOpen ? 'translate-x-0' : 'translate-x-full'}
+      `}
       role="dialog"
       aria-label={selectedColumn ? 'Column details' : 'Edge details'}
+      aria-hidden={!isOpen}
     >
       <div className="sticky top-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-slate-600">
