@@ -1693,6 +1693,209 @@ def get_dataset(dataset_id):
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/api/v2/openlineage/datasets/<path:dataset_id>/statistics", methods=["GET"])
+def get_dataset_statistics(dataset_id):
+    """Get statistics for a dataset (table/view)."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Verify dataset exists in OL_DATASET
+                cur.execute("""
+                    SELECT source_type FROM OL_DATASET WHERE dataset_id = ?
+                """, [dataset_id])
+                ds_row = cur.fetchone()
+                if not ds_row:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                # Parse database.table from dataset name
+                # Format: "namespace_id/database.table"
+                name_part = dataset_id.split("/", 1)[1] if "/" in dataset_id else dataset_id
+                parts = name_part.split(".", 1)
+                if len(parts) != 2:
+                    return jsonify({"error": "Dataset not found"}), 404
+                db_name, table_name = parts[0].strip(), parts[1].strip()
+
+                # Query DBC.TablesV for table/view metadata
+                cur.execute("""
+                    SELECT
+                        TRIM(t.TableName),
+                        t.TableKind,
+                        TRIM(t.CreatorName),
+                        t.CreateTimeStamp,
+                        t.LastAlterTimeStamp,
+                        TRIM(t.CommentString)
+                    FROM DBC.TablesV t
+                    WHERE t.DatabaseName = ?
+                      AND t.TableName = ?
+                """, [db_name, table_name])
+                tab_row = cur.fetchone()
+
+                if not tab_row:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                table_kind = tab_row[1].strip() if tab_row[1] else ""
+                source_type = "VIEW" if table_kind == "V" else "TABLE"
+
+                result = {
+                    "datasetId": dataset_id,
+                    "databaseName": db_name,
+                    "tableName": tab_row[0] if tab_row[0] else table_name,
+                    "sourceType": source_type,
+                    "creatorName": tab_row[2] if tab_row[2] else None,
+                    "createTimestamp": tab_row[3].isoformat() if tab_row[3] else None,
+                    "lastAlterTimestamp": tab_row[4].isoformat() if tab_row[4] else None,
+                    "rowCount": None,
+                    "sizeBytes": None,
+                    "tableComment": tab_row[5] if tab_row[5] else None,
+                }
+
+                # Query DBC.TableStatsV for row count (may fail on permission)
+                try:
+                    cur.execute("""
+                        SELECT RowCount
+                        FROM DBC.TableStatsV
+                        WHERE DatabaseName = ? AND TableName = ?
+                          AND IndexNumber = 1
+                    """, [db_name, table_name])
+                    stats_row = cur.fetchone()
+                    if stats_row and stats_row[0] is not None:
+                        result["rowCount"] = int(stats_row[0])
+                except Exception:
+                    pass  # Permission or availability issue, leave rowCount null
+
+                # Query DBC.TableSizeV for size (only meaningful for tables, not views)
+                if source_type == "TABLE":
+                    try:
+                        cur.execute("""
+                            SELECT SUM(CurrentPerm)
+                            FROM DBC.TableSizeV
+                            WHERE DatabaseName = ? AND TableName = ?
+                        """, [db_name, table_name])
+                        size_row = cur.fetchone()
+                        if size_row and size_row[0] is not None:
+                            result["sizeBytes"] = int(size_row[0])
+                    except Exception:
+                        pass  # Permission or availability issue, leave sizeBytes null
+
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+
+
+@app.route("/api/v2/openlineage/datasets/<path:dataset_id>/ddl", methods=["GET"])
+def get_dataset_ddl(dataset_id):
+    """Get DDL/definition for a dataset (table/view)."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                # Verify dataset exists in OL_DATASET
+                cur.execute("""
+                    SELECT source_type FROM OL_DATASET WHERE dataset_id = ?
+                """, [dataset_id])
+                ds_row = cur.fetchone()
+                if not ds_row:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                # Parse database.table from dataset name
+                name_part = dataset_id.split("/", 1)[1] if "/" in dataset_id else dataset_id
+                parts = name_part.split(".", 1)
+                if len(parts) != 2:
+                    return jsonify({"error": "Dataset not found"}), 404
+                db_name, table_name = parts[0].strip(), parts[1].strip()
+
+                # Query DBC.TablesV for view SQL and table comment
+                # Try with RequestTxtOverFlow first, fall back without it
+                truncated = False
+                view_sql = None
+                table_comment = None
+                table_kind = None
+
+                try:
+                    cur.execute("""
+                        SELECT
+                            t.TableKind,
+                            TRIM(t.CommentString),
+                            t.RequestText,
+                            t.RequestTxtOverFlow
+                        FROM DBC.TablesV t
+                        WHERE t.DatabaseName = ?
+                          AND t.TableName = ?
+                    """, [db_name, table_name])
+                    tab_row = cur.fetchone()
+                    if tab_row:
+                        table_kind = tab_row[0].strip() if tab_row[0] else ""
+                        table_comment = tab_row[1] if tab_row[1] else None
+                        if tab_row[2]:
+                            view_sql = tab_row[2].strip() if isinstance(tab_row[2], str) else str(tab_row[2]).strip()
+                        truncated = tab_row[3] == "Y" if tab_row[3] else False
+                except Exception:
+                    # RequestTxtOverFlow column may not exist, retry without it
+                    cur.execute("""
+                        SELECT
+                            t.TableKind,
+                            TRIM(t.CommentString),
+                            t.RequestText
+                        FROM DBC.TablesV t
+                        WHERE t.DatabaseName = ?
+                          AND t.TableName = ?
+                    """, [db_name, table_name])
+                    tab_row = cur.fetchone()
+                    if tab_row:
+                        table_kind = tab_row[0].strip() if tab_row[0] else ""
+                        table_comment = tab_row[1] if tab_row[1] else None
+                        if tab_row[2]:
+                            view_sql = tab_row[2].strip() if isinstance(tab_row[2], str) else str(tab_row[2]).strip()
+                            truncated = len(view_sql) >= 12500
+
+                if table_kind is None:
+                    return jsonify({"error": "Dataset not found"}), 404
+
+                source_type = "VIEW" if table_kind == "V" else "TABLE"
+
+                # Only set viewSql for views
+                if source_type != "VIEW":
+                    view_sql = None
+                    truncated = False
+
+                result = {
+                    "datasetId": dataset_id,
+                    "databaseName": db_name,
+                    "tableName": table_name,
+                    "sourceType": source_type,
+                    "viewSql": view_sql,
+                    "truncated": truncated,
+                    "tableComment": table_comment,
+                    "columnComments": {},
+                }
+
+                # Query DBC.ColumnsJQV for column comments
+                try:
+                    cur.execute("""
+                        SELECT TRIM(ColumnName), TRIM(CommentString)
+                        FROM DBC.ColumnsJQV
+                        WHERE DatabaseName = ?
+                          AND TableName = ?
+                          AND CommentString IS NOT NULL
+                          AND TRIM(CommentString) <> ''
+                        ORDER BY ColumnId
+                    """, [db_name, table_name])
+                    for row in cur.fetchall():
+                        col_name = row[0].strip() if row[0] else ""
+                        col_comment = row[1].strip() if row[1] else ""
+                        if col_name and col_comment:
+                            result["columnComments"][col_name] = col_comment
+                except Exception:
+                    pass  # Permission issue, return empty column comments
+
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": "Internal server error"}), 500
+
+
 @app.route("/api/v2/openlineage/datasets/search", methods=["GET"])
 def search_datasets():
     """Search for datasets."""
