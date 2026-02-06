@@ -88,10 +88,12 @@ Plans:
   5. Each tab shows loading state independently while fetching data
   6. Failed fetches show graceful error state (not crash or blank)
   7. Large content (many columns, long SQL) scrolls independently per tab
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 21-01: TBD
+- [ ] 21-01-PLAN.md - Install prism-react-renderer, add TypeScript types, API client methods, TanStack Query hooks
+- [ ] 21-02-PLAN.md - Refactor DetailPanel with tabs, create sub-components, update graph consumers
+- [ ] 21-03-PLAN.md - Update and extend DetailPanel tests for tabbed layout
 
 #### Phase 22: Selection Features
 **Goal**: Enhance selection interaction with viewport control and navigation breadcrumbs
@@ -132,10 +134,10 @@ Plans:
 |-------|-----------|----------------|--------|-----------|
 | 19. Animation & Transitions | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 | 20. Backend Statistics & DDL API | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
-| 21. Detail Panel Enhancement | v4.0 | 0/TBD | Not started | - |
+| 21. Detail Panel Enhancement | v4.0 | 0/3 | Not started | - |
 | 22. Selection Features | v4.0 | 0/TBD | Not started | - |
 | 23. Testing & Validation | v4.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-06 (Phase 20 executed)*
+*Last updated: 2026-02-06 (Phase 21 planned)*
