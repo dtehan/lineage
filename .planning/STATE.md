@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 20 complete, ready for Phase 21
+**Current focus:** v4.0 Interactive Graph Experience - Phase 21 in progress
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
-Phase: 20 of 23 (Backend Statistics & DDL API)
-Plan: 2 of 2
-Status: Phase complete
-Last activity: 2026-02-06 - Completed 20-01-PLAN.md (Go Backend Statistics & DDL API)
+Phase: 21 of 23 (Detail Panel Enhancement)
+Plan: 1 of 3
+Status: In progress
+Last activity: 2026-02-06 - Completed 21-01-PLAN.md (API Layer Foundation)
 
-Progress: [####      ] 40% (2/5 phases complete)
+Progress: [####      ] 40% (2/5 phases complete, plan 1/3 in phase 21)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 45 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 5)
-- Average duration: ~4 min
-- Total execution time: ~155 min
+- Total plans completed: 46 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 6)
+- Average duration: ~3 min
+- Total execution time: ~157 min
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [####      ] 40% (2/5 phases complete)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 20-01 (4 min), 20-02 (1 min), 19-03 (2 min), 19-02 (2 min), 19-01 (3 min)
+- Last 5 plans: 21-01 (2 min), 20-01 (4 min), 20-02 (1 min), 19-03 (2 min), 19-02 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -69,6 +69,11 @@ v4.0 Phase 20 decisions:
 - Go backend: parseDatasetName helper splits namespace_id/database.table format
 - Go backend: MockOpenLineageRepository implements full OpenLineageRepository interface with error injection
 
+v4.0 Phase 21 decisions:
+- 5min staleTime for statistics hook (row counts change occasionally), 30min for DDL hook (view SQL rarely changes)
+- Hooks default enabled=true but accept enabled option for lazy tab fetching
+- Query keys use openLineageKeys.all prefix for consistent cache invalidation
+
 ### Pending Todos
 
 1. Views not showing their column types (2026-01-31, area: ui)
@@ -77,11 +82,11 @@ v4.0 Phase 20 decisions:
 
 ### Blockers/Concerns
 
-None - Phase 20 complete, ready for Phase 21.
+None - Plan 21-01 complete, ready for Plan 21-02.
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Phase 20 complete - both Go and Python backend endpoints implemented
+Stopped at: Completed 21-01-PLAN.md (API Layer Foundation)
 Resume file: None
-Next: Phase 21 (Detail Panel Enhancement) - frontend integration with statistics and DDL endpoints
+Next: Plan 21-02 (DetailPanel UI tabs with statistics and DDL components)
