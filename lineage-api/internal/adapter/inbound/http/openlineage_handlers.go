@@ -218,3 +218,59 @@ func (h *OpenLineageHandler) GetLineageGraph(w http.ResponseWriter, r *http.Requ
 
 	respondJSON(w, http.StatusOK, lineage)
 }
+
+// GetDatasetStatistics handles GET /api/v2/openlineage/datasets/{datasetId}/statistics
+func (h *OpenLineageHandler) GetDatasetStatistics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	datasetID := chi.URLParam(r, "datasetId")
+
+	stats, err := h.service.GetDatasetStatistics(ctx, datasetID)
+	if err != nil {
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to get dataset statistics",
+			"request_id", requestID,
+			"dataset_id", datasetID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	if stats == nil {
+		respondError(w, r, http.StatusNotFound, "Dataset not found")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, stats)
+}
+
+// GetDatasetDDL handles GET /api/v2/openlineage/datasets/{datasetId}/ddl
+func (h *OpenLineageHandler) GetDatasetDDL(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	datasetID := chi.URLParam(r, "datasetId")
+
+	ddl, err := h.service.GetDatasetDDL(ctx, datasetID)
+	if err != nil {
+		requestID := middleware.GetReqID(ctx)
+		slog.ErrorContext(ctx, "failed to get dataset DDL",
+			"request_id", requestID,
+			"dataset_id", datasetID,
+			"error", err,
+			"stack", logging.CaptureStack(),
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+		respondError(w, r, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	if ddl == nil {
+		respondError(w, r, http.StatusNotFound, "Dataset not found")
+		return
+	}
+
+	respondJSON(w, http.StatusOK, ddl)
+}

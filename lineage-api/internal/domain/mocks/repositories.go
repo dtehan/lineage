@@ -4,6 +4,7 @@ package mocks
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/lineage-api/internal/domain"
@@ -475,6 +476,325 @@ func (m *MockCacheRepository) Exists(ctx context.Context, key string) (bool, err
 
 	_, exists := m.Data[key]
 	return exists, nil
+}
+
+// MockOpenLineageRepository is a mock implementation of domain.OpenLineageRepository.
+type MockOpenLineageRepository struct {
+	mu sync.RWMutex
+
+	// Data
+	Namespaces []domain.OpenLineageNamespace
+	Datasets   []domain.OpenLineageDataset
+	Fields     []domain.OpenLineageField
+	Jobs       []domain.OpenLineageJob
+	Runs       []domain.OpenLineageRun
+	Lineages   []domain.OpenLineageColumnLineage
+	Statistics map[string]*domain.DatasetStatistics
+	DDLData    map[string]*domain.DatasetDDL
+	GraphData  map[string]*domain.OpenLineageGraph
+
+	// Error injection
+	GetNamespaceErr          error
+	GetNamespaceByURIErr     error
+	ListNamespacesErr        error
+	GetDatasetErr            error
+	ListDatasetsErr          error
+	SearchDatasetsErr        error
+	GetFieldErr              error
+	ListFieldsErr            error
+	GetJobErr                error
+	ListJobsErr              error
+	GetRunErr                error
+	ListRunsErr              error
+	GetColumnLineageErr      error
+	GetColumnLineageGraphErr error
+	GetDatasetStatisticsErr  error
+	GetDatasetDDLErr         error
+}
+
+// Compile-time interface check
+var _ domain.OpenLineageRepository = (*MockOpenLineageRepository)(nil)
+
+// NewMockOpenLineageRepository creates a new MockOpenLineageRepository.
+func NewMockOpenLineageRepository() *MockOpenLineageRepository {
+	return &MockOpenLineageRepository{
+		Namespaces: []domain.OpenLineageNamespace{},
+		Datasets:   []domain.OpenLineageDataset{},
+		Fields:     []domain.OpenLineageField{},
+		Jobs:       []domain.OpenLineageJob{},
+		Runs:       []domain.OpenLineageRun{},
+		Lineages:   []domain.OpenLineageColumnLineage{},
+		Statistics: make(map[string]*domain.DatasetStatistics),
+		DDLData:    make(map[string]*domain.DatasetDDL),
+		GraphData:  make(map[string]*domain.OpenLineageGraph),
+	}
+}
+
+// GetNamespace retrieves a namespace by ID.
+func (m *MockOpenLineageRepository) GetNamespace(ctx context.Context, namespaceID string) (*domain.OpenLineageNamespace, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetNamespaceErr != nil {
+		return nil, m.GetNamespaceErr
+	}
+	for i := range m.Namespaces {
+		if m.Namespaces[i].ID == namespaceID {
+			return &m.Namespaces[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// GetNamespaceByURI retrieves a namespace by URI.
+func (m *MockOpenLineageRepository) GetNamespaceByURI(ctx context.Context, uri string) (*domain.OpenLineageNamespace, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetNamespaceByURIErr != nil {
+		return nil, m.GetNamespaceByURIErr
+	}
+	for i := range m.Namespaces {
+		if m.Namespaces[i].URI == uri {
+			return &m.Namespaces[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// ListNamespaces returns all namespaces.
+func (m *MockOpenLineageRepository) ListNamespaces(ctx context.Context) ([]domain.OpenLineageNamespace, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ListNamespacesErr != nil {
+		return nil, m.ListNamespacesErr
+	}
+	return m.Namespaces, nil
+}
+
+// GetDataset retrieves a dataset by ID.
+func (m *MockOpenLineageRepository) GetDataset(ctx context.Context, datasetID string) (*domain.OpenLineageDataset, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetDatasetErr != nil {
+		return nil, m.GetDatasetErr
+	}
+	for i := range m.Datasets {
+		if m.Datasets[i].ID == datasetID {
+			return &m.Datasets[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// ListDatasets returns datasets for a namespace with pagination.
+func (m *MockOpenLineageRepository) ListDatasets(ctx context.Context, namespaceID string, limit, offset int) ([]domain.OpenLineageDataset, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ListDatasetsErr != nil {
+		return nil, 0, m.ListDatasetsErr
+	}
+	var filtered []domain.OpenLineageDataset
+	for _, ds := range m.Datasets {
+		if ds.NamespaceID == namespaceID {
+			filtered = append(filtered, ds)
+		}
+	}
+	total := len(filtered)
+	// Apply pagination
+	start := offset
+	if start > len(filtered) {
+		return []domain.OpenLineageDataset{}, total, nil
+	}
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[start:end], total, nil
+}
+
+// SearchDatasets searches datasets by name.
+func (m *MockOpenLineageRepository) SearchDatasets(ctx context.Context, query string, limit int) ([]domain.OpenLineageDataset, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.SearchDatasetsErr != nil {
+		return nil, m.SearchDatasetsErr
+	}
+	var results []domain.OpenLineageDataset
+	for _, ds := range m.Datasets {
+		if strings.Contains(strings.ToUpper(ds.Name), strings.ToUpper(query)) {
+			results = append(results, ds)
+			if limit > 0 && len(results) >= limit {
+				break
+			}
+		}
+	}
+	return results, nil
+}
+
+// GetField retrieves a field by ID.
+func (m *MockOpenLineageRepository) GetField(ctx context.Context, fieldID string) (*domain.OpenLineageField, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetFieldErr != nil {
+		return nil, m.GetFieldErr
+	}
+	for i := range m.Fields {
+		if m.Fields[i].ID == fieldID {
+			return &m.Fields[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// ListFields returns fields for a dataset.
+func (m *MockOpenLineageRepository) ListFields(ctx context.Context, datasetID string) ([]domain.OpenLineageField, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ListFieldsErr != nil {
+		return nil, m.ListFieldsErr
+	}
+	var results []domain.OpenLineageField
+	for _, f := range m.Fields {
+		if f.DatasetID == datasetID {
+			results = append(results, f)
+		}
+	}
+	return results, nil
+}
+
+// GetJob retrieves a job by ID.
+func (m *MockOpenLineageRepository) GetJob(ctx context.Context, jobID string) (*domain.OpenLineageJob, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetJobErr != nil {
+		return nil, m.GetJobErr
+	}
+	for i := range m.Jobs {
+		if m.Jobs[i].ID == jobID {
+			return &m.Jobs[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// ListJobs returns jobs for a namespace with pagination.
+func (m *MockOpenLineageRepository) ListJobs(ctx context.Context, namespaceID string, limit, offset int) ([]domain.OpenLineageJob, int, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ListJobsErr != nil {
+		return nil, 0, m.ListJobsErr
+	}
+	var filtered []domain.OpenLineageJob
+	for _, j := range m.Jobs {
+		if j.NamespaceID == namespaceID {
+			filtered = append(filtered, j)
+		}
+	}
+	total := len(filtered)
+	start := offset
+	if start > len(filtered) {
+		return []domain.OpenLineageJob{}, total, nil
+	}
+	end := start + limit
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+	return filtered[start:end], total, nil
+}
+
+// GetRun retrieves a run by ID.
+func (m *MockOpenLineageRepository) GetRun(ctx context.Context, runID string) (*domain.OpenLineageRun, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetRunErr != nil {
+		return nil, m.GetRunErr
+	}
+	for i := range m.Runs {
+		if m.Runs[i].ID == runID {
+			return &m.Runs[i], nil
+		}
+	}
+	return nil, nil
+}
+
+// ListRuns returns runs for a job.
+func (m *MockOpenLineageRepository) ListRuns(ctx context.Context, jobID string, limit int) ([]domain.OpenLineageRun, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ListRunsErr != nil {
+		return nil, m.ListRunsErr
+	}
+	var results []domain.OpenLineageRun
+	for _, run := range m.Runs {
+		if run.JobID == jobID {
+			results = append(results, run)
+			if limit > 0 && len(results) >= limit {
+				break
+			}
+		}
+	}
+	return results, nil
+}
+
+// GetColumnLineage returns column lineage for a dataset field.
+func (m *MockOpenLineageRepository) GetColumnLineage(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) ([]domain.OpenLineageColumnLineage, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetColumnLineageErr != nil {
+		return nil, m.GetColumnLineageErr
+	}
+	var results []domain.OpenLineageColumnLineage
+	for _, l := range m.Lineages {
+		if l.TargetDataset == datasetID && l.TargetField == fieldName {
+			results = append(results, l)
+		}
+		if l.SourceDataset == datasetID && l.SourceField == fieldName {
+			results = append(results, l)
+		}
+	}
+	return results, nil
+}
+
+// GetColumnLineageGraph returns a graph representation of column lineage.
+func (m *MockOpenLineageRepository) GetColumnLineageGraph(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) (*domain.OpenLineageGraph, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetColumnLineageGraphErr != nil {
+		return nil, m.GetColumnLineageGraphErr
+	}
+	key := datasetID + "/" + fieldName
+	if graph, ok := m.GraphData[key]; ok {
+		return graph, nil
+	}
+	return &domain.OpenLineageGraph{
+		Nodes: []domain.OpenLineageNode{},
+		Edges: []domain.OpenLineageEdge{},
+	}, nil
+}
+
+// GetDatasetStatistics returns statistics for a dataset.
+func (m *MockOpenLineageRepository) GetDatasetStatistics(ctx context.Context, datasetID string) (*domain.DatasetStatistics, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetDatasetStatisticsErr != nil {
+		return nil, m.GetDatasetStatisticsErr
+	}
+	if stats, ok := m.Statistics[datasetID]; ok {
+		return stats, nil
+	}
+	return nil, nil
+}
+
+// GetDatasetDDL returns DDL information for a dataset.
+func (m *MockOpenLineageRepository) GetDatasetDDL(ctx context.Context, datasetID string) (*domain.DatasetDDL, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.GetDatasetDDLErr != nil {
+		return nil, m.GetDatasetDDLErr
+	}
+	if ddl, ok := m.DDLData[datasetID]; ok {
+		return ddl, nil
+	}
+	return nil, nil
 }
 
 // Helper function to build a graph from lineage data

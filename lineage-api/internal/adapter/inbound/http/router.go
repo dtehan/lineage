@@ -57,6 +57,8 @@ func NewRouter(h *Handler, olHandler *OpenLineageHandler) *chi.Mux {
 			// Dataset routes
 			r.Get("/datasets/search", olHandler.SearchDatasets)
 			r.Get("/datasets/{datasetId}", olHandler.GetDataset)
+			r.Get("/datasets/{datasetId}/statistics", olHandler.GetDatasetStatistics)
+			r.Get("/datasets/{datasetId}/ddl", olHandler.GetDatasetDDL)
 
 			// Lineage routes
 			r.Get("/lineage/{datasetId}/{fieldName}", olHandler.GetLineageGraph)
