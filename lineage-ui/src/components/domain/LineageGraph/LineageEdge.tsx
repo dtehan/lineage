@@ -136,7 +136,7 @@ export const LineageEdge = memo(function LineageEdge({
           strokeWidth,
           opacity: finalOpacity,
           strokeDasharray: shouldAnimate ? '5 5' : undefined,
-          transition: 'stroke-width 0.2s, opacity 0.2s',
+          transition: 'stroke-width 200ms ease-out, opacity 200ms ease-out',
         }}
         className={shouldAnimate ? 'animate-dash' : ''}
       />
@@ -162,7 +162,7 @@ export const LineageEdge = memo(function LineageEdge({
               transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
               pointerEvents: 'none',
             }}
-            className="bg-white px-2 py-1 rounded shadow-md text-xs font-medium border border-slate-200"
+            className="bg-white px-2 py-1 rounded shadow-md text-xs font-medium border border-slate-200 edge-label-enter"
           >
             <span style={{ color: baseColor }}>
               {formatTransformationType(edgeData.transformationType)}
@@ -183,24 +183,3 @@ export const LineageEdge = memo(function LineageEdge({
     </>
   );
 });
-
-// Add CSS animation for dashed edge flow
-const styleSheet = document.createElement('style');
-styleSheet.textContent = `
-  @keyframes dash-flow {
-    from {
-      stroke-dashoffset: 10;
-    }
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-
-  .animate-dash {
-    animation: dash-flow 0.5s linear infinite;
-  }
-`;
-if (typeof document !== 'undefined' && !document.querySelector('#lineage-edge-styles')) {
-  styleSheet.id = 'lineage-edge-styles';
-  document.head.appendChild(styleSheet);
-}
