@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 20 in progress (Backend Statistics & DDL API)
+**Current focus:** v4.0 Interactive Graph Experience - Phase 20 complete, ready for Phase 21
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
 Phase: 20 of 23 (Backend Statistics & DDL API)
 Plan: 2 of 2
-Status: In progress
-Last activity: 2026-02-06 - Completed 20-02-PLAN.md (Python Statistics & DDL Endpoints)
+Status: Phase complete
+Last activity: 2026-02-06 - Completed 20-01-PLAN.md (Go Backend Statistics & DDL API)
 
-Progress: [###       ] 28% (2/5 phases partially complete, 20-02 done)
+Progress: [####      ] 40% (2/5 phases complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 44 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 4)
+- Total plans completed: 45 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 5)
 - Average duration: ~4 min
-- Total execution time: ~151 min
+- Total execution time: ~155 min
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [###       ] 28% (2/5 phases partially complete, 20-02 done)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 20-02 (1 min), 19-03 (2 min), 19-02 (2 min), 19-01 (3 min), 18-02 (8 min)
+- Last 5 plans: 20-01 (4 min), 20-02 (1 min), 19-03 (2 min), 19-02 (2 min), 19-01 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -66,6 +66,8 @@ v4.0 Phase 20 decisions:
 - DBC system view queries individually wrapped in try/except for graceful permission degradation
 - DDL endpoint tries RequestTxtOverFlow column first, falls back for older Teradata versions
 - Views return null sizeBytes, tables return null viewSql
+- Go backend: parseDatasetName helper splits namespace_id/database.table format
+- Go backend: MockOpenLineageRepository implements full OpenLineageRepository interface with error injection
 
 ### Pending Todos
 
@@ -75,11 +77,11 @@ v4.0 Phase 20 decisions:
 
 ### Blockers/Concerns
 
-None - Phase 20 plan 02 complete. Plan 01 (Go backend) pending.
+None - Phase 20 complete, ready for Phase 21.
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 20-02-PLAN.md (Python Statistics & DDL Endpoints)
+Stopped at: Phase 20 complete - both Go and Python backend endpoints implemented
 Resume file: None
-Next: Execute 20-01-PLAN.md (Go backend endpoints) or proceed to Phase 21 (Frontend Detail Panel)
+Next: Phase 21 (Detail Panel Enhancement) - frontend integration with statistics and DDL endpoints
