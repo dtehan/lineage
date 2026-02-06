@@ -48,8 +48,7 @@ export const ColumnRow = memo(function ColumnRow({
 
   return (
     <div
-      className={getRowClassName()}
-      style={{ opacity: isDimmed ? 0.2 : 1 }}
+      className={`${getRowClassName()} transition-opacity duration-200 ease-out motion-reduce:transition-none ${isDimmed ? 'opacity-20' : 'opacity-100'}`}
       onClick={handleClick}
       data-testid={`column-row-${column.id}`}
       data-column-id={column.id}

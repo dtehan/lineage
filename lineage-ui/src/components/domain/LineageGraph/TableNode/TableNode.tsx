@@ -90,10 +90,10 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
       className={`
         min-w-[280px] max-w-[400px]
         ${getBackgroundColor()} rounded-lg border-2 shadow-md
-        transition-all duration-200
+        transition-opacity duration-200 ease-out motion-reduce:transition-none
         ${getBorderColor()}
+        ${isTableDimmed ? 'opacity-20' : 'opacity-100'}
       `}
-      style={{ opacity: isTableDimmed ? 0.2 : 1 }}
       data-testid={`table-node-${id}`}
     >
       <TableNodeHeader
