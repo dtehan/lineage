@@ -24,12 +24,12 @@ Requirements for Interactive Graph Experience milestone. Focus on animation poli
 
 ### Detail Panel - Backend API
 
-- [ ] **API-01**: GET /api/v2/openlineage/datasets/{id}/statistics returns row count, size, last modified
-- [ ] **API-02**: Statistics endpoint returns owner, table/view type, created date
-- [ ] **API-03**: GET /api/v2/openlineage/datasets/{id}/ddl returns view definition SQL
-- [ ] **API-04**: DDL endpoint returns table comments, column comments
-- [ ] **API-05**: Endpoints return 404 for missing datasets, 500 with generic errors (security)
-- [ ] **API-06**: Endpoints support both table and view dataset types
+- [x] **API-01**: GET /api/v2/openlineage/datasets/{id}/statistics returns row count, size, last modified
+- [x] **API-02**: Statistics endpoint returns owner, table/view type, created date
+- [x] **API-03**: GET /api/v2/openlineage/datasets/{id}/ddl returns view definition SQL
+- [x] **API-04**: DDL endpoint returns table comments, column comments
+- [x] **API-05**: Endpoints return 404 for missing datasets, 500 with generic errors (security)
+- [x] **API-06**: Endpoints support both table and view dataset types
 
 ### Detail Panel - Frontend
 
@@ -93,12 +93,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SELECT-03 | Phase 22 | Pending |
 | SELECT-04 | Phase 22 | Pending |
 | SELECT-05 | Phase 22 | Pending |
-| API-01 | Phase 20 | Pending |
-| API-02 | Phase 20 | Pending |
-| API-03 | Phase 20 | Pending |
-| API-04 | Phase 20 | Pending |
-| API-05 | Phase 20 | Pending |
-| API-06 | Phase 20 | Pending |
+| API-01 | Phase 20 | Complete |
+| API-02 | Phase 20 | Complete |
+| API-03 | Phase 20 | Complete |
+| API-04 | Phase 20 | Complete |
+| API-05 | Phase 20 | Complete |
+| API-06 | Phase 20 | Complete |
 | PANEL-01 | Phase 21 | Pending |
 | PANEL-02 | Phase 21 | Pending |
 | PANEL-03 | Phase 21 | Pending |
@@ -121,4 +121,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-06 (Phase 19 complete)*
+*Last updated: 2026-02-06 (Phase 20 complete)*

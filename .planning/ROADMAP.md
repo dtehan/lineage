@@ -73,8 +73,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 20-01-PLAN.md - Go backend vertical slice: domain entities, repository, service, handlers, router, mocks
-- [ ] 20-02-PLAN.md - Python Flask server statistics and DDL endpoints
+- [x] 20-01-PLAN.md - Go backend vertical slice: domain entities, repository, service, handlers, router, mocks
+- [x] 20-02-PLAN.md - Python Flask server statistics and DDL endpoints
 
 #### Phase 21: Detail Panel Enhancement
 **Goal**: Transform the existing detail panel into a comprehensive metadata viewer with tabs
@@ -131,11 +131,11 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. Animation & Transitions | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
-| 20. Backend Statistics & DDL API | v4.0 | 0/2 | Not started | - |
+| 20. Backend Statistics & DDL API | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
 | 21. Detail Panel Enhancement | v4.0 | 0/TBD | Not started | - |
 | 22. Selection Features | v4.0 | 0/TBD | Not started | - |
 | 23. Testing & Validation | v4.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-06 (Phase 20 planned)*
+*Last updated: 2026-02-06 (Phase 20 executed)*
