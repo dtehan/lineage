@@ -9,10 +9,10 @@ Requirements for Interactive Graph Experience milestone. Focus on animation poli
 
 ### Animation & Transitions
 
-- [ ] **ANIM-01**: Smooth opacity transitions (200-300ms) when highlighting/unhighlighting nodes
-- [ ] **ANIM-02**: Smooth transitions (200-300ms) when dimming unrelated nodes during selection
-- [ ] **ANIM-03**: Panel slides in/out with smooth animation (not instant)
-- [ ] **ANIM-04**: Transition timing feels natural (ease-out curve, no jarring jumps)
+- [x] **ANIM-01**: Smooth opacity transitions (200-300ms) when highlighting/unhighlighting nodes
+- [x] **ANIM-02**: Smooth transitions (200-300ms) when dimming unrelated nodes during selection
+- [x] **ANIM-03**: Panel slides in/out with smooth animation (not instant)
+- [x] **ANIM-04**: Transition timing feels natural (ease-out curve, no jarring jumps)
 
 ### Selection Enhancement
 
@@ -84,10 +84,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ANIM-01 | Phase 19 | Pending |
-| ANIM-02 | Phase 19 | Pending |
-| ANIM-03 | Phase 19 | Pending |
-| ANIM-04 | Phase 19 | Pending |
+| ANIM-01 | Phase 19 | Complete |
+| ANIM-02 | Phase 19 | Complete |
+| ANIM-03 | Phase 19 | Complete |
+| ANIM-04 | Phase 19 | Complete |
 | SELECT-01 | Phase 22 | Pending |
 | SELECT-02 | Phase 22 | Pending |
 | SELECT-03 | Phase 22 | Pending |
@@ -121,4 +121,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-01 after roadmap creation (traceability complete)*
+*Last updated: 2026-02-06 (Phase 19 complete)*
