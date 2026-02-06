@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 19 verified, ready for Phase 20
+**Current focus:** v4.0 Interactive Graph Experience - Phase 20 in progress (Backend Statistics & DDL API)
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
-Phase: 19 of 23 (Animation & Transitions)
-Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-02-06 - Completed 19-03-PLAN.md (DetailPanel test updates for animation behavior)
+Phase: 20 of 23 (Backend Statistics & DDL API)
+Plan: 2 of 2
+Status: In progress
+Last activity: 2026-02-06 - Completed 20-02-PLAN.md (Python Statistics & DDL Endpoints)
 
-Progress: [##        ] 20% (1/5 phases complete)
+Progress: [###       ] 28% (2/5 phases partially complete, 20-02 done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 43 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 3)
+- Total plans completed: 44 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 4)
 - Average duration: ~4 min
-- Total execution time: ~150 min
+- Total execution time: ~151 min
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [##        ] 20% (1/5 phases complete)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 19-03 (2 min), 19-02 (2 min), 19-01 (3 min), 18-02 (8 min), 18-01 (7 min)
+- Last 5 plans: 20-02 (1 min), 19-03 (2 min), 19-02 (2 min), 19-01 (3 min), 18-02 (8 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -61,6 +61,12 @@ v4.0 Phase 19 decisions:
 - Animation timing hierarchy: 150ms (labels), 200ms (nodes/edges), 300ms (panels)
 - Custom CSS class for edge label fade-in instead of tailwindcss-animate dependency
 
+v4.0 Phase 20 decisions:
+- Generic "Internal server error" on 500 errors (API-05 security) for new endpoints, not str(e) pattern
+- DBC system view queries individually wrapped in try/except for graceful permission degradation
+- DDL endpoint tries RequestTxtOverFlow column first, falls back for older Teradata versions
+- Views return null sizeBytes, tables return null viewSql
+
 ### Pending Todos
 
 1. Views not showing their column types (2026-01-31, area: ui)
@@ -69,11 +75,11 @@ v4.0 Phase 19 decisions:
 
 ### Blockers/Concerns
 
-None - Phase 19 complete, ready for Phase 20.
+None - Phase 20 plan 02 complete. Plan 01 (Go backend) pending.
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Phase 19 verified - 5/5 must-haves satisfied, animation system established
+Stopped at: Completed 20-02-PLAN.md (Python Statistics & DDL Endpoints)
 Resume file: None
-Next: `/gsd:discuss-phase 20` or `/gsd:plan-phase 20` to plan Backend Statistics & DDL API
+Next: Execute 20-01-PLAN.md (Go backend endpoints) or proceed to Phase 21 (Frontend Detail Panel)
