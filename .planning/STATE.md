@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 21 in progress
+**Current focus:** v4.0 Interactive Graph Experience - Phase 21 execution in progress
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
 Phase: 21 of 23 (Detail Panel Enhancement)
-Plan: 1 of 3
+Plan: 2 of 3 (21-02 complete)
 Status: In progress
-Last activity: 2026-02-06 - Completed 21-01-PLAN.md (API Layer Foundation)
+Last activity: 2026-02-06 - Completed 21-02-PLAN.md (Tabbed Detail Panel UI)
 
-Progress: [####      ] 40% (2/5 phases complete, plan 1/3 in phase 21)
+Progress: [####      ] 40% (2/5 phases complete, plan 2/3 in phase 21)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 46 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 6)
-- Average duration: ~3 min
-- Total execution time: ~157 min
+- Total plans completed: 47 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 7)
+- Average duration: ~3.5 min
+- Total execution time: ~163 min
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [####      ] 40% (2/5 phases complete, plan 1/3 in phase 21)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 21-01 (2 min), 20-01 (4 min), 20-02 (1 min), 19-03 (2 min), 19-02 (2 min)
+- Last 5 plans: 21-02 (6 min), 21-01 (2 min), 20-01 (4 min), 20-02 (1 min), 19-03 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -73,6 +73,10 @@ v4.0 Phase 21 decisions:
 - 5min staleTime for statistics hook (row counts change occasionally), 30min for DDL hook (view SQL rarely changes)
 - Hooks default enabled=true but accept enabled option for lazy tab fetching
 - Query keys use openLineageKeys.all prefix for consistent cache invalidation
+- SQL language built into prism-react-renderer bundled Prism -- no dynamic import needed
+- Tab state resets to "columns" on selection change to prevent stale tab data
+- effectiveDatasetId computed from prop or selectedColumn.id for graph compatibility
+- Edge details remain flat layout (no tabs) -- tabs only for column selection
 
 ### Pending Todos
 
@@ -82,11 +86,11 @@ v4.0 Phase 21 decisions:
 
 ### Blockers/Concerns
 
-None - Plan 21-01 complete, ready for Plan 21-02.
+None - Plan 21-02 complete, ready for Plan 21-03 (testing).
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 21-01-PLAN.md (API Layer Foundation)
+Stopped at: Completed 21-02-PLAN.md (Tabbed Detail Panel UI)
 Resume file: None
-Next: Plan 21-02 (DetailPanel UI tabs with statistics and DDL components)
+Next: Plan 21-03 (Testing phase for detail panel enhancement)
