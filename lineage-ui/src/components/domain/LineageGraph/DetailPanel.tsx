@@ -1,5 +1,9 @@
-import React from 'react';
-import { X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, LayoutList, BarChart3, Code } from 'lucide-react';
+import { TabBar, TabPanel } from './DetailPanel/TabBar';
+import { ColumnsTab } from './DetailPanel/ColumnsTab';
+import { StatisticsTab } from './DetailPanel/StatisticsTab';
+import { DDLTab } from './DetailPanel/DDLTab';
 
 export interface ColumnDetail {
   id: string;
@@ -28,6 +32,7 @@ export interface DetailPanelProps {
   onClose: () => void;
   selectedColumn?: ColumnDetail | null;
   selectedEdge?: EdgeDetail | null;
+  datasetId?: string;
   onViewFullLineage?: (columnId: string) => void;
   onViewImpactAnalysis?: (columnId: string) => void;
 }
@@ -68,110 +73,40 @@ const SqlViewer: React.FC<{ sql: string }> = ({ sql }) => {
   );
 };
 
+type TabId = 'columns' | 'statistics' | 'ddl';
+
+const TABS = [
+  { id: 'columns' as const, label: 'Columns', icon: <LayoutList className="w-4 h-4" /> },
+  { id: 'statistics' as const, label: 'Statistics', icon: <BarChart3 className="w-4 h-4" /> },
+  { id: 'ddl' as const, label: 'DDL', icon: <Code className="w-4 h-4" /> },
+];
+
 export const DetailPanel: React.FC<DetailPanelProps> = ({
   isOpen,
   onClose,
   selectedColumn,
   selectedEdge,
+  datasetId,
   onViewFullLineage,
   onViewImpactAnalysis,
 }) => {
-  const renderColumnDetails = () => {
-    if (!selectedColumn) return null;
+  const [activeTab, setActiveTab] = useState<TabId>('columns');
 
-    const fullName = `${selectedColumn.databaseName}.${selectedColumn.tableName}.${selectedColumn.columnName}`;
+  // Compute effective datasetId from prop or selectedColumn
+  const effectiveDatasetId = datasetId || (selectedColumn
+    ? selectedColumn.id.substring(0, selectedColumn.id.lastIndexOf('.'))
+    : '');
 
-    return (
-      <>
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-slate-800 break-all">
-            {fullName}
-          </h3>
-        </div>
-
-        <div className="mb-4">
-          <h4 className="text-sm font-medium text-slate-600 mb-2 border-b border-slate-200 pb-1">
-            Metadata
-          </h4>
-          <dl className="space-y-1">
-            {selectedColumn.dataType && (
-              <div className="flex justify-between">
-                <dt className="text-sm text-slate-500">Data Type:</dt>
-                <dd className="text-sm font-medium text-slate-700">
-                  {selectedColumn.dataType}
-                </dd>
-              </div>
-            )}
-            <div className="flex justify-between">
-              <dt className="text-sm text-slate-500">Nullable:</dt>
-              <dd className="text-sm font-medium text-slate-700">
-                {selectedColumn.nullable ? 'Yes' : 'No'}
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-sm text-slate-500">Primary Key:</dt>
-              <dd className="text-sm font-medium text-slate-700">
-                {selectedColumn.isPrimaryKey ? 'Yes' : 'No'}
-              </dd>
-            </div>
-            {selectedColumn.description && (
-              <div className="pt-2">
-                <dt className="text-sm text-slate-500">Description:</dt>
-                <dd className="text-sm text-slate-700 mt-1">
-                  {selectedColumn.description}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </div>
-
-        <div className="mb-4">
-          <h4 className="text-sm font-medium text-slate-600 mb-2 border-b border-slate-200 pb-1">
-            Lineage Stats
-          </h4>
-          <dl className="space-y-1">
-            <div className="flex justify-between">
-              <dt className="text-sm text-slate-500">Upstream:</dt>
-              <dd className="text-sm font-medium text-slate-700">
-                {selectedColumn.upstreamCount ?? 0} columns
-              </dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-sm text-slate-500">Downstream:</dt>
-              <dd className="text-sm font-medium text-slate-700">
-                {selectedColumn.downstreamCount ?? 0} columns
-              </dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="flex gap-2 mt-4">
-          {onViewFullLineage && (
-            <button
-              onClick={() => onViewFullLineage(selectedColumn.id)}
-              className="flex-1 px-3 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              View Full Lineage
-            </button>
-          )}
-          {onViewImpactAnalysis && (
-            <button
-              onClick={() => onViewImpactAnalysis(selectedColumn.id)}
-              className="flex-1 px-3 py-2 text-sm bg-slate-100 text-slate-700 rounded hover:bg-slate-200"
-            >
-              Impact Analysis
-            </button>
-          )}
-        </div>
-      </>
-    );
-  };
+  // Reset tab to columns when selection changes
+  useEffect(() => {
+    setActiveTab('columns');
+  }, [selectedColumn?.id]);
 
   const renderEdgeDetails = () => {
     if (!selectedEdge) return null;
 
     return (
-      <>
+      <div className="p-4 overflow-y-auto flex-1">
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-slate-800">
             Connection Details
@@ -225,6 +160,53 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
             <SqlViewer sql={selectedEdge.transformationSql} />
           </div>
         )}
+      </div>
+    );
+  };
+
+  const renderColumnTabbed = () => {
+    if (!selectedColumn) return null;
+
+    return (
+      <>
+        {/* Entity header */}
+        <div className="px-4 py-2 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-800 break-all">
+            {selectedColumn.databaseName}.{selectedColumn.tableName}
+          </h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Selected: <span className="font-medium text-slate-600">{selectedColumn.columnName}</span>
+          </p>
+        </div>
+
+        {/* Tab bar */}
+        <TabBar tabs={TABS} activeTab={activeTab} onTabChange={(id) => setActiveTab(id as TabId)} />
+
+        {/* Tab panels */}
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <TabPanel id="columns" activeTab={activeTab}>
+            <ColumnsTab
+              columns={[selectedColumn]}
+              datasetId={effectiveDatasetId}
+              onViewFullLineage={onViewFullLineage}
+              onViewImpactAnalysis={onViewImpactAnalysis}
+            />
+          </TabPanel>
+
+          <TabPanel id="statistics" activeTab={activeTab}>
+            <StatisticsTab
+              datasetId={effectiveDatasetId}
+              isActive={activeTab === 'statistics'}
+            />
+          </TabPanel>
+
+          <TabPanel id="ddl" activeTab={activeTab}>
+            <DDLTab
+              datasetId={effectiveDatasetId}
+              isActive={activeTab === 'ddl'}
+            />
+          </TabPanel>
+        </div>
       </>
     );
   };
@@ -235,7 +217,7 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
       className={`
         fixed right-0 top-0 h-full w-96
         bg-white shadow-xl border-l border-slate-200 z-50
-        overflow-y-auto
+        flex flex-col
         transition-transform duration-300 ease-out
         motion-reduce:transition-none
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -244,7 +226,8 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
       aria-label={selectedColumn ? 'Column details' : 'Edge details'}
       aria-hidden={!isOpen}
     >
-      <div className="sticky top-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
+      {/* Sticky header */}
+      <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-slate-600">
           {selectedColumn ? 'Column Details' : 'Connection Details'}
         </h2>
@@ -256,13 +239,15 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
           <X className="w-5 h-5 text-slate-500" />
         </button>
       </div>
-      <div className="p-4">
-        {selectedColumn && renderColumnDetails()}
-        {selectedEdge && renderEdgeDetails()}
-        {!selectedColumn && !selectedEdge && (
+
+      {/* Content area */}
+      {selectedColumn && renderColumnTabbed()}
+      {selectedEdge && renderEdgeDetails()}
+      {!selectedColumn && !selectedEdge && (
+        <div className="p-4">
           <p className="text-slate-500 text-sm">No item selected</p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 };

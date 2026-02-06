@@ -586,6 +586,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         onClose={closePanel}
         selectedColumn={panelContent === 'node' ? selectedColumn : undefined}
         selectedEdge={panelContent === 'edge' ? selectedEdgeDetail : undefined}
+        datasetId={datasetId}
         onViewFullLineage={handleViewFullLineage}
         onViewImpactAnalysis={handleViewImpactAnalysis}
       />
