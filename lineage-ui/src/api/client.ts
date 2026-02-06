@@ -7,6 +7,8 @@ import type {
   NamespacesResponse,
   DatasetsResponse,
   DatasetSearchResponse,
+  DatasetStatisticsResponse,
+  DatasetDDLResponse,
   UnifiedSearchResponse,
   OpenLineagePaginationParams,
   LineageQueryParams,
@@ -72,6 +74,21 @@ export const openLineageApi = {
     const response = await apiClientV2.get<UnifiedSearchResponse>('/api/v2/openlineage/search', {
       params: { q: query, limit },
     });
+    return response.data;
+  },
+
+  // Statistics and DDL
+  async getDatasetStatistics(datasetId: string): Promise<DatasetStatisticsResponse> {
+    const response = await apiClientV2.get<DatasetStatisticsResponse>(
+      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}/statistics`
+    );
+    return response.data;
+  },
+
+  async getDatasetDDL(datasetId: string): Promise<DatasetDDLResponse> {
+    const response = await apiClientV2.get<DatasetDDLResponse>(
+      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}/ddl`
+    );
     return response.data;
   },
 

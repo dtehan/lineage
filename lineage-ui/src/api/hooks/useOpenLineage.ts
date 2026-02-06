@@ -8,6 +8,8 @@ import type {
   NamespacesResponse,
   DatasetsResponse,
   DatasetSearchResponse,
+  DatasetStatisticsResponse,
+  DatasetDDLResponse,
   UnifiedSearchResponse,
   OpenLineagePaginationParams,
   LineageDirection,
@@ -104,6 +106,36 @@ export function useOpenLineageUnifiedSearch(
     queryFn: () => openLineageApi.unifiedSearch(query, limit),
     enabled: query.length > 0,
     ...options,
+  });
+}
+
+// Statistics and DDL hooks
+
+export function useDatasetStatistics(
+  datasetId: string,
+  options?: { enabled?: boolean } & Omit<UseQueryOptions<DatasetStatisticsResponse, Error>, 'queryKey' | 'queryFn'>
+) {
+  const { enabled = true, ...queryOptions } = options ?? {};
+  return useQuery({
+    queryKey: [...openLineageKeys.all, 'statistics', datasetId],
+    queryFn: () => openLineageApi.getDatasetStatistics(datasetId),
+    enabled: !!datasetId && enabled,
+    staleTime: 5 * 60 * 1000, // Statistics change infrequently
+    ...queryOptions,
+  });
+}
+
+export function useDatasetDDL(
+  datasetId: string,
+  options?: { enabled?: boolean } & Omit<UseQueryOptions<DatasetDDLResponse, Error>, 'queryKey' | 'queryFn'>
+) {
+  const { enabled = true, ...queryOptions } = options ?? {};
+  return useQuery({
+    queryKey: [...openLineageKeys.all, 'ddl', datasetId],
+    queryFn: () => openLineageApi.getDatasetDDL(datasetId),
+    enabled: !!datasetId && enabled,
+    staleTime: 30 * 60 * 1000, // DDL changes very rarely
+    ...queryOptions,
   });
 }
 
