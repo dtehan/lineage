@@ -132,6 +132,32 @@ export interface LineageQueryParams {
   maxDepth?: number;
 }
 
+// Dataset Statistics and DDL Response Types (Phase 20 API)
+
+export interface DatasetStatisticsResponse {
+  datasetId: string;
+  databaseName: string;
+  tableName: string;
+  sourceType: string;
+  creatorName?: string;
+  createTimestamp?: string;
+  lastAlterTimestamp?: string;
+  rowCount?: number | null;
+  sizeBytes?: number | null;
+  tableComment?: string;
+}
+
+export interface DatasetDDLResponse {
+  datasetId: string;
+  databaseName: string;
+  tableName: string;
+  sourceType: string;
+  viewSql?: string;
+  truncated: boolean;
+  tableComment?: string;
+  columnComments?: Record<string, string>;
+}
+
 // Pagination parameters
 export interface OpenLineagePaginationParams {
   limit?: number;
