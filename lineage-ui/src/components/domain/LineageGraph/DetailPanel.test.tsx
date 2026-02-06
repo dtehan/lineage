@@ -26,7 +26,7 @@ describe('DetailPanel', () => {
   };
 
   describe('TC-COMP-016: Panel visibility', () => {
-    it('renders when isOpen is true', () => {
+    it('renders visible when isOpen is true', () => {
       render(
         <DetailPanel
           isOpen={true}
@@ -35,7 +35,10 @@ describe('DetailPanel', () => {
         />
       );
 
-      expect(screen.getByTestId('detail-panel')).toBeInTheDocument();
+      const panel = screen.getByTestId('detail-panel');
+      expect(panel).toBeInTheDocument();
+      expect(panel).toHaveClass('translate-x-0');
+      expect(panel).not.toHaveClass('translate-x-full');
     });
 
     it('is hidden off-screen when isOpen is false', () => {
@@ -51,6 +54,36 @@ describe('DetailPanel', () => {
       expect(panel).toBeInTheDocument();
       expect(panel).toHaveAttribute('aria-hidden', 'true');
       expect(panel.className).toContain('translate-x-full');
+    });
+  });
+
+  describe('TC-COMP-016b: Animation classes', () => {
+    it('has transition classes for slide animation', () => {
+      render(
+        <DetailPanel
+          isOpen={true}
+          onClose={() => {}}
+          selectedColumn={mockColumnDetail}
+        />
+      );
+
+      const panel = screen.getByTestId('detail-panel');
+      expect(panel).toHaveClass('transition-transform');
+      expect(panel).toHaveClass('duration-300');
+      expect(panel).toHaveClass('ease-out');
+    });
+
+    it('has reduced motion support', () => {
+      render(
+        <DetailPanel
+          isOpen={true}
+          onClose={() => {}}
+          selectedColumn={mockColumnDetail}
+        />
+      );
+
+      const panel = screen.getByTestId('detail-panel');
+      expect(panel.className).toContain('motion-reduce');
     });
   });
 
@@ -225,6 +258,32 @@ describe('DetailPanel', () => {
         'aria-label',
         'Column details'
       );
+    });
+
+    it('has aria-hidden true when closed', () => {
+      render(
+        <DetailPanel
+          isOpen={false}
+          onClose={() => {}}
+          selectedColumn={mockColumnDetail}
+        />
+      );
+
+      const panel = screen.getByTestId('detail-panel');
+      expect(panel).toHaveAttribute('aria-hidden', 'true');
+    });
+
+    it('has aria-hidden false when open', () => {
+      render(
+        <DetailPanel
+          isOpen={true}
+          onClose={() => {}}
+          selectedColumn={mockColumnDetail}
+        />
+      );
+
+      const panel = screen.getByTestId('detail-panel');
+      expect(panel).toHaveAttribute('aria-hidden', 'false');
     });
 
     it('has appropriate aria-label for edge details', () => {
