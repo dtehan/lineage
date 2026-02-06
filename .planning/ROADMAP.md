@@ -56,9 +56,9 @@ See [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md) for full details. 6
 **Plans**: 3 plans
 
 Plans:
-- [ ] 19-01-PLAN.md - Add CSS transitions to nodes and slide animation to DetailPanel
-- [ ] 19-02-PLAN.md - Unify edge animation timing and move keyframes to CSS
-- [ ] 19-03-PLAN.md - Update DetailPanel tests for animation behavior
+- [x] 19-01-PLAN.md - Add CSS transitions to nodes and slide animation to DetailPanel
+- [x] 19-02-PLAN.md - Unify edge animation timing and move keyframes to CSS
+- [x] 19-03-PLAN.md - Update DetailPanel tests for animation behavior
 
 #### Phase 20: Backend Statistics & DDL API
 **Goal**: Provide backend endpoints that supply table/view metadata for the enhanced detail panel
@@ -70,10 +70,11 @@ Plans:
   3. API returns table/column comments when available
   4. API returns 404 for missing datasets (not 500 with details)
   5. Both tables and views are supported by statistics/DDL endpoints
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 20-01: TBD
+- [ ] 20-01-PLAN.md - Go backend vertical slice: domain entities, repository, service, handlers, router, mocks
+- [ ] 20-02-PLAN.md - Python Flask server statistics and DDL endpoints
 
 #### Phase 21: Detail Panel Enhancement
 **Goal**: Transform the existing detail panel into a comprehensive metadata viewer with tabs
@@ -130,11 +131,11 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. Animation & Transitions | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
-| 20. Backend Statistics & DDL API | v4.0 | 0/TBD | Not started | - |
+| 20. Backend Statistics & DDL API | v4.0 | 0/2 | Not started | - |
 | 21. Detail Panel Enhancement | v4.0 | 0/TBD | Not started | - |
 | 22. Selection Features | v4.0 | 0/TBD | Not started | - |
 | 23. Testing & Validation | v4.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-06 (Phase 19 complete)*
+*Last updated: 2026-02-06 (Phase 20 planned)*
