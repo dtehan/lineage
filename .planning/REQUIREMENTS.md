@@ -33,14 +33,14 @@ Requirements for Interactive Graph Experience milestone. Focus on animation poli
 
 ### Detail Panel - Frontend
 
-- [ ] **PANEL-01**: Tabbed interface with "Columns", "Statistics", "DDL" tabs
-- [ ] **PANEL-02**: Statistics tab shows table metadata (row count, size, dates, owner, type)
-- [ ] **PANEL-03**: DDL tab shows view SQL with syntax highlighting
-- [ ] **PANEL-04**: DDL tab shows table/column comments if available
-- [ ] **PANEL-05**: Column list: click column name navigates to that column's lineage graph
-- [ ] **PANEL-06**: Loading states for statistics and DDL tabs (separate from main panel)
-- [ ] **PANEL-07**: Error states if statistics/DDL fetch fails (graceful degradation)
-- [ ] **PANEL-08**: Panel scrollable independently per tab (large SQL, many columns)
+- [x] **PANEL-01**: Tabbed interface with "Columns", "Statistics", "DDL" tabs
+- [x] **PANEL-02**: Statistics tab shows table metadata (row count, size, dates, owner, type)
+- [x] **PANEL-03**: DDL tab shows view SQL with syntax highlighting
+- [x] **PANEL-04**: DDL tab shows table/column comments if available
+- [x] **PANEL-05**: Column list: click column name navigates to that column's lineage graph
+- [x] **PANEL-06**: Loading states for statistics and DDL tabs (separate from main panel)
+- [x] **PANEL-07**: Error states if statistics/DDL fetch fails (graceful degradation)
+- [x] **PANEL-08**: Panel scrollable independently per tab (large SQL, many columns)
 
 ### Testing
 
@@ -99,14 +99,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | API-04 | Phase 20 | Complete |
 | API-05 | Phase 20 | Complete |
 | API-06 | Phase 20 | Complete |
-| PANEL-01 | Phase 21 | Pending |
-| PANEL-02 | Phase 21 | Pending |
-| PANEL-03 | Phase 21 | Pending |
-| PANEL-04 | Phase 21 | Pending |
-| PANEL-05 | Phase 21 | Pending |
-| PANEL-06 | Phase 21 | Pending |
-| PANEL-07 | Phase 21 | Pending |
-| PANEL-08 | Phase 21 | Pending |
+| PANEL-01 | Phase 21 | Complete |
+| PANEL-02 | Phase 21 | Complete |
+| PANEL-03 | Phase 21 | Complete |
+| PANEL-04 | Phase 21 | Complete |
+| PANEL-05 | Phase 21 | Complete |
+| PANEL-06 | Phase 21 | Complete |
+| PANEL-07 | Phase 21 | Complete |
+| PANEL-08 | Phase 21 | Complete |
 | TEST-01 | Phase 23 | Pending |
 | TEST-02 | Phase 23 | Pending |
 | TEST-03 | Phase 23 | Pending |
@@ -121,4 +121,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-06 (Phase 20 complete)*
+*Last updated: 2026-02-06 (Phase 21 complete)*

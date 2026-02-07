@@ -95,4 +95,4 @@ None
 Last session: 2026-02-06
 Stopped at: Completed 21-03-PLAN.md (Test Coverage for Tabbed DetailPanel) - Phase 21 complete
 Resume file: None
-Next: Phase 22 (Performance Optimization) or Phase 23 (Integration Testing)
+Next: Phase 22 (Selection Features) - fit-to-selection viewport control and breadcrumb navigation
