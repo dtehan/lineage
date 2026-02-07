@@ -4,18 +4,18 @@
 
 See: .planning/PROJECT.md (updated 2026-02-07)
 
-**Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 milestone complete - planning next milestone
+**Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
+**Current focus:** Phase 24 - README Updates
 
 ## Current Position
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-02-07 - v5.0 milestone started
+Phase: 24 of 27 (README Updates)
+Plan: 0 of 2 in current phase
+Status: Ready to plan
+Last activity: 2026-02-07 -- v5.0 roadmap created (4 phases, 9 plans, 51 requirements)
 
-Progress: Requirements definition [          ] 0%
+Progress: [░░░░░░░░░░] 0% (0/9 plans)
 
 ## Performance Metrics
 
@@ -33,12 +33,13 @@ Progress: Requirements definition [          ] 0%
 | v2.1 | 2 | 5 | 1 day |
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
+| v5.0 | 4 | 9 | - |
 
 **Recent Trend:**
 - v4.0 average: 3.2 min per plan
 - Trend: Stable velocity
 
-*Updated after milestone completion*
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -46,13 +47,10 @@ Progress: Requirements definition [          ] 0%
 
 All decisions logged in PROJECT.md Key Decisions table.
 
-Recent v4.0 decisions:
-- Generic "Internal server error" on 500 errors for security (not detailed SQL errors)
-- MAX(RowCount) without IndexNumber filter for robust statistics retrieval
-- SHOW TABLE command for CREATE TABLE DDL extraction
-- Tab state resets to "columns" on selection change to prevent stale data
-- FIT_TO_SELECTION_PADDING = 0.15 and DURATION = 300ms matching panel animation timing
-- Selection persistence checks storeNodes existence, clears on column disappearance
+Recent decisions:
+- [v5.0 roadmap]: 4 phases from 4 natural doc groupings (READMEs, User Guide, Ops Guide, Dev Manual)
+- [v5.0 roadmap]: All phases independent -- can execute in any order
+- [v5.0 roadmap]: No research phase needed -- introspective documentation of existing codebase
 
 ### Pending Todos
 
@@ -62,19 +60,10 @@ Recent v4.0 decisions:
 
 ### Blockers/Concerns
 
-None - v4.0 milestone complete with 100% audit score (zero gaps)
+None.
 
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: v4.0 milestone complete and archived
+Stopped at: v5.0 roadmap created, ready to plan Phase 24
 Resume file: None
-Next: `/gsd:new-milestone` to start v5.0 planning (questioning → research → requirements → roadmap)
-
----
-
-## Next Steps
-
-1. Run `/gsd:new-milestone` to start next milestone planning
-2. Consider addressing deferred concerns: Redis integration, SQL parser improvements, E2E validation, secrets vault, search performance
-3. Review pending todos for potential inclusion in next milestone

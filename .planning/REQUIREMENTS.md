@@ -83,17 +83,63 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 ## Traceability
 
-*Will be populated during roadmap creation*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (empty initially) | | |
+| README-01 | Phase 24 | Pending |
+| README-02 | Phase 24 | Pending |
+| README-03 | Phase 24 | Pending |
+| README-04 | Phase 24 | Pending |
+| README-05 | Phase 24 | Pending |
+| README-06 | Phase 24 | Pending |
+| README-07 | Phase 24 | Pending |
+| README-08 | Phase 24 | Pending |
+| README-09 | Phase 24 | Pending |
+| README-10 | Phase 24 | Pending |
+| USER-01 | Phase 25 | Pending |
+| USER-02 | Phase 25 | Pending |
+| USER-03 | Phase 25 | Pending |
+| USER-04 | Phase 25 | Pending |
+| USER-05 | Phase 25 | Pending |
+| USER-06 | Phase 25 | Pending |
+| USER-07 | Phase 25 | Pending |
+| USER-08 | Phase 25 | Pending |
+| USER-09 | Phase 25 | Pending |
+| USER-10 | Phase 25 | Pending |
+| USER-11 | Phase 25 | Pending |
+| OPS-01 | Phase 26 | Pending |
+| OPS-02 | Phase 26 | Pending |
+| OPS-03 | Phase 26 | Pending |
+| OPS-04 | Phase 26 | Pending |
+| OPS-05 | Phase 26 | Pending |
+| OPS-06 | Phase 26 | Pending |
+| OPS-07 | Phase 26 | Pending |
+| OPS-08 | Phase 26 | Pending |
+| OPS-09 | Phase 26 | Pending |
+| OPS-10 | Phase 26 | Pending |
+| OPS-11 | Phase 26 | Pending |
+| OPS-12 | Phase 26 | Pending |
+| DEV-01 | Phase 27 | Pending |
+| DEV-02 | Phase 27 | Pending |
+| DEV-03 | Phase 27 | Pending |
+| DEV-04 | Phase 27 | Pending |
+| DEV-05 | Phase 27 | Pending |
+| DEV-06 | Phase 27 | Pending |
+| DEV-07 | Phase 27 | Pending |
+| DEV-08 | Phase 27 | Pending |
+| DEV-09 | Phase 27 | Pending |
+| DEV-10 | Phase 27 | Pending |
+| DEV-11 | Phase 27 | Pending |
+| DEV-12 | Phase 27 | Pending |
+| DEV-13 | Phase 27 | Pending |
+| DEV-14 | Phase 27 | Pending |
+| DEV-15 | Phase 27 | Pending |
+| DEV-16 | Phase 27 | Pending |
 
 **Coverage:**
-- v5.0 requirements: 51 total
-- Mapped to phases: (pending roadmap)
-- Unmapped: (pending roadmap)
+- v5.0 requirements: 49 total
+- Mapped to phases: 49
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after initial definition*
+*Last updated: 2026-02-07 after roadmap creation*
