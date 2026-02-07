@@ -114,19 +114,19 @@ func (r *OpenLineageRepository) ListNamespaces(ctx context.Context) ([]domain.Op
 
 // Dataset operations
 
-// GetDataset retrieves a dataset by its ID.
+// GetDataset retrieves a dataset by its ID or name.
 func (r *OpenLineageRepository) GetDataset(ctx context.Context, datasetID string) (*domain.OpenLineageDataset, error) {
 	query := `
 		SELECT dataset_id, namespace_id, name, description, source_type, created_at, updated_at, is_active
 		FROM demo_user.OL_DATASET
-		WHERE dataset_id = ?`
+		WHERE dataset_id = ? OR "name" = ?`
 
 	var ds domain.OpenLineageDataset
 	var description, sourceType sql.NullString
 	var createdAt, updatedAt sql.NullTime
 	var isActive string
 
-	err := r.db.QueryRowContext(ctx, query, datasetID).Scan(
+	err := r.db.QueryRowContext(ctx, query, datasetID, datasetID).Scan(
 		&ds.ID, &ds.NamespaceID, &ds.Name, &description, &sourceType,
 		&createdAt, &updatedAt, &isActive,
 	)
@@ -775,14 +775,14 @@ func (r *OpenLineageRepository) GetColumnLineageGraph(ctx context.Context, datas
 	return graph, nil
 }
 
-// parseDatasetName extracts database and table names from a datasetID.
-// The datasetID format is "namespace_id/database.table".
-func parseDatasetName(datasetID string) (database, table string, err error) {
-	slashIdx := strings.LastIndex(datasetID, "/")
-	if slashIdx < 0 {
-		return "", "", fmt.Errorf("invalid dataset ID format: missing '/'")
+// parseDatasetName extracts database and table names from a dataset name or ID.
+// Accepts both "namespace_id/database.table" (dataset_id format) and "database.table" (name format).
+func parseDatasetName(nameOrID string) (database, table string, err error) {
+	// Extract the name portion: after "/" for dataset_id format, or use as-is for name format
+	name := nameOrID
+	if slashIdx := strings.LastIndex(nameOrID, "/"); slashIdx >= 0 {
+		name = nameOrID[slashIdx+1:]
 	}
-	name := datasetID[slashIdx+1:]
 
 	dotIdx := strings.Index(name, ".")
 	if dotIdx < 0 {
@@ -812,10 +812,10 @@ func mapTableKind(kind string) string {
 
 // GetDatasetStatistics retrieves statistics for a dataset from DBC system views.
 func (r *OpenLineageRepository) GetDatasetStatistics(ctx context.Context, datasetID string) (*domain.DatasetStatistics, error) {
-	// Verify dataset exists in OL_DATASET
-	existsQuery := `SELECT dataset_id FROM demo_user.OL_DATASET WHERE dataset_id = ?`
-	var exists string
-	err := r.db.QueryRowContext(ctx, existsQuery, datasetID).Scan(&exists)
+	// Verify dataset exists in OL_DATASET (match by dataset_id OR name)
+	existsQuery := `SELECT dataset_id, "name" FROM demo_user.OL_DATASET WHERE dataset_id = ? OR "name" = ?`
+	var resolvedID, resolvedName string
+	err := r.db.QueryRowContext(ctx, existsQuery, datasetID, datasetID).Scan(&resolvedID, &resolvedName)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -823,14 +823,14 @@ func (r *OpenLineageRepository) GetDatasetStatistics(ctx context.Context, datase
 		return nil, fmt.Errorf("check dataset exists: %w", err)
 	}
 
-	// Parse database and table from datasetID
-	dbName, tableName, err := parseDatasetName(datasetID)
+	// Parse database and table from resolved name
+	dbName, tableName, err := parseDatasetName(resolvedName)
 	if err != nil {
 		return nil, fmt.Errorf("parse dataset name: %w", err)
 	}
 
 	stats := &domain.DatasetStatistics{
-		DatasetID:    datasetID,
+		DatasetID:    resolvedID,
 		DatabaseName: dbName,
 		TableName:    tableName,
 	}
@@ -906,10 +906,10 @@ func (r *OpenLineageRepository) GetDatasetStatistics(ctx context.Context, datase
 
 // GetDatasetDDL retrieves DDL information for a dataset from DBC system views.
 func (r *OpenLineageRepository) GetDatasetDDL(ctx context.Context, datasetID string) (*domain.DatasetDDL, error) {
-	// Verify dataset exists in OL_DATASET
-	existsQuery := `SELECT dataset_id FROM demo_user.OL_DATASET WHERE dataset_id = ?`
-	var exists string
-	err := r.db.QueryRowContext(ctx, existsQuery, datasetID).Scan(&exists)
+	// Verify dataset exists in OL_DATASET (match by dataset_id OR name)
+	existsQuery := `SELECT dataset_id, "name" FROM demo_user.OL_DATASET WHERE dataset_id = ? OR "name" = ?`
+	var resolvedID, resolvedName string
+	err := r.db.QueryRowContext(ctx, existsQuery, datasetID, datasetID).Scan(&resolvedID, &resolvedName)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -917,14 +917,14 @@ func (r *OpenLineageRepository) GetDatasetDDL(ctx context.Context, datasetID str
 		return nil, fmt.Errorf("check dataset exists: %w", err)
 	}
 
-	// Parse database and table from datasetID
-	dbName, tableName, err := parseDatasetName(datasetID)
+	// Parse database and table from resolved name
+	dbName, tableName, err := parseDatasetName(resolvedName)
 	if err != nil {
 		return nil, fmt.Errorf("parse dataset name: %w", err)
 	}
 
 	ddl := &domain.DatasetDDL{
-		DatasetID:      datasetID,
+		DatasetID:      resolvedID,
 		DatabaseName:   dbName,
 		TableName:      tableName,
 		ColumnComments: make(map[string]string),

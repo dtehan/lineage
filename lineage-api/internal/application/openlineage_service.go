@@ -154,7 +154,7 @@ func (s *OpenLineageService) GetLineageGraph(ctx context.Context, datasetID, fie
 
 // GetDatasetStatistics returns statistics for a dataset
 func (s *OpenLineageService) GetDatasetStatistics(ctx context.Context, datasetID string) (*DatasetStatisticsResponse, error) {
-	// Verify dataset exists in OL_DATASET
+	// Verify dataset exists in OL_DATASET (resolves name to canonical ID)
 	ds, err := s.repo.GetDataset(ctx, datasetID)
 	if err != nil {
 		return nil, err
@@ -163,7 +163,7 @@ func (s *OpenLineageService) GetDatasetStatistics(ctx context.Context, datasetID
 		return nil, nil
 	}
 
-	stats, err := s.repo.GetDatasetStatistics(ctx, datasetID)
+	stats, err := s.repo.GetDatasetStatistics(ctx, ds.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +196,7 @@ func (s *OpenLineageService) GetDatasetStatistics(ctx context.Context, datasetID
 
 // GetDatasetDDL returns DDL information for a dataset
 func (s *OpenLineageService) GetDatasetDDL(ctx context.Context, datasetID string) (*DatasetDDLResponse, error) {
-	// Verify dataset exists in OL_DATASET
+	// Verify dataset exists in OL_DATASET (resolves name to canonical ID)
 	ds, err := s.repo.GetDataset(ctx, datasetID)
 	if err != nil {
 		return nil, err
@@ -205,7 +205,7 @@ func (s *OpenLineageService) GetDatasetDDL(ctx context.Context, datasetID string
 		return nil, nil
 	}
 
-	ddl, err := s.repo.GetDatasetDDL(ctx, datasetID)
+	ddl, err := s.repo.GetDatasetDDL(ctx, ds.ID)
 	if err != nil {
 		return nil, err
 	}

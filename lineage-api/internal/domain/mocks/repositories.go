@@ -570,7 +570,7 @@ func (m *MockOpenLineageRepository) ListNamespaces(ctx context.Context) ([]domai
 	return m.Namespaces, nil
 }
 
-// GetDataset retrieves a dataset by ID.
+// GetDataset retrieves a dataset by ID or name.
 func (m *MockOpenLineageRepository) GetDataset(ctx context.Context, datasetID string) (*domain.OpenLineageDataset, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -578,7 +578,7 @@ func (m *MockOpenLineageRepository) GetDataset(ctx context.Context, datasetID st
 		return nil, m.GetDatasetErr
 	}
 	for i := range m.Datasets {
-		if m.Datasets[i].ID == datasetID {
+		if m.Datasets[i].ID == datasetID || m.Datasets[i].Name == datasetID {
 			return &m.Datasets[i], nil
 		}
 	}
