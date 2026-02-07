@@ -70,11 +70,12 @@ Plans:
   3. API returns table/column comments when available
   4. API returns 404 for missing datasets (not 500 with details)
   5. Both tables and views are supported by statistics/DDL endpoints
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
 - [x] 20-01-PLAN.md - Go backend vertical slice: domain entities, repository, service, handlers, router, mocks
 - [x] 20-02-PLAN.md - Python Flask server statistics and DDL endpoints
+- [ ] 20-03-PLAN.md - Fix dataset ID format mismatch (backend accepts name OR dataset_id)
 
 #### Phase 21: Detail Panel Enhancement
 **Goal**: Transform the existing detail panel into a comprehensive metadata viewer with tabs
@@ -136,11 +137,11 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. Animation & Transitions | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
-| 20. Backend Statistics & DDL API | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
+| 20. Backend Statistics & DDL API | v4.0 | 2/3 | UAT fix in progress | - |
 | 21. Detail Panel Enhancement | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 | 22. Selection Features | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
 | 23. Testing & Validation | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-06 (Phase 23 complete)*
+*Last updated: 2026-02-07 (Phase 20 gap closure plan added)*
