@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Maximize2, Download, ChevronDown, Focus, Filter } from 'lucide-react';
+import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair } from 'lucide-react';
 import { Tooltip } from '../../common/Tooltip';
 
 export type ViewMode = 'graph' | 'table';
@@ -18,6 +18,8 @@ export interface ToolbarProps {
   searchQuery: string;
   onSearchChange: (query: string) => void;
   onFitView: () => void;
+  onFitToSelection?: () => void;
+  hasSelection?: boolean;
   onExport?: () => void;
   onFullscreen?: () => void;
   isLoading?: boolean;
@@ -37,6 +39,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   searchQuery,
   onSearchChange,
   onFitView,
+  onFitToSelection,
+  hasSelection = false,
   onExport,
   onFullscreen,
   isLoading = false,
@@ -251,6 +255,19 @@ export const Toolbar: React.FC<ToolbarProps> = ({
             <Focus className="w-4 h-4" />
           </button>
         </Tooltip>
+
+        {onFitToSelection && (
+          <Tooltip content="Center viewport on selected lineage path" position="bottom">
+            <button
+              onClick={onFitToSelection}
+              disabled={isLoading || !hasSelection}
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              aria-label="Fit to selection"
+            >
+              <Crosshair className="w-4 h-4" />
+            </button>
+          </Tooltip>
+        )}
 
         {onExport && (
           <Tooltip content="Export graph as image" position="bottom">
