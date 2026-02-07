@@ -44,12 +44,12 @@ Requirements for Interactive Graph Experience milestone. Focus on animation poli
 
 ### Testing
 
-- [ ] **TEST-01**: Unit tests for hover tooltip with different node types
-- [ ] **TEST-02**: Integration tests for fit-to-selection viewport calculations
-- [ ] **TEST-03**: E2E tests for panel navigation (column click → new lineage)
-- [ ] **TEST-04**: Performance tests for hover on 100+ node graphs
-- [ ] **TEST-05**: API tests for statistics and DDL endpoints
-- [ ] **TEST-06**: Frontend tests for panel tab switching and error states
+- [x] **TEST-01**: Unit tests for hover tooltip with different node types
+- [x] **TEST-02**: Integration tests for fit-to-selection viewport calculations
+- [x] **TEST-03**: E2E tests for panel navigation (column click → new lineage)
+- [x] **TEST-04**: Performance tests for hover on 100+ node graphs
+- [x] **TEST-05**: API tests for statistics and DDL endpoints
+- [x] **TEST-06**: Frontend tests for panel tab switching and error states
 
 ## Future Requirements
 
@@ -107,12 +107,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PANEL-06 | Phase 21 | Complete |
 | PANEL-07 | Phase 21 | Complete |
 | PANEL-08 | Phase 21 | Complete |
-| TEST-01 | Phase 23 | Pending |
-| TEST-02 | Phase 23 | Pending |
-| TEST-03 | Phase 23 | Pending |
-| TEST-04 | Phase 23 | Pending |
-| TEST-05 | Phase 23 | Pending |
-| TEST-06 | Phase 23 | Pending |
+| TEST-01 | Phase 23 | Complete |
+| TEST-02 | Phase 23 | Complete |
+| TEST-03 | Phase 23 | Complete |
+| TEST-04 | Phase 23 | Complete |
+| TEST-05 | Phase 23 | Complete |
+| TEST-06 | Phase 23 | Complete |
 
 **Coverage:**
 - v4.0 requirements: 29 total
