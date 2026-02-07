@@ -16,11 +16,11 @@ Requirements for Interactive Graph Experience milestone. Focus on animation poli
 
 ### Selection Enhancement
 
-- [ ] **SELECT-01**: "Fit to selection" button centers viewport on highlighted path
-- [ ] **SELECT-02**: Fit-to-selection uses React Flow fitBounds API with padding
-- [ ] **SELECT-03**: Breadcrumb shows selection hierarchy (database > table > column) in panel header
-- [ ] **SELECT-04**: Breadcrumb updates immediately on selection change
-- [ ] **SELECT-05**: Selection state persists when changing graph depth (if possible)
+- [x] **SELECT-01**: "Fit to selection" button centers viewport on highlighted path
+- [x] **SELECT-02**: Fit-to-selection uses React Flow fitBounds API with padding
+- [x] **SELECT-03**: Breadcrumb shows selection hierarchy (database > table > column) in panel header
+- [x] **SELECT-04**: Breadcrumb updates immediately on selection change
+- [x] **SELECT-05**: Selection state persists when changing graph depth (if possible)
 
 ### Detail Panel - Backend API
 
@@ -88,11 +88,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ANIM-02 | Phase 19 | Complete |
 | ANIM-03 | Phase 19 | Complete |
 | ANIM-04 | Phase 19 | Complete |
-| SELECT-01 | Phase 22 | Pending |
-| SELECT-02 | Phase 22 | Pending |
-| SELECT-03 | Phase 22 | Pending |
-| SELECT-04 | Phase 22 | Pending |
-| SELECT-05 | Phase 22 | Pending |
+| SELECT-01 | Phase 22 | Complete |
+| SELECT-02 | Phase 22 | Complete |
+| SELECT-03 | Phase 22 | Complete |
+| SELECT-04 | Phase 22 | Complete |
+| SELECT-05 | Phase 22 | Complete |
 | API-01 | Phase 20 | Complete |
 | API-02 | Phase 20 | Complete |
 | API-03 | Phase 20 | Complete |
@@ -121,4 +121,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-06 (Phase 21 complete)*
+*Last updated: 2026-02-06 (Phase 22 complete)*

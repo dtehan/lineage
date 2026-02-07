@@ -13,7 +13,7 @@ Milestone: v4.0 Interactive Graph Experience
 Phase: 22 of 23 (Selection Features)
 Plan: 1 of 2 (22-01 complete, 22-02 complete)
 Status: Phase complete
-Last activity: 2026-02-06 - Completed 22-01-PLAN.md (Fit-to-Selection and Selection Persistence)
+Last activity: 2026-02-06 - Completed Phase 22 (Selection Features)
 
 Progress: [########  ] 80% (4/5 phases complete in v4.0)
 
@@ -104,6 +104,6 @@ None
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 22-01-PLAN.md (Fit-to-Selection and Selection Persistence) - Phase 22 complete
+Stopped at: Completed Phase 22 (Selection Features) - Phase 22 complete
 Resume file: None
 Next: Phase 23 (Testing & Verification)
