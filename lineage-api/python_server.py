@@ -1754,10 +1754,9 @@ def get_dataset_statistics(dataset_id):
                 # Query DBC.TableStatsV for row count (may fail on permission)
                 try:
                     cur.execute("""
-                        SELECT RowCount
+                        SELECT MAX(RowCount)
                         FROM DBC.TableStatsV
                         WHERE DatabaseName = ? AND TableName = ?
-                          AND IndexNumber = 1
                     """, [db_name, table_name])
                     stats_row = cur.fetchone()
                     if stats_row and stats_row[0] is not None:
@@ -1864,12 +1863,24 @@ def get_dataset_ddl(dataset_id):
                     view_sql = None
                     truncated = False
 
+                # For tables, get CREATE TABLE DDL via SHOW TABLE
+                table_ddl = None
+                if source_type == "TABLE":
+                    try:
+                        cur.execute(f"SHOW TABLE {db_name}.{table_name}")
+                        ddl_rows = cur.fetchall()
+                        if ddl_rows:
+                            table_ddl = "\n".join(row[0] if isinstance(row[0], str) else str(row[0]) for row in ddl_rows).strip()
+                    except Exception:
+                        pass  # Permission or availability issue, leave tableDdl null
+
                 result = {
                     "datasetId": resolved_dataset_id,
                     "databaseName": db_name,
                     "tableName": table_name,
                     "sourceType": source_type,
                     "viewSql": view_sql,
+                    "tableDdl": table_ddl,
                     "truncated": truncated,
                     "tableComment": table_comment,
                     "columnComments": {},

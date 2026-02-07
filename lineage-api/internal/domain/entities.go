@@ -234,6 +234,7 @@ type DatasetDDL struct {
 	TableName      string            `json:"tableName"`
 	SourceType     string            `json:"sourceType"`
 	ViewSQL        string            `json:"viewSql,omitempty"`
+	TableDDL       string            `json:"tableDdl,omitempty"`
 	Truncated      bool              `json:"truncated"`
 	TableComment   string            `json:"tableComment,omitempty"`
 	ColumnComments map[string]string `json:"columnComments,omitempty"`

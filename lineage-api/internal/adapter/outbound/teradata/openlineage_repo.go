@@ -868,8 +868,8 @@ func (r *OpenLineageRepository) GetDatasetStatistics(ctx context.Context, datase
 
 	// Query DBC.TableStatsV for row count (handle permission errors gracefully)
 	statsQuery := `
-		SELECT RowCount FROM DBC.TableStatsV
-		WHERE DatabaseName = ? AND TableName = ? AND IndexNumber = 1`
+		SELECT MAX(RowCount) FROM DBC.TableStatsV
+		WHERE DatabaseName = ? AND TableName = ?`
 
 	var rowCount sql.NullInt64
 	err = r.db.QueryRowContext(ctx, statsQuery, dbName, tableName).Scan(&rowCount)
@@ -975,6 +975,32 @@ func (r *OpenLineageRepository) GetDatasetDDL(ctx context.Context, datasetID str
 			ddl.Truncated = true
 		} else if !hasOverFlowColumn && len(requestText.String) >= 12500 {
 			ddl.Truncated = true
+		}
+	}
+
+	// For tables, get CREATE TABLE DDL via SHOW TABLE
+	if strings.TrimSpace(tableKind.String) != "V" {
+		showQuery := fmt.Sprintf("SHOW TABLE %s.%s", dbName, tableName)
+		showRows, err := r.db.QueryContext(ctx, showQuery)
+		if err != nil {
+			// Log but don't fail - permission issues possible
+			slog.WarnContext(ctx, "failed to get table DDL",
+				"database", dbName, "table", tableName, "error", err)
+		} else {
+			var ddlParts []string
+			for showRows.Next() {
+				var line string
+				if err := showRows.Scan(&line); err != nil {
+					slog.WarnContext(ctx, "failed to scan DDL line",
+						"database", dbName, "table", tableName, "error", err)
+					continue
+				}
+				ddlParts = append(ddlParts, line)
+			}
+			showRows.Close()
+			if len(ddlParts) > 0 {
+				ddl.TableDDL = strings.Join(ddlParts, "\n")
+			}
 		}
 	}
 
