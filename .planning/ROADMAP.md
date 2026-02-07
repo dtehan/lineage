@@ -60,11 +60,11 @@ See [milestones/v4.0-ROADMAP.md](milestones/v4.0-ROADMAP.md) for full details. 5
   3. lineage-api README describes hexagonal architecture (domain/application/adapter) and provides working commands for both Python and Go servers
   4. lineage-ui README describes the React component structure including v4.0 components (DetailPanel, Toolbar, LineageTableView) and provides working dev/build/test commands
   5. database README explains OL_* schema, OpenLineage alignment, both lineage population methods (fixtures vs DBQL), and provides working test commands
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 24-01: Root README update (v4.0 features, quick start, doc links)
-- [ ] 24-02: Component README updates (lineage-api, lineage-ui, database)
+- [ ] 24-01-PLAN.md -- Rewrite root README with v4.0 features, quick start, architecture diagram, doc links
+- [ ] 24-02-PLAN.md -- Create lineage-api and lineage-ui READMEs, update database README testing section
 
 #### Phase 25: User Guide Refresh
 **Goal**: The user guide documents every user-facing feature so someone can learn the full application without external help
@@ -132,4 +132,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-07 (v5.0 milestone roadmap added)*
+*Last updated: 2026-02-07 (Phase 24 plans created)*
