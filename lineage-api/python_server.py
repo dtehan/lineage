@@ -1699,17 +1699,19 @@ def get_dataset_statistics(dataset_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Verify dataset exists in OL_DATASET
+                # Verify dataset exists in OL_DATASET (match by dataset_id OR name)
                 cur.execute("""
-                    SELECT source_type FROM OL_DATASET WHERE dataset_id = ?
-                """, [dataset_id])
+                    SELECT dataset_id, "name", source_type FROM OL_DATASET
+                    WHERE dataset_id = ? OR "name" = ?
+                """, [dataset_id, dataset_id])
                 ds_row = cur.fetchone()
                 if not ds_row:
                     return jsonify({"error": "Dataset not found"}), 404
+                resolved_dataset_id = ds_row[0]
+                resolved_name = ds_row[1]
 
-                # Parse database.table from dataset name
-                # Format: "namespace_id/database.table"
-                name_part = dataset_id.split("/", 1)[1] if "/" in dataset_id else dataset_id
+                # Parse database.table from resolved dataset name
+                name_part = resolved_name.strip() if resolved_name else (dataset_id.split("/", 1)[1] if "/" in dataset_id else dataset_id)
                 parts = name_part.split(".", 1)
                 if len(parts) != 2:
                     return jsonify({"error": "Dataset not found"}), 404
@@ -1737,7 +1739,7 @@ def get_dataset_statistics(dataset_id):
                 source_type = "VIEW" if table_kind == "V" else "TABLE"
 
                 result = {
-                    "datasetId": dataset_id,
+                    "datasetId": resolved_dataset_id,
                     "databaseName": db_name,
                     "tableName": tab_row[0] if tab_row[0] else table_name,
                     "sourceType": source_type,
@@ -1790,16 +1792,19 @@ def get_dataset_ddl(dataset_id):
     try:
         with get_db_connection() as conn:
             with conn.cursor() as cur:
-                # Verify dataset exists in OL_DATASET
+                # Verify dataset exists in OL_DATASET (match by dataset_id OR name)
                 cur.execute("""
-                    SELECT source_type FROM OL_DATASET WHERE dataset_id = ?
-                """, [dataset_id])
+                    SELECT dataset_id, "name", source_type FROM OL_DATASET
+                    WHERE dataset_id = ? OR "name" = ?
+                """, [dataset_id, dataset_id])
                 ds_row = cur.fetchone()
                 if not ds_row:
                     return jsonify({"error": "Dataset not found"}), 404
+                resolved_dataset_id = ds_row[0]
+                resolved_name = ds_row[1]
 
-                # Parse database.table from dataset name
-                name_part = dataset_id.split("/", 1)[1] if "/" in dataset_id else dataset_id
+                # Parse database.table from resolved dataset name
+                name_part = resolved_name.strip() if resolved_name else (dataset_id.split("/", 1)[1] if "/" in dataset_id else dataset_id)
                 parts = name_part.split(".", 1)
                 if len(parts) != 2:
                     return jsonify({"error": "Dataset not found"}), 404
@@ -1860,7 +1865,7 @@ def get_dataset_ddl(dataset_id):
                     truncated = False
 
                 result = {
-                    "datasetId": dataset_id,
+                    "datasetId": resolved_dataset_id,
                     "databaseName": db_name,
                     "tableName": table_name,
                     "sourceType": source_type,
