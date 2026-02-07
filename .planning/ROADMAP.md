@@ -108,8 +108,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 22-01-PLAN.md — Fit-to-selection viewport control and selection persistence
-- [ ] 22-02-PLAN.md — Selection hierarchy breadcrumb in DetailPanel header
+- [x] 22-01-PLAN.md - Fit-to-selection viewport control and selection persistence
+- [x] 22-02-PLAN.md - Selection hierarchy breadcrumb in DetailPanel header
 
 #### Phase 23: Testing & Validation
 **Goal**: Ensure all v4.0 features have comprehensive test coverage
@@ -122,10 +122,12 @@ Plans:
   4. Performance tests verify hover responsiveness on 100+ node graphs
   5. API tests verify statistics and DDL endpoints (success and error cases)
   6. Frontend tests verify tab switching and error state handling
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 23-01: TBD
+- [ ] 23-01-PLAN.md - Tooltip hover tests + ColumnRow node type tests + useFitToSelection hook tests
+- [ ] 23-02-PLAN.md - Go handler tests for statistics/DDL + hover highlight performance benchmarks
+- [ ] 23-03-PLAN.md - E2E panel column click navigation + TEST-06 coverage verification
 
 ## Progress
 
@@ -137,8 +139,8 @@ Plans:
 | 20. Backend Statistics & DDL API | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
 | 21. Detail Panel Enhancement | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 | 22. Selection Features | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
-| 23. Testing & Validation | v4.0 | 0/TBD | Not started | - |
+| 23. Testing & Validation | v4.0 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-06 (Phase 22 complete)*
+*Last updated: 2026-02-06 (Phase 23 planned)*
