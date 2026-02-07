@@ -1,622 +1,419 @@
-# Architecture Research: Integrating Cross-Cutting Concerns in Hexagonal Architecture
+# Architecture Patterns: Interactive Graph Features
 
-**Domain:** Go API with Hexagonal/Clean Architecture
-**Researched:** 2026-01-29
+**Domain:** React Flow + Zustand integration for node selection, path highlighting, and detail panel
+**Researched:** 2026-02-01
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This research addresses how to integrate validation, error handling, pagination, and configuration into an existing hexagonal architecture Go API without violating separation of concerns. The key insight is that these concerns are **not monolithic** - they have different aspects that belong in different layers.
+Research confirms the existing architecture is **already well-positioned** for interactive graph features. The codebase has implemented most of the core infrastructure:
 
-**Core principle:** Each layer validates what it owns and wraps errors at layer boundaries.
+- `useLineageStore` already contains `selectedAssetId`, `highlightedNodeIds`, `highlightedEdgeIds`, panel state
+- `useLineageHighlight` hook already implements DFS traversal with cycle detection
+- `DetailPanel` component exists with column and edge detail rendering
+- `TableNode` and `ColumnRow` components already respond to selection/highlight state
 
----
-
-## System Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                        HTTP ADAPTER (Inbound)                                │
-│  ┌─────────────────┐  ┌──────────────┐  ┌─────────────────┐                 │
-│  │  Router/Mux     │  │  Middleware  │  │    Handlers     │                 │
-│  │  (Chi router)   │  │  (logging,   │  │  (parse params, │                 │
-│  │                 │  │   recovery)  │  │   call service) │                 │
-│  └────────┬────────┘  └──────────────┘  └────────┬────────┘                 │
-│           │                                      │                           │
-│           │  INPUT VALIDATION:                   │  ERROR MAPPING:           │
-│           │  - HTTP syntax (maxDepth is int)     │  - Domain errors → HTTP   │
-│           │  - Required params present           │  - Hide internal details  │
-│           │  - Value ranges (0 < maxDepth ≤ 20)  │  - Structured responses   │
-├───────────┴──────────────────────────────────────┴───────────────────────────┤
-│                        APPLICATION LAYER                                      │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────┐             │
-│  │  DTOs           │  │  Services        │  │  Validators     │             │
-│  │  (requests,     │  │  (orchestrate    │  │  (business rule │             │
-│  │   responses)    │  │   use cases)     │  │   validation)   │             │
-│  └─────────────────┘  └────────┬─────────┘  └─────────────────┘             │
-│                                │                                             │
-│           BUSINESS VALIDATION:  │  ERROR WRAPPING:                          │
-│           - Logical consistency │  - Add context to errors                  │
-│           - Cross-field rules   │  - Classify error types                   │
-│           - Pagination bounds   │  - Never expose DB details                │
-├────────────────────────────────┴─────────────────────────────────────────────┤
-│                        DOMAIN LAYER                                          │
-│  ┌─────────────────┐  ┌──────────────────┐  ┌─────────────────┐             │
-│  │  Entities       │  │  Repository      │  │  Domain Errors  │             │
-│  │  (Database,     │  │  Interfaces      │  │  (ErrNotFound,  │             │
-│  │   Table, etc.)  │  │  (ports)         │  │   ErrInvalid)   │             │
-│  └─────────────────┘  └──────────────────┘  └─────────────────┘             │
-│                                                                              │
-│           INVARIANT PROTECTION:                                              │
-│           - Entity construction rules                                        │
-│           - Business rule enforcement                                        │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                        OUTBOUND ADAPTERS                                     │
-│  ┌──────────────────────┐  ┌──────────────────────┐                         │
-│  │  Teradata Repo       │  │  Redis Cache         │                         │
-│  │  (implements ports)  │  │  (implements ports)  │                         │
-│  └──────────────────────┘  └──────────────────────┘                         │
-│                                                                              │
-│           TECHNICAL ERROR WRAPPING:                                          │
-│           - Wrap SQL errors with context                                     │
-│           - Map DB errors to domain errors                                   │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                        INFRASTRUCTURE                                        │
-│  ┌──────────────────────┐  ┌──────────────────────┐                         │
-│  │  Configuration       │  │  Logging             │                         │
-│  │  (centralized        │  │  (structured         │                         │
-│  │   limits, defaults)  │  │   logging)           │                         │
-│  └──────────────────────┘  └──────────────────────┘                         │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
+**Recommendation:** Extend existing patterns rather than introduce new architecture. Focus on enhancing what exists.
 
 ---
 
-## Layer Assignments for Each Concern
+## Current Architecture Analysis
 
-### 1. Input Validation
+### State Management: Already Centralized in Zustand
 
-**Validation is NOT one thing** - it's a stack where each layer guards what it owns.
+The existing `useLineageStore` (lines 1-194) already manages:
 
-| Validation Type | Layer | Responsibility | Example |
-|-----------------|-------|----------------|---------|
-| HTTP Syntax | HTTP Adapter | Parse params, check types | `maxDepth` is valid integer |
-| Required Fields | HTTP Adapter | Required params present | `assetId` not empty |
-| Value Bounds | HTTP Adapter | Within allowed ranges | `0 < maxDepth <= 20` |
-| Business Rules | Application | Logical consistency | Direction is "upstream", "downstream", or "both" |
-| Invariants | Domain | Entity cannot exist in invalid state | Column cannot have negative position |
+```typescript
+// Selection state (lines 33-34, 51-59)
+selectedAssetId: string | null;
+selectedEdgeId: string | null;
+highlightedNodeIds: Set<string>;
+highlightedEdgeIds: Set<string>;
 
-**Current Gap:** The existing handlers silently ignore invalid `maxDepth` values and use defaults:
-
-```go
-// Current code - problematic
-maxDepthStr := r.URL.Query().Get("maxDepth")
-maxDepth := 5
-if maxDepthStr != "" {
-    if d, err := strconv.Atoi(maxDepthStr); err == nil {
-        maxDepth = d  // No validation of range!
-    }
-}
+// Panel state (lines 63-67)
+isPanelOpen: boolean;
+panelContent: 'node' | 'edge' | null;
+openPanel: (content: 'node' | 'edge') => void;
+closePanel: () => void;
 ```
 
-**Recommended Pattern:**
+**Architecture Decision (Confirmed):** Selection and highlight state lives in Zustand, not React Flow's internal state. This is correct because:
+1. Panel visibility depends on selection state
+2. Multiple components (TableNode, ColumnRow, LineageEdge, DetailPanel) consume highlight state
+3. Zustand provides fine-grained subscriptions without re-rendering entire tree
 
-```go
-// HTTP Handler - owns syntax and bounds validation
-func (h *Handler) GetLineage(w http.ResponseWriter, r *http.Request) {
-    maxDepth, err := parseMaxDepth(r.URL.Query().Get("maxDepth"), h.config.DefaultMaxDepth, h.config.MaxMaxDepth)
-    if err != nil {
-        respondError(w, http.StatusBadRequest, err.Error())
-        return
-    }
-    // ... proceed with valid maxDepth
-}
+### Path Highlighting: Already Implemented
 
-// parseMaxDepth validates and returns the depth parameter
-func parseMaxDepth(s string, defaultVal, maxVal int) (int, error) {
-    if s == "" {
-        return defaultVal, nil
-    }
-    depth, err := strconv.Atoi(s)
-    if err != nil {
-        return 0, fmt.Errorf("maxDepth must be a valid integer")
-    }
-    if depth < 1 || depth > maxVal {
-        return 0, fmt.Errorf("maxDepth must be between 1 and %d", maxVal)
-    }
-    return depth, nil
-}
+The `useLineageHighlight` hook (lines 1-160) implements:
+
+```typescript
+// Adjacency maps built from edges (lines 30-54)
+const { upstreamMap, downstreamMap } = useMemo(() => {
+  // ... builds Map<columnId, Set<connectedColumnIds>>
+}, [edges]);
+
+// DFS traversal with cycle detection (lines 57-81, 84-108)
+const getUpstreamNodes = useCallback((nodeId: string): Set<string> => {
+  const visited = new Set<string>();
+  const stack = [nodeId];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (visited.has(current)) continue;  // Cycle detection
+    visited.add(current);
+    // ... traverse
+  }
+}, [upstreamMap]);
 ```
 
-### 2. Error Handling and Wrapping
+**Architecture Decision (Confirmed):** DFS with visited set is correct for:
+- Handling cyclic graphs (common in real lineage data)
+- O(V+E) time complexity
+- Memory efficient (stack-based, not recursive)
 
-**Key Security Concern:** Database errors can leak schema information. Production APIs must hide internal details.
+### Component Integration: Already Wired
 
-| Layer | Error Responsibility | Pattern |
-|-------|---------------------|---------|
-| Outbound Adapter | Wrap technical errors, map to domain errors | `fmt.Errorf("failed to query lineage: %w", err)` → `ErrDatabaseUnavailable` |
-| Application | Add business context, classify errors | Wrap with use-case context |
-| HTTP Adapter | Map domain errors to HTTP status codes | `ErrNotFound` → 404, `ErrInvalidInput` → 400 |
+**LineageGraph.tsx** (lines 1-607):
+- Uses `useLineageHighlight` hook (line 109)
+- Triggers highlight on selection change (lines 249-255)
+- Passes highlight state to DetailPanel (lines 584-591)
 
-**Domain Errors (define in domain layer):**
+**TableNode.tsx** (lines 1-188):
+- Reads `highlightedNodeIds` from store (line 25)
+- Applies visual dimming for non-highlighted nodes (line 41, 96)
+- Delegates column click to `setSelectedAssetId` (lines 81-86)
 
-```go
-// internal/domain/errors.go
-package domain
+**ColumnRow.tsx** (lines 1-104):
+- Receives `isSelected`, `isHighlighted`, `isDimmed` props
+- Applies appropriate styling classes (lines 32-42)
 
-import "errors"
-
-// Sentinel errors for specific conditions
-var (
-    ErrNotFound          = errors.New("resource not found")
-    ErrInvalidInput      = errors.New("invalid input")
-    ErrInvalidDepth      = errors.New("invalid depth parameter")
-    ErrInvalidDirection  = errors.New("invalid direction parameter")
-    ErrDatabaseError     = errors.New("database operation failed")
-)
-
-// NotFoundError provides structured not-found errors
-type NotFoundError struct {
-    Resource string
-    ID       string
-}
-
-func (e *NotFoundError) Error() string {
-    return fmt.Sprintf("%s not found: %s", e.Resource, e.ID)
-}
-
-func (e *NotFoundError) Is(target error) bool {
-    return target == ErrNotFound
-}
-```
-
-**Error Mapping in HTTP Adapter:**
-
-```go
-// internal/adapter/inbound/http/errors.go
-package http
-
-import (
-    "errors"
-    "net/http"
-
-    "github.com/lineage-api/internal/domain"
-)
-
-// mapErrorToStatus converts domain errors to HTTP status codes
-func mapErrorToStatus(err error) int {
-    if errors.Is(err, domain.ErrNotFound) {
-        return http.StatusNotFound
-    }
-    if errors.Is(err, domain.ErrInvalidInput) ||
-       errors.Is(err, domain.ErrInvalidDepth) ||
-       errors.Is(err, domain.ErrInvalidDirection) {
-        return http.StatusBadRequest
-    }
-    // Default: hide internal errors from client
-    return http.StatusInternalServerError
-}
-
-// sanitizeError returns a user-safe error message
-func sanitizeError(err error) string {
-    // For known domain errors, use their message
-    if errors.Is(err, domain.ErrNotFound) ||
-       errors.Is(err, domain.ErrInvalidInput) {
-        return err.Error()
-    }
-    // For unknown/internal errors, return generic message
-    return "internal server error"
-}
-```
-
-**Outbound Adapter Error Wrapping:**
-
-```go
-// internal/adapter/outbound/teradata/lineage_repo.go
-
-func (r *LineageRepository) GetUpstreamLineage(ctx context.Context, columnID string, maxDepth int) ([]domain.ColumnLineage, error) {
-    rows, err := r.db.QueryContext(ctx, query, columnID, maxDepth)
-    if err != nil {
-        // Wrap with context but don't expose raw SQL error
-        if errors.Is(err, sql.ErrNoRows) {
-            return nil, &domain.NotFoundError{Resource: "column", ID: columnID}
-        }
-        // Log the full error for debugging, return sanitized error
-        // log.Error("database query failed", "error", err, "query", "GetUpstreamLineage")
-        return nil, fmt.Errorf("failed to query upstream lineage: %w", domain.ErrDatabaseError)
-    }
-    // ...
-}
-```
-
-### 3. Pagination
-
-**Where pagination belongs depends on what's being paginated:**
-
-| Concern | Layer | Why |
-|---------|-------|-----|
-| Page/limit/offset parsing | HTTP Adapter | HTTP-specific parameters |
-| Pagination DTO | Application | Data transfer structure |
-| Paginated query execution | Outbound Adapter | Database-specific LIMIT/OFFSET |
-| Total count retrieval | Outbound Adapter | Requires database access |
-
-**Recommended Structure:**
-
-```go
-// internal/application/dto.go - Application layer owns pagination DTOs
-
-// PaginationRequest represents client-provided pagination parameters
-type PaginationRequest struct {
-    Limit  int `json:"limit"`
-    Offset int `json:"offset"`
-}
-
-// PaginationResponse provides pagination metadata in responses
-type PaginationResponse struct {
-    Limit      int `json:"limit"`
-    Offset     int `json:"offset"`
-    Total      int `json:"total"`
-    HasMore    bool `json:"hasMore"`
-}
-
-// PaginatedResponse wraps any paginated data
-type PaginatedResponse[T any] struct {
-    Data       []T                `json:"data"`
-    Pagination PaginationResponse `json:"pagination"`
-}
-
-// Example: Paginated database list
-type DatabaseListResponse struct {
-    Databases  []domain.Database  `json:"databases"`
-    Pagination PaginationResponse `json:"pagination"`
-}
-```
-
-**Repository Interface Update:**
-
-```go
-// internal/domain/repository.go
-
-type AssetRepository interface {
-    // Add pagination support to list methods
-    ListDatabases(ctx context.Context, limit, offset int) ([]Database, int, error)  // returns items, total, error
-    ListTables(ctx context.Context, databaseName string, limit, offset int) ([]Table, int, error)
-    ListColumns(ctx context.Context, databaseName, tableName string, limit, offset int) ([]Column, int, error)
-    // ... other methods unchanged
-}
-```
-
-### 4. Configuration
-
-**Configuration Centralization Strategy:**
-
-| Config Type | Location | Access Pattern |
-|-------------|----------|----------------|
-| API limits (maxDepth, pagination) | Infrastructure config | Injected into handlers |
-| Database connection | Infrastructure config | Injected into adapters |
-| Cache settings | Infrastructure config | Injected into cache adapter |
-| Feature flags | Infrastructure config | Injected where needed |
-
-**Recommended Configuration Structure:**
-
-```go
-// internal/infrastructure/config/config.go
-
-type Config struct {
-    Port     string
-    Teradata TeradataConfig
-    Redis    RedisConfig
-    API      APIConfig  // NEW: API-specific limits
-}
-
-// APIConfig holds API behavior configuration
-type APIConfig struct {
-    DefaultMaxDepth   int `mapstructure:"DEFAULT_MAX_DEPTH" default:"5"`
-    MaxMaxDepth       int `mapstructure:"MAX_MAX_DEPTH" default:"20"`
-    DefaultPageSize   int `mapstructure:"DEFAULT_PAGE_SIZE" default:"50"`
-    MaxPageSize       int `mapstructure:"MAX_PAGE_SIZE" default:"1000"`
-
-    // Valid direction values
-    ValidDirections   []string `mapstructure:"VALID_DIRECTIONS" default:"[upstream,downstream,both]"`
-}
-
-// Handler receives config via dependency injection
-type Handler struct {
-    assetService   *application.AssetService
-    lineageService *application.LineageService
-    searchService  *application.SearchService
-    config         *config.APIConfig  // Configuration injected here
-}
-```
-
-### 5. DBQL Extraction Error Handling
-
-DBQL extraction is a **batch/ETL process**, not a request-response operation. Error handling differs:
-
-| Concern | Strategy |
-|---------|----------|
-| Individual query parse failures | Log warning, skip query, continue processing |
-| Database connection failures | Retry with exponential backoff, alert after threshold |
-| Partial extraction failures | Record watermark of last successful batch |
-| Invalid column mappings | Log detailed error, skip mapping, mark as unresolved |
-
-**This belongs in the extraction scripts, not the API layers.**
+**LineageEdge.tsx** (lines 1-207):
+- Reads `highlightedEdgeIds` from store (line 85)
+- Applies opacity dimming for non-highlighted edges (line 108)
+- Shows animated dash effect for highlighted edges (line 111)
 
 ---
 
-## Data Flow: Request Through Layers
+## Recommended Architecture for Enhancement
 
-### Happy Path
+### 1. State Management Strategy
 
-```
-HTTP Request: GET /api/v1/lineage/db.table.col?direction=upstream&maxDepth=10
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ HTTP Handler                                                            │
-│  1. Parse URL params (assetId from path, direction/maxDepth from query) │
-│  2. Validate syntax (maxDepth is int, direction is valid enum)          │
-│  3. Validate bounds (1 <= maxDepth <= 20)                               │
-│  4. Build DTO: GetLineageRequest{AssetID, Direction, MaxDepth}          │
-└─────────────────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Application Service                                                      │
-│  1. Receive DTO                                                          │
-│  2. Optionally validate business rules                                   │
-│  3. Call repository through port interface                               │
-│  4. Transform domain result to response DTO                              │
-└─────────────────────────────────────────────────────────────────────────┘
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ Teradata Repository (Outbound Adapter)                                   │
-│  1. Execute recursive CTE query with maxDepth                            │
-│  2. Scan rows into domain entities                                       │
-│  3. Wrap any SQL errors with context                                     │
-│  4. Return domain.LineageGraph                                           │
-└─────────────────────────────────────────────────────────────────────────┘
-    │
-    ▼
-HTTP Response: 200 OK with LineageGraphResponse JSON
+**Keep using Zustand for:**
+- `selectedAssetId` / `selectedEdgeId` - global selection state
+- `highlightedNodeIds` / `highlightedEdgeIds` - computed highlight sets
+- `isPanelOpen` / `panelContent` - panel visibility
+
+**Do NOT use React Flow internal state for selection because:**
+- React Flow's `selected` property on nodes is designed for multi-select drag operations
+- Our selection model is single-select with path highlighting
+- Panel visibility logic requires external access to selection
+
+**Recommended addition to useLineageStore:**
+
+```typescript
+// For column click navigation (future feature)
+focusedColumnId: string | null;
+setFocusedColumnId: (id: string | null) => void;
 ```
 
-### Error Path
+### 2. Data Fetching Strategy for Detail Panel
 
+**Current implementation (lines 302-348 in LineageGraph.tsx):**
+```typescript
+const getColumnDetail = useCallback((columnId: string): ColumnDetail | null => {
+  const node = storeNodes.find((n) => n.id === columnId);
+  // ... builds detail from cached graph data
+}, [storeNodes, storeEdges]);
 ```
-HTTP Request: GET /api/v1/lineage/invalid.asset?maxDepth=999
-    │
-    ▼
-┌─────────────────────────────────────────────────────────────────────────┐
-│ HTTP Handler                                                            │
-│  1. Parse maxDepth="999" → int 999                                      │
-│  2. Validate bounds: 999 > maxMaxDepth(20) → FAIL                       │
-│  3. Return 400 Bad Request: "maxDepth must be between 1 and 20"         │
-└─────────────────────────────────────────────────────────────────────────┘
-    │
-    ▼
-HTTP Response: 400 Bad Request
-{
-    "error": "maxDepth must be between 1 and 20"
+
+**Recommendation:** This is sufficient for basic metadata. For extended metadata (DDL, usage stats), add a TanStack Query hook:
+
+```typescript
+// New hook: useColumnMetadata
+export function useColumnMetadata(columnId: string | null) {
+  return useQuery({
+    queryKey: ['column-metadata', columnId],
+    queryFn: () => openLineageApi.getDataset(columnId!.split('.').slice(0, 2).join('.')),
+    enabled: !!columnId,
+    staleTime: 5 * 60 * 1000,  // Cache 5 minutes
+  });
 }
 ```
+
+**API Strategy:**
+- Reuse existing `GET /api/v2/openlineage/datasets/{datasetId}` endpoint
+- No new backend endpoint needed
+- Data already includes fields with type, nullable, description
+
+### 3. Path Highlighting Algorithm
+
+**Current algorithm is correct.** Key characteristics:
+
+| Aspect | Current Implementation | Status |
+|--------|------------------------|--------|
+| Traversal | DFS with stack | Correct |
+| Cycle handling | Visited set check | Correct |
+| Direction | Bidirectional (upstream + downstream) | Correct |
+| Edge filtering | Filters edges where both endpoints are highlighted | Correct |
+
+**Performance characteristics:**
+- Build adjacency maps: O(E) - runs once via useMemo
+- Traversal: O(V+E) per selection change
+- Edge filtering: O(E) per selection change
+
+**For graphs with 500+ nodes (virtualization threshold is 50):**
+- Current implementation handles this fine
+- useMemo dependency on `edges` prevents rebuild unless graph changes
+- useCallback memoizes traversal functions
+
+### 4. Component Boundaries
+
+```
+                    ┌─────────────────────────────────┐
+                    │         useLineageStore         │
+                    │  (selection, highlight, panel)  │
+                    └───────────────┬─────────────────┘
+                                    │
+          ┌─────────────────────────┼─────────────────────────┐
+          │                         │                         │
+          ▼                         ▼                         ▼
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│   LineageGraph   │    │    DetailPanel   │    │     Toolbar      │
+│  (orchestrator)  │    │  (displays info) │    │  (controls)      │
+└────────┬─────────┘    └──────────────────┘    └──────────────────┘
+         │
+         │ useLineageHighlight
+         │
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌────────┐  ┌────────────┐
+│TableNode│  │LineageEdge │
+│  │      │  │            │
+│  ▼      │  │            │
+│ColumnRow│  │            │
+└─────────┘  └────────────┘
+```
+
+**Data flow for selection:**
+1. User clicks ColumnRow
+2. ColumnRow calls `onClick(column.id)` prop
+3. TableNode's `handleColumnClick` calls `setSelectedAssetId(columnId)`
+4. useLineageStore updates `selectedAssetId`
+5. LineageGraph's useEffect (lines 249-255) reacts:
+   - Calls `highlightPath(selectedAssetId)`
+   - Updates `highlightedNodeIds`, `highlightedEdgeIds`
+   - Calls `openPanel('node')`
+6. Components re-render with new highlight state
+
+### 5. Performance Considerations
+
+**Current optimizations already in place:**
+
+| Optimization | Implementation | Impact |
+|--------------|----------------|--------|
+| Virtualization | `onlyRenderVisibleElements` when nodes > 50 | Major for large graphs |
+| Memoization | `useMemo` for adjacency maps, `useCallback` for traversals | Prevents recalc |
+| Component memos | `memo(TableNode)`, `memo(ColumnRow)`, `memo(LineageEdge)` | Prevents re-render |
+| Highlight as Sets | `Set<string>` instead of arrays | O(1) lookup |
+
+**Additional recommendations for v4.0:**
+
+1. **Debounce hover highlighting** (if implementing hover-based highlighting):
+```typescript
+const debouncedHighlight = useMemo(
+  () => debounce((nodeId: string) => {
+    const { highlightedNodes, highlightedEdges } = highlightPath(nodeId);
+    setHighlightedPath(highlightedNodes, highlightedEdges);
+  }, 100),
+  [highlightPath, setHighlightedPath]
+);
+```
+
+2. **Lazy load extended metadata** in DetailPanel:
+```typescript
+// Only fetch when panel is open AND user has been viewing for 500ms
+useEffect(() => {
+  if (!isPanelOpen || !selectedAssetId) return;
+  const timer = setTimeout(() => setFetchExtendedMetadata(true), 500);
+  return () => clearTimeout(timer);
+}, [isPanelOpen, selectedAssetId]);
+```
+
+---
+
+## Integration Points Summary
+
+### New Components (None Required)
+All components already exist. Enhancements can be made to existing components.
+
+### Modified Components
+
+| Component | Enhancement | Complexity |
+|-----------|-------------|------------|
+| DetailPanel | Add tabs for extended metadata (DDL, stats) | Medium |
+| ColumnRow | Add double-click handler for column navigation | Low |
+| useLineageStore | Add `focusedColumnId` for navigation feature | Low |
+
+### New Hooks (Optional)
+
+| Hook | Purpose | Required for v4.0? |
+|------|---------|-------------------|
+| `useColumnMetadata` | Fetch extended column metadata | Optional |
+| `useTableDDL` | Fetch table DDL on demand | Optional |
+
+### Backend Changes (None Required)
+Existing endpoints provide all necessary data:
+- `GET /api/v2/openlineage/datasets/{datasetId}` - Returns fields with metadata
+- `GET /api/v2/openlineage/lineage/table/{datasetId}` - Returns lineage graph
+
+---
+
+## Build Order Recommendation
+
+Based on existing infrastructure and dependencies:
+
+### Phase 1: Selection Enhancement (Low Risk)
+**Already functional.** Minor polish:
+- Visual feedback improvements (selection ring, focus indicator)
+- Keyboard navigation (arrow keys to move selection)
+- Selection persistence across view changes
+
+### Phase 2: Path Highlighting Polish (Low Risk)
+**Already functional.** Minor polish:
+- Animation smoothing for highlight transitions
+- Consider hover-based preview highlighting
+- Clear highlight button/shortcut
+
+### Phase 3: Detail Panel Enhancement (Medium Risk)
+**Partially functional.** Needs:
+- Tabbed interface for different data types
+- Extended metadata fetching hook
+- Error states for failed metadata fetch
+- Loading states for extended data
+
+### Phase 4: Column Navigation (Medium Risk)
+**Not implemented.** Needs:
+- Double-click handler on ColumnRow
+- Navigation action that changes graph focus
+- View transitions / animation
 
 ---
 
 ## Patterns to Follow
 
-### Pattern 1: Validation Middleware for Common Params
+### Pattern 1: Zustand Selector with useShallow
 
-**What:** Centralize validation of common query parameters in middleware
-**When:** Parameters used across multiple endpoints (pagination, depth limits)
-**Trade-offs:** Cleaner handlers vs. slightly more complex middleware chain
+**What:** Prevent re-renders when selecting multiple values from store
+**When:** Component needs multiple store values
+**Example:**
 
-```go
-// internal/adapter/inbound/http/middleware/validation.go
+```typescript
+import { useShallow } from 'zustand/react/shallow';
 
-func ValidatePagination(config *config.APIConfig) func(next http.Handler) http.Handler {
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            limit, err := parseIntParam(r, "limit", config.DefaultPageSize, 1, config.MaxPageSize)
-            if err != nil {
-                respondError(w, http.StatusBadRequest, err.Error())
-                return
-            }
-            offset, err := parseIntParam(r, "offset", 0, 0, math.MaxInt32)
-            if err != nil {
-                respondError(w, http.StatusBadRequest, err.Error())
-                return
-            }
-
-            // Store in context for handler access
-            ctx := context.WithValue(r.Context(), paginationKey, PaginationParams{Limit: limit, Offset: offset})
-            next.ServeHTTP(w, r.WithContext(ctx))
-        })
-    }
-}
+const { selectedAssetId, highlightedNodeIds } = useLineageStore(
+  useShallow((state) => ({
+    selectedAssetId: state.selectedAssetId,
+    highlightedNodeIds: state.highlightedNodeIds,
+  }))
+);
 ```
 
-### Pattern 2: Domain Error Types with `errors.Is` Support
+### Pattern 2: Effect-Based State Derivation
 
-**What:** Custom error types that work with Go 1.13+ error wrapping
-**When:** Need to distinguish error types across layer boundaries
-**Trade-offs:** More code vs. type-safe error handling
+**What:** Compute derived state (highlight sets) in useEffect, not during render
+**When:** Expensive computation based on selection change
+**Current implementation (correct):**
 
-```go
-// Domain errors implement Is() for errors.Is() support
-type NotFoundError struct {
-    Resource string
-    ID       string
-}
-
-func (e *NotFoundError) Error() string {
-    return fmt.Sprintf("%s not found: %s", e.Resource, e.ID)
-}
-
-func (e *NotFoundError) Is(target error) bool {
-    return target == ErrNotFound
-}
-
-// Usage in handler:
-if errors.Is(err, domain.ErrNotFound) {
-    respondError(w, http.StatusNotFound, err.Error())
-    return
-}
+```typescript
+// LineageGraph.tsx lines 249-255
+useEffect(() => {
+  if (selectedAssetId) {
+    const { highlightedNodes, highlightedEdges } = highlightPath(selectedAssetId);
+    setHighlightedPath(highlightedNodes, highlightedEdges);
+    openPanel('node');
+  }
+}, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
 ```
 
-### Pattern 3: Configuration Injection
+### Pattern 3: Lazy Data Fetching for Panel
 
-**What:** Inject configuration at construction time, not runtime
-**When:** Always - avoids global state and enables testing
-**Trade-offs:** More constructor parameters vs. explicit dependencies
+**What:** Only fetch extended data when needed
+**When:** User opens panel and stays on it
+**Example:**
 
-```go
-// Construction with config injection
-func NewHandler(
-    assetService *application.AssetService,
-    lineageService *application.LineageService,
-    searchService *application.SearchService,
-    apiConfig *config.APIConfig,  // Config injected here
-) *Handler {
-    return &Handler{
-        assetService:   assetService,
-        lineageService: lineageService,
-        searchService:  searchService,
-        config:         apiConfig,
-    }
-}
+```typescript
+const [shouldFetch, setShouldFetch] = useState(false);
 
-// main.go wiring
-cfg, _ := config.Load()
-handler := http.NewHandler(assetSvc, lineageSvc, searchSvc, &cfg.API)
+useEffect(() => {
+  if (!isPanelOpen) {
+    setShouldFetch(false);
+    return;
+  }
+  const timer = setTimeout(() => setShouldFetch(true), 300);
+  return () => clearTimeout(timer);
+}, [isPanelOpen, selectedAssetId]);
+
+const { data: metadata } = useColumnMetadata(shouldFetch ? selectedAssetId : null);
 ```
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: Validation in Domain Layer for HTTP Concerns
+### Anti-Pattern 1: React Flow Selection for Application Selection
 
-**What people do:** Put `maxDepth` range validation in domain entities
-**Why it's wrong:** HTTP parameter bounds are not domain invariants. The domain doesn't care about API limits.
-**Do this instead:** Validate HTTP concerns in HTTP adapter, domain invariants in domain entities
+**Problem:** Using React Flow's `selected` node property for single-select with panel
+**Why bad:** React Flow selection is designed for multi-select drag operations, not application-level selection
+**Do this instead:** Use Zustand store for application selection state
 
-### Anti-Pattern 2: Exposing Raw Database Errors
+### Anti-Pattern 2: Recursive Graph Traversal
 
-**What people do:** Return `err.Error()` directly to clients
-**Why it's wrong:** Leaks schema information, SQL syntax, connection details
-**Do this instead:** Log full error internally, return sanitized error to client
+**Problem:** Recursive functions for graph traversal in graphs with cycles
+**Why bad:** Stack overflow on cyclic graphs
+**Do this instead:** Iterative DFS with visited set (already implemented correctly)
 
-### Anti-Pattern 3: Pagination Logic in Domain
+### Anti-Pattern 3: Storing Highlight State in Components
 
-**What people do:** Put LIMIT/OFFSET in domain interfaces or entities
-**Why it's wrong:** Pagination is a presentation/transport concern, not domain logic
-**Do this instead:** Repository methods accept limit/offset, domain stays unaware
+**Problem:** Each TableNode/ColumnRow maintaining own highlight state
+**Why bad:** State synchronization nightmare, unnecessary re-renders
+**Do this instead:** Single source of truth in Zustand, components read via selectors
 
-### Anti-Pattern 4: Global Configuration Access
+### Anti-Pattern 4: Fetching Data on Every Selection
 
-**What people do:** `config.Get("maxDepth")` called anywhere in code
-**Why it's wrong:** Hidden dependencies, hard to test, global state
-**Do this instead:** Inject config at construction time
-
----
-
-## Implementation Order
-
-Based on dependencies between components:
-
-### Phase 1: Foundation (No Dependencies)
-
-1. **Domain errors** (`internal/domain/errors.go`)
-   - Define sentinel errors and custom error types
-   - No dependencies on other new code
-
-2. **API configuration** (extend `internal/infrastructure/config/config.go`)
-   - Add `APIConfig` struct with limits
-   - No dependencies on other new code
-
-### Phase 2: Error Infrastructure (Depends on Phase 1)
-
-3. **Error mapping** (`internal/adapter/inbound/http/errors.go`)
-   - `mapErrorToStatus()`, `sanitizeError()` functions
-   - Depends on: domain errors
-
-4. **Repository error wrapping** (update existing repos)
-   - Wrap SQL errors, map to domain errors
-   - Depends on: domain errors
-
-### Phase 3: Validation Infrastructure (Depends on Phases 1-2)
-
-5. **Validation helpers** (`internal/adapter/inbound/http/validation.go`)
-   - Parameter parsing and validation functions
-   - Depends on: API config, error types
-
-6. **Handler updates** (update existing handlers)
-   - Integrate validation, error mapping
-   - Depends on: validation helpers, error mapping
-
-### Phase 4: Pagination (Depends on Phases 1-3)
-
-7. **Pagination DTOs** (extend `internal/application/dto.go`)
-   - Request/Response structures for pagination
-   - Depends on: API config (for defaults)
-
-8. **Repository pagination** (update repository interfaces)
-   - Add limit/offset to list methods
-   - Depends on: pagination DTOs
-
-9. **Handler pagination** (update list handlers)
-   - Parse pagination params, format responses
-   - Depends on: all above
+**Problem:** Calling API on every column click
+**Why bad:** Unnecessary network requests, poor UX with loading spinners
+**Do this instead:** Use cached graph data for basic info, lazy-load extended metadata
 
 ---
 
-## Component Boundaries Summary
+## Scalability Considerations
 
-| Component | Talks To | Never Talks To |
-|-----------|----------|----------------|
-| HTTP Handlers | Application Services, Config | Database directly, Redis directly |
-| Application Services | Domain Repositories (via interfaces), Domain Entities | HTTP concerns, Database drivers |
-| Domain | Nothing external | HTTP, Database, Cache - anything infrastructure |
-| Outbound Adapters | Database drivers, Cache clients | HTTP handlers, Application services (except via interfaces) |
-| Config | Viper/env loading | Application logic |
+| Graph Size | Current Behavior | Recommendation |
+|------------|------------------|----------------|
+| < 50 nodes | Full render, fast selection | No changes needed |
+| 50-200 nodes | Virtualization enabled, smooth | No changes needed |
+| 200-500 nodes | May see slight delay on highlight | Consider limiting traversal depth |
+| > 500 nodes | Large graph warning shown | Suggest reducing depth, filtering by database |
 
----
-
-## Roadmap Implications
-
-**Suggested Phase Structure:**
-
-1. **Phase 1: Error Handling Foundation** (lowest risk, highest value)
-   - Domain errors, error mapping, repository wrapping
-   - Rationale: Fixes security issue immediately, foundation for other work
-
-2. **Phase 2: Input Validation** (depends on Phase 1)
-   - Validation helpers, handler updates
-   - Rationale: Uses error types from Phase 1
-
-3. **Phase 3: Configuration Centralization** (parallel with Phase 2)
-   - API config structure, injection updates
-   - Rationale: Enables configurable limits for validation
-
-4. **Phase 4: Pagination** (depends on Phases 1-3)
-   - DTOs, repository updates, handler updates
-   - Rationale: Largest scope, benefits from validation/error foundations
+**For very large graphs (500+ nodes):**
+1. Current `LargeGraphWarning` component already prompts user to reduce depth
+2. Consider adding option to highlight only direct connections (not full path)
+3. Consider server-side path computation for extremely large graphs
 
 ---
 
 ## Sources
 
-- [Applying Hexagonal Architecture to a Mid-Size Go Backend](https://sams96.github.io/go-project-layout/) - Feb 2025
-- [Where To Put Validation in Clean Architecture](https://medium.com/@michaelmaurice410/where-to-put-validation-in-clean-architecture-so-its-obvious-fast-and-never-leaks-161bfd62f1dc)
-- [Domain-Driven Hexagon](https://github.com/Sairyss/domain-driven-hexagon) - Reference architecture
-- [Error Handling and Logging in Go Applications 2025](https://www.securegyan.com/error-handling-and-logging-in-go-applications/) - Security considerations
-- [A practical guide to error handling in Go](https://www.datadoghq.com/blog/go-error-handling/) - Datadog
-- [Hexagonal Architecture/Ports And Adapters: Clarifying Key Concepts Using Go](https://dev.to/buarki/hexagonal-architectureports-and-adapters-clarifying-key-concepts-using-go-14oo)
-- Existing project: `specs/coding_standards_go.md` - Project coding standards
+- [Using a State Management Library - React Flow](https://reactflow.dev/learn/advanced-use/state-management) - Official Zustand integration guide
+- [Computing Flows - React Flow](https://reactflow.dev/learn/advanced-use/computing-flows) - Graph traversal utilities (getIncomers, getOutgoers)
+- [Highlight path of selected node - GitHub Issue #984](https://github.com/wbkd/react-flow/issues/984) - Community patterns for path highlighting
+- [Performance - React Flow](https://reactflow.dev/learn/advanced-use/performance) - Virtualization and optimization
+- [State Management Trends in React 2025](https://makersden.io/blog/react-state-management-in-2025) - Zustand best practices
+- Existing codebase: `lineage-ui/src/components/domain/LineageGraph/hooks/useLineageHighlight.ts`
+- Existing codebase: `lineage-ui/src/stores/useLineageStore.ts`
+- Existing tests: `lineage-ui/src/components/domain/LineageGraph/hooks/useLineageHighlight.test.ts`
 
 ---
 
-*Architecture research for: Hexagonal Architecture Production Fixes*
-*Researched: 2026-01-29*
+*Architecture research for: Interactive Graph Features (v4.0)*
+*Researched: 2026-02-01*

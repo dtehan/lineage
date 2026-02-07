@@ -17,192 +17,195 @@ import teradatasql
 
 from db_config import CONFIG
 
+# Get database name from config
+DATABASE = CONFIG["database"]
+
 # CTE test data inserts for OL_COLUMN_LINEAGE
 CTE_TEST_INSERTS = [
     # Two-node cycle test data (A -> B -> A)
     # TC-EDGE-002: Verify cycle detection handles A -> B -> A pattern
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE_001', NULL, 'teradata://demo', 'demo_user.CYCLE_TEST', 'col_a',
-     'teradata://demo', 'demo_user.CYCLE_TEST', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE_001', NULL, 'teradata://demo', '{DATABASE}.CYCLE_TEST', 'col_a',
+     'teradata://demo', '{DATABASE}.CYCLE_TEST', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE_002', NULL, 'teradata://demo', 'demo_user.CYCLE_TEST', 'col_b',
-     'teradata://demo', 'demo_user.CYCLE_TEST', 'col_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE_002', NULL, 'teradata://demo', '{DATABASE}.CYCLE_TEST', 'col_b',
+     'teradata://demo', '{DATABASE}.CYCLE_TEST', 'col_a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Multi-node cycle test data (A -> B -> C -> D -> A)
     # TC-EDGE-003: Verify cycle detection handles multi-node cycle
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_001', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_a',
-     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_001', NULL, 'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_a',
+     'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_002', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_b',
-     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_002', NULL, 'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_b',
+     'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_003', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_c',
-     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_003', NULL, 'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_c',
+     'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MCYCLE_004', NULL, 'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_d',
-     'teradata://demo', 'demo_user.MCYCLE_TEST', 'col_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MCYCLE_004', NULL, 'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_d',
+     'teradata://demo', '{DATABASE}.MCYCLE_TEST', 'col_a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Diamond pattern test (A -> B -> D, A -> C -> D)
     # TC-EDGE-004: Verify diamond pattern doesn't cause issues
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_001', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.DIAMOND', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_001', NULL, 'teradata://demo', '{DATABASE}.DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.DIAMOND', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_002', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.DIAMOND', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_002', NULL, 'teradata://demo', '{DATABASE}.DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.DIAMOND', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_003', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_b',
-     'teradata://demo', 'demo_user.DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_003', NULL, 'teradata://demo', '{DATABASE}.DIAMOND', 'col_b',
+     'teradata://demo', '{DATABASE}.DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_DIAMOND_004', NULL, 'teradata://demo', 'demo_user.DIAMOND', 'col_c',
-     'teradata://demo', 'demo_user.DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_DIAMOND_004', NULL, 'teradata://demo', '{DATABASE}.DIAMOND', 'col_c',
+     'teradata://demo', '{DATABASE}.DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Inactive lineage test
     # TC-CTE-005: Verify only active lineage records are traversed
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_INACTIVE_001', NULL, 'teradata://demo', 'demo_user.INACTIVE_TEST', 'active_source',
-     'teradata://demo', 'demo_user.INACTIVE_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_INACTIVE_001', NULL, 'teradata://demo', '{DATABASE}.INACTIVE_TEST', 'active_source',
+     'teradata://demo', '{DATABASE}.INACTIVE_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_INACTIVE_002', NULL, 'teradata://demo', 'demo_user.INACTIVE_TEST', 'inactive_source',
-     'teradata://demo', 'demo_user.INACTIVE_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_INACTIVE_002', NULL, 'teradata://demo', '{DATABASE}.INACTIVE_TEST', 'inactive_source',
+     'teradata://demo', '{DATABASE}.INACTIVE_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'N')
     """,
 
     # Multi-level upstream chain (A <- B <- C <- D <- E)
     # For TC-CTE-002 and TC-CTE-003: Multi-level and max depth tests
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_001', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_e',
-     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_001', NULL, 'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_e',
+     'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_002', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_d',
-     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_002', NULL, 'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_d',
+     'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_003', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_c',
-     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_003', NULL, 'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_c',
+     'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CHAIN_004', NULL, 'teradata://demo', 'demo_user.CHAIN_TEST', 'col_b',
-     'teradata://demo', 'demo_user.CHAIN_TEST', 'col_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CHAIN_004', NULL, 'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_b',
+     'teradata://demo', '{DATABASE}.CHAIN_TEST', 'col_a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Multiple sources at same level (A <- B, A <- C, A <- D)
     # TC-CTE-004: Multiple sources at same level
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MULTISRC_001', NULL, 'teradata://demo', 'demo_user.MULTISRC_TEST', 'src_b',
-     'teradata://demo', 'demo_user.MULTISRC_TEST', 'target_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MULTISRC_001', NULL, 'teradata://demo', '{DATABASE}.MULTISRC_TEST', 'src_b',
+     'teradata://demo', '{DATABASE}.MULTISRC_TEST', 'target_a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MULTISRC_002', NULL, 'teradata://demo', 'demo_user.MULTISRC_TEST', 'src_c',
-     'teradata://demo', 'demo_user.MULTISRC_TEST', 'target_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MULTISRC_002', NULL, 'teradata://demo', '{DATABASE}.MULTISRC_TEST', 'src_c',
+     'teradata://demo', '{DATABASE}.MULTISRC_TEST', 'target_a',
      'CALCULATION', NULL, NULL, 'N', 0.85, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_MULTISRC_003', NULL, 'teradata://demo', 'demo_user.MULTISRC_TEST', 'src_d',
-     'teradata://demo', 'demo_user.MULTISRC_TEST', 'target_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_MULTISRC_003', NULL, 'teradata://demo', '{DATABASE}.MULTISRC_TEST', 'src_d',
+     'teradata://demo', '{DATABASE}.MULTISRC_TEST', 'target_a',
      'JOIN', NULL, NULL, 'N', 0.75, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Fan-out test (single source -> multiple targets)
     # TC-CTE-008: Fan-out pattern
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_001', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_001', NULL, 'teradata://demo', '{DATABASE}.FANOUT_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_1',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_002', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_2',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_002', NULL, 'teradata://demo', '{DATABASE}.FANOUT_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_2',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_003', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_3',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_003', NULL, 'teradata://demo', '{DATABASE}.FANOUT_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_3',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_004', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_4',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_004', NULL, 'teradata://demo', '{DATABASE}.FANOUT_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_4',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     # Second level fan-out (target_1 -> more targets)
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_005', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1',
-     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_005', NULL, 'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_1',
+     'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_1a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT_006', NULL, 'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1',
-     'teradata://demo', 'demo_user.FANOUT_TEST', 'target_1b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT_006', NULL, 'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_1',
+     'teradata://demo', '{DATABASE}.FANOUT_TEST', 'target_1b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
     # Transformation types test
     # TC-CTE-009: Verify transformation_type is correctly returned
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_TRANS_001', NULL, 'teradata://demo', 'demo_user.TRANS_TEST', 'src1',
-     'teradata://demo', 'demo_user.TRANS_TEST', 'tgt1',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_TRANS_001', NULL, 'teradata://demo', '{DATABASE}.TRANS_TEST', 'src1',
+     'teradata://demo', '{DATABASE}.TRANS_TEST', 'tgt1',
      'AGGREGATION', NULL, NULL, 'N', 0.95, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_TRANS_002', NULL, 'teradata://demo', 'demo_user.TRANS_TEST', 'src2',
-     'teradata://demo', 'demo_user.TRANS_TEST', 'tgt2',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_TRANS_002', NULL, 'teradata://demo', '{DATABASE}.TRANS_TEST', 'src2',
+     'teradata://demo', '{DATABASE}.TRANS_TEST', 'tgt2',
      'FILTER', NULL, NULL, 'N', 0.80, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -210,33 +213,33 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-01: 5-node cycle test (A -> B -> C -> D -> E -> A)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE5_001', NULL, 'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_a',
-     'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE5_001', NULL, 'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_a',
+     'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE5_002', NULL, 'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_b',
-     'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE5_002', NULL, 'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_b',
+     'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE5_003', NULL, 'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_c',
-     'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE5_003', NULL, 'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_c',
+     'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE5_004', NULL, 'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_d',
-     'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_e',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE5_004', NULL, 'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_d',
+     'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_e',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_CYCLE5_005', NULL, 'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_e',
-     'teradata://demo', 'demo_user.CYCLE5_TEST', 'col_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_CYCLE5_005', NULL, 'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_e',
+     'teradata://demo', '{DATABASE}.CYCLE5_TEST', 'col_a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -244,51 +247,51 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-02: Nested diamond (A -> B -> D, A -> C -> D, D -> E -> G, D -> F -> G)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_001', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_001', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_002', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_002', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_003', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_b',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_003', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_b',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_004', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_c',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_004', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_c',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_005', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_d',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_e',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_005', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_d',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_e',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_006', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_d',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_f',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_006', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_d',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_f',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_007', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_e',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_g',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_007', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_e',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_g',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_NESTED_DIAMOND_008', NULL, 'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_f',
-     'teradata://demo', 'demo_user.NESTED_DIAMOND', 'col_g',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_NESTED_DIAMOND_008', NULL, 'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_f',
+     'teradata://demo', '{DATABASE}.NESTED_DIAMOND', 'col_g',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -296,51 +299,51 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-02: Wide diamond (A -> B, A -> C, A -> D, A -> E, B/C/D/E -> F)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_001', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_001', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_002', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_002', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_003', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_003', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_004', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_e',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_004', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_e',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_005', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_b',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_f',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_005', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_b',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_f',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_006', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_c',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_f',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_006', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_c',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_f',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_007', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_d',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_f',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_007', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_d',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_f',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_WIDE_DIAMOND_008', NULL, 'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_e',
-     'teradata://demo', 'demo_user.WIDE_DIAMOND', 'col_f',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_WIDE_DIAMOND_008', NULL, 'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_e',
+     'teradata://demo', '{DATABASE}.WIDE_DIAMOND', 'col_f',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -348,33 +351,33 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-03: Fan-out 5 (source -> target_1..target_5)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT5_001', NULL, 'teradata://demo', 'demo_user.FANOUT5_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT5_TEST', 'target_1',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT5_001', NULL, 'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'target_1',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT5_002', NULL, 'teradata://demo', 'demo_user.FANOUT5_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT5_TEST', 'target_2',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT5_002', NULL, 'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'target_2',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT5_003', NULL, 'teradata://demo', 'demo_user.FANOUT5_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT5_TEST', 'target_3',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT5_003', NULL, 'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'target_3',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT5_004', NULL, 'teradata://demo', 'demo_user.FANOUT5_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT5_TEST', 'target_4',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT5_004', NULL, 'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'target_4',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT5_005', NULL, 'teradata://demo', 'demo_user.FANOUT5_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT5_TEST', 'target_5',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT5_005', NULL, 'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT5_TEST', 'target_5',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -382,63 +385,63 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-03: Fan-out 10 (source -> target_01..target_10)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_001', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_01',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_001', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_01',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_002', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_02',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_002', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_02',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_003', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_03',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_003', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_03',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_004', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_04',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_004', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_04',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_005', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_05',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_005', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_05',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_006', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_06',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_006', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_06',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_007', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_07',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_007', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_07',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_008', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_08',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_008', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_08',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_009', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_09',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_009', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_09',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANOUT10_010', NULL, 'teradata://demo', 'demo_user.FANOUT10_TEST', 'source',
-     'teradata://demo', 'demo_user.FANOUT10_TEST', 'target_10',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANOUT10_010', NULL, 'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'source',
+     'teradata://demo', '{DATABASE}.FANOUT10_TEST', 'target_10',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -446,33 +449,33 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-04: Fan-in 5 (src_1..src_5 -> target)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN5_001', NULL, 'teradata://demo', 'demo_user.FANIN5_TEST', 'src_1',
-     'teradata://demo', 'demo_user.FANIN5_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN5_001', NULL, 'teradata://demo', '{DATABASE}.FANIN5_TEST', 'src_1',
+     'teradata://demo', '{DATABASE}.FANIN5_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN5_002', NULL, 'teradata://demo', 'demo_user.FANIN5_TEST', 'src_2',
-     'teradata://demo', 'demo_user.FANIN5_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN5_002', NULL, 'teradata://demo', '{DATABASE}.FANIN5_TEST', 'src_2',
+     'teradata://demo', '{DATABASE}.FANIN5_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN5_003', NULL, 'teradata://demo', 'demo_user.FANIN5_TEST', 'src_3',
-     'teradata://demo', 'demo_user.FANIN5_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN5_003', NULL, 'teradata://demo', '{DATABASE}.FANIN5_TEST', 'src_3',
+     'teradata://demo', '{DATABASE}.FANIN5_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN5_004', NULL, 'teradata://demo', 'demo_user.FANIN5_TEST', 'src_4',
-     'teradata://demo', 'demo_user.FANIN5_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN5_004', NULL, 'teradata://demo', '{DATABASE}.FANIN5_TEST', 'src_4',
+     'teradata://demo', '{DATABASE}.FANIN5_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN5_005', NULL, 'teradata://demo', 'demo_user.FANIN5_TEST', 'src_5',
-     'teradata://demo', 'demo_user.FANIN5_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN5_005', NULL, 'teradata://demo', '{DATABASE}.FANIN5_TEST', 'src_5',
+     'teradata://demo', '{DATABASE}.FANIN5_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -480,63 +483,63 @@ CTE_TEST_INSERTS = [
     # CORRECT-DATA-04: Fan-in 10 (src_01..src_10 -> target)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_001', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_01',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_001', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_01',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_002', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_02',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_002', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_02',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_003', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_03',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_003', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_03',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_004', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_04',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_004', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_04',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_005', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_05',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_005', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_05',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_006', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_06',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_006', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_06',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_007', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_07',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_007', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_07',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_008', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_08',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_008', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_08',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_009', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_09',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_009', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_09',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_FANIN10_010', NULL, 'teradata://demo', 'demo_user.FANIN10_TEST', 'src_10',
-     'teradata://demo', 'demo_user.FANIN10_TEST', 'target',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_FANIN10_010', NULL, 'teradata://demo', '{DATABASE}.FANIN10_TEST', 'src_10',
+     'teradata://demo', '{DATABASE}.FANIN10_TEST', 'target',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -545,33 +548,33 @@ CTE_TEST_INSERTS = [
     # (A -> B -> A cycle) + (A -> C -> D, A -> D diamond converging)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_CD_001', NULL, 'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_CD_001', NULL, 'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_CD_002', NULL, 'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_b',
-     'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_a',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_CD_002', NULL, 'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_b',
+     'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_a',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_CD_003', NULL, 'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_CD_003', NULL, 'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_CD_004', NULL, 'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_c',
-     'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_CD_004', NULL, 'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_c',
+     'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_CD_005', NULL, 'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_a',
-     'teradata://demo', 'demo_user.COMBINED_CYCLE_DIAMOND', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_CD_005', NULL, 'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_a',
+     'teradata://demo', '{DATABASE}.COMBINED_CYCLE_DIAMOND', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 
@@ -580,39 +583,39 @@ CTE_TEST_INSERTS = [
     # (A -> B,C,D fan-out) + (B,C,D -> E fan-in)
     # =========================================================================
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_FAN_001', NULL, 'teradata://demo', 'demo_user.COMBINED_FAN', 'col_a',
-     'teradata://demo', 'demo_user.COMBINED_FAN', 'col_b',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_FAN_001', NULL, 'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_a',
+     'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_b',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_FAN_002', NULL, 'teradata://demo', 'demo_user.COMBINED_FAN', 'col_a',
-     'teradata://demo', 'demo_user.COMBINED_FAN', 'col_c',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_FAN_002', NULL, 'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_a',
+     'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_c',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_FAN_003', NULL, 'teradata://demo', 'demo_user.COMBINED_FAN', 'col_a',
-     'teradata://demo', 'demo_user.COMBINED_FAN', 'col_d',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_FAN_003', NULL, 'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_a',
+     'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_d',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_FAN_004', NULL, 'teradata://demo', 'demo_user.COMBINED_FAN', 'col_b',
-     'teradata://demo', 'demo_user.COMBINED_FAN', 'col_e',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_FAN_004', NULL, 'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_b',
+     'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_e',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_FAN_005', NULL, 'teradata://demo', 'demo_user.COMBINED_FAN', 'col_c',
-     'teradata://demo', 'demo_user.COMBINED_FAN', 'col_e',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_FAN_005', NULL, 'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_c',
+     'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_e',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
     """
-    INSERT INTO demo_user.OL_COLUMN_LINEAGE VALUES
-    ('TEST_COMBINED_FAN_006', NULL, 'teradata://demo', 'demo_user.COMBINED_FAN', 'col_d',
-     'teradata://demo', 'demo_user.COMBINED_FAN', 'col_e',
+    INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE VALUES
+    ('TEST_COMBINED_FAN_006', NULL, 'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_d',
+     'teradata://demo', '{DATABASE}.COMBINED_FAN', 'col_e',
      'DIRECT', NULL, NULL, 'N', 1.00, TIMESTAMP '2024-01-15 10:00:00', 'Y')
     """,
 ]
@@ -636,7 +639,7 @@ def main():
     # Remove existing test data
     print("\n--- Removing existing TEST_* lineage records ---")
     try:
-        cursor.execute("DELETE FROM demo_user.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
+        cursor.execute(f"DELETE FROM {DATABASE}.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
         print("  Cleared existing TEST_* records")
     except Exception as e:
         print(f"  Warning: {e}")
@@ -644,8 +647,9 @@ def main():
     # Insert CTE test data
     print("\n--- Inserting CTE edge case test data ---")
     success_count = 0
-    for i, insert_sql in enumerate(CTE_TEST_INSERTS, 1):
+    for i, insert_template in enumerate(CTE_TEST_INSERTS, 1):
         try:
+            insert_sql = insert_template.format(DATABASE=DATABASE)
             cursor.execute(insert_sql)
             success_count += 1
         except Exception as e:
@@ -655,12 +659,12 @@ def main():
 
     # Verify test data
     print("\n--- Verifying CTE test data ---")
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
+    cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
     count = cursor.fetchone()[0]
     print(f"  Total TEST_* lineage records: {count}")
 
     # Show breakdown by test type
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT
             CASE
                 WHEN lineage_id LIKE 'TEST_CYCLE5%' THEN '5-node cycle'
@@ -683,7 +687,7 @@ def main():
                 ELSE 'Other'
             END AS test_type,
             COUNT(*) AS record_count
-        FROM demo_user.OL_COLUMN_LINEAGE
+        FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE lineage_id LIKE 'TEST_%'
         GROUP BY 1
         ORDER BY 1

@@ -3,11 +3,16 @@
 Populate OpenLineage Tables
 
 Extracts metadata from DBC views and populates OpenLineage-compliant lineage data.
+Supports multiple lineage sources:
+  - Manual fixtures (--fixtures): Hardcoded test/demo mappings
+  - DBQL extraction (--dbql): Parse executed SQL from query logs
 
 Usage:
-  python populate_lineage.py              # Use manual mappings (default)
-  python populate_lineage.py --manual     # Explicitly use manual mappings
-  python populate_lineage.py --dbql       # Extract from DBQL tables (future)
+  python populate_lineage.py              # Use fixtures (default, for testing/demo)
+  python populate_lineage.py --fixtures   # Explicitly use fixture mappings
+  python populate_lineage.py --dbql       # Extract from DBQL tables
+  python populate_lineage.py --dbql --since "2024-01-01"  # DBQL since date
+  python populate_lineage.py --dry-run    # Preview without changes
 """
 
 from pathlib import Path
@@ -15,10 +20,14 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import argparse
+from datetime import datetime
 import teradatasql
 import hashlib
 
 from db_config import CONFIG, get_openlineage_namespace
+
+# Get database name from config
+DATABASE = CONFIG["database"]
 
 # OpenLineage transformation type mapping
 # Maps current transformation types to (OL_type, OL_subtype)
@@ -37,66 +46,6 @@ def map_transformation_type(current_type: str) -> tuple:
         current_type.upper(),
         ("DIRECT", "TRANSFORMATION")  # Default for unknown types
     )
-
-
-# Helper function for type conversion used in dataset/field population
-def convert_teradata_type(column_type, length, decimal_total, decimal_fractional):
-    """Convert Teradata column type codes to readable type strings."""
-    # Handle NULL column types
-    if column_type is None:
-        return 'UNKNOWN'
-
-    type_map = {
-        'I': 'INTEGER',
-        'I1': 'BYTEINT',
-        'I2': 'SMALLINT',
-        'I8': 'BIGINT',
-        'F': 'FLOAT',
-        'DA': 'DATE',
-        'TZ': 'TIME WITH TIME ZONE',
-        'SZ': 'TIMESTAMP WITH TIME ZONE',
-        'CO': 'CLOB',
-        'BO': 'BLOB',
-        'N': 'NUMBER',
-        'AN': 'ARRAY',
-        'JN': 'JSON',
-        'DY': 'INTERVAL DAY',
-        'DH': 'INTERVAL DAY TO HOUR',
-        'DM': 'INTERVAL DAY TO MINUTE',
-        'DS': 'INTERVAL DAY TO SECOND',
-        'HR': 'INTERVAL HOUR',
-        'HM': 'INTERVAL HOUR TO MINUTE',
-        'HS': 'INTERVAL HOUR TO SECOND',
-        'MI': 'INTERVAL MINUTE',
-        'MS': 'INTERVAL MINUTE TO SECOND',
-        'SC': 'INTERVAL SECOND',
-        'MO': 'INTERVAL MONTH',
-        'YR': 'INTERVAL YEAR',
-        'YM': 'INTERVAL YEAR TO MONTH',
-        'PD': 'PERIOD(DATE)',
-        'PT': 'PERIOD(TIME)',
-        'PS': 'PERIOD(TIMESTAMP)',
-        'PM': 'PERIOD(TIMESTAMP WITH TIME ZONE)'
-    }
-
-    col_type = column_type.strip()
-
-    if col_type in type_map:
-        return type_map[col_type]
-    elif col_type == 'D':
-        return f'DECIMAL({decimal_total},{decimal_fractional})'
-    elif col_type in ('TS', 'AT'):
-        precision = decimal_fractional or 0
-        prefix = 'TIMESTAMP' if col_type == 'TS' else 'TIME'
-        return f'{prefix}({precision})'
-    elif col_type in ('CF', 'BF'):
-        prefix = 'CHAR' if col_type == 'CF' else 'BYTE'
-        return f'{prefix}({length})'
-    elif col_type in ('CV', 'BV'):
-        prefix = 'VARCHAR' if col_type == 'CV' else 'VARBYTE'
-        return f'{prefix}({length})'
-    else:
-        return col_type
 
 
 def generate_namespace_id(namespace_uri: str) -> str:
@@ -125,12 +74,12 @@ def populate_openlineage_namespace(cursor, namespace_uri: str):
     namespace_id = generate_namespace_id(namespace_uri)
 
     # Use INSERT...SELECT with NOT EXISTS to avoid fetch
-    cursor.execute("""
-        INSERT INTO demo_user.OL_NAMESPACE
+    cursor.execute(f"""
+        INSERT INTO {DATABASE}.OL_NAMESPACE
         (namespace_id, namespace_uri, description, spec_version, created_at)
         SELECT ?, ?, ?, '2-0-2', CURRENT_TIMESTAMP(0)
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_NAMESPACE
+            SELECT 1 FROM {DATABASE}.OL_NAMESPACE
             WHERE namespace_id = ?
         )
     """, (namespace_id, namespace_uri, f"Teradata instance at {namespace_uri}", namespace_id))
@@ -148,14 +97,16 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
     print("\n--- Populating OL_DATASET from DBC.TablesV ---")
 
     # Use INSERT...SELECT to keep data in database
-    cursor.execute("""
-        INSERT INTO demo_user.OL_DATASET
+    cursor.execute(f"""
+        INSERT INTO {DATABASE}.OL_DATASET
         (dataset_id, namespace_id, name, description, source_type, created_at, updated_at, is_active)
         SELECT
             ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName) AS dataset_id,
             ? AS namespace_id,
             TRIM(DatabaseName) || '.' || TRIM(TableName) AS name,
-            CAST(CommentString AS VARCHAR(2000)) AS description,
+            CASE WHEN TRANSLATE_CHK(CommentString USING UNICODE_TO_LATIN) = 0
+                 THEN CAST(CommentString AS VARCHAR(2000))
+                 ELSE NULL END AS description,
             CASE WHEN TableKind = 'V' THEN 'VIEW' ELSE 'TABLE' END AS source_type,
             CAST(CreateTimeStamp AS TIMESTAMP(0)) AS created_at,
             CURRENT_TIMESTAMP(0) AS updated_at,
@@ -165,7 +116,7 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
           AND TableName NOT LIKE 'LIN_%'
           AND TableName NOT LIKE 'OL_%'
           AND NOT EXISTS (
-              SELECT 1 FROM demo_user.OL_DATASET od
+              SELECT 1 FROM {DATABASE}.OL_DATASET od
               WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
           )
     """, (namespace_id, namespace_id, namespace_id))
@@ -176,12 +127,16 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
 
 
 def populate_openlineage_fields(cursor, namespace_id: str):
-    """Populate OL_DATASET_FIELD from DBC.ColumnsV using INSERT...SELECT."""
+    """Populate OL_DATASET_FIELD from DBC.ColumnsV using INSERT...SELECT.
+
+    Note: ColumnsV may return NULL for view column types. This is acceptable for
+    now as we focus on table columns. View column types can be enhanced later.
+    """
     print("\n--- Populating OL_DATASET_FIELD from DBC.ColumnsV ---")
 
     # Use INSERT...SELECT with SQL-based type conversion
-    cursor.execute("""
-        INSERT INTO demo_user.OL_DATASET_FIELD
+    cursor.execute(f"""
+        INSERT INTO {DATABASE}.OL_DATASET_FIELD
         (field_id, dataset_id, field_name, field_type, field_description,
          ordinal_position, nullable, created_at)
         SELECT
@@ -236,13 +191,16 @@ def populate_openlineage_fields(cursor, namespace_id: str):
                 -- Unknown/NULL types
                 ELSE COALESCE(TRIM(c.ColumnType), 'UNKNOWN')
             END AS field_type,
-            CAST(c.CommentString AS VARCHAR(2000)) AS field_description,
+            NULL AS field_description,
             c.ColumnId AS ordinal_position,
             c.Nullable AS nullable,
             CURRENT_TIMESTAMP(0) AS created_at
         FROM DBC.ColumnsV c
         WHERE c.TableName NOT LIKE 'LIN_%'
           AND c.TableName NOT LIKE 'OL_%'
+          AND TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
+          AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
+          AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
           AND EXISTS (
               SELECT 1 FROM DBC.TablesV t
               WHERE t.DatabaseName = c.DatabaseName
@@ -250,7 +208,7 @@ def populate_openlineage_fields(cursor, namespace_id: str):
                 AND t.TableKind IN ('T', 'V', 'O')
           )
           AND NOT EXISTS (
-              SELECT 1 FROM demo_user.OL_DATASET_FIELD odf
+              SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
               WHERE odf.field_id = ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName)
           )
     """, (namespace_id, namespace_id, namespace_id))
@@ -260,100 +218,19 @@ def populate_openlineage_fields(cursor, namespace_id: str):
     return count
 
 
-def update_view_column_types(cursor, namespace_id: str):
-    """Update column types for views using HELP COLUMN (DBC.ColumnsV returns NULL for view types)."""
-    print("\n--- Updating view column types using HELP COLUMN ---")
+def populate_lineage_from_fixtures(cursor, namespace_id: str, namespace_uri: str):
+    """Populate OL_COLUMN_LINEAGE from fixture mappings."""
+    print("\n--- Populating OL_COLUMN_LINEAGE from fixtures ---")
 
-    # Get all views that have fields with UNKNOWN type
-    cursor.execute("""
-        SELECT DISTINCT d.name, d.dataset_id
-        FROM demo_user.OL_DATASET d
-        JOIN demo_user.OL_DATASET_FIELD f ON d.dataset_id = f.dataset_id
-        WHERE d.source_type = 'VIEW'
-          AND f.field_type = 'UNKNOWN'
-    """)
-    views = cursor.fetchall()
+    # Import fixtures
+    try:
+        from fixtures import COLUMN_LINEAGE_MAPPINGS
+    except ImportError:
+        # Fallback for direct script execution
+        from database.fixtures import COLUMN_LINEAGE_MAPPINGS
 
-    if not views:
-        print("  No views with UNKNOWN column types found")
-        return 0
-
-    # Create volatile table to hold type information
-    cursor.execute("""
-        CREATE VOLATILE TABLE vt_view_types (
-            field_id VARCHAR(512),
-            field_type VARCHAR(512)
-        ) ON COMMIT PRESERVE ROWS
-    """)
-
-    # Populate volatile table with HELP COLUMN results
-    insert_count = 0
-    for view_name, dataset_id in views:
-        view_name = view_name.strip()
-        dataset_id = dataset_id.strip()
-
-        # Extract database.table from dataset name
-        try:
-            parts = view_name.split('.')
-            if len(parts) != 2:
-                continue
-            db_name, table_name = parts
-
-            # Use HELP COLUMN to get actual column types for this view
-            cursor.execute(f'HELP COLUMN "{db_name}"."{table_name}".*')
-            columns = cursor.fetchall()
-
-            for col in columns:
-                col_name = col[0].strip() if col[0] else ""
-                col_type_code = col[1].strip() if col[1] else ""
-                col_length = col[4] if len(col) > 4 and col[4] else None
-                col_decimal_total = col[5] if len(col) > 5 and col[5] else None
-                col_decimal_frac = col[6] if len(col) > 6 and col[6] else None
-
-                # Convert type code to readable type string
-                field_type = convert_teradata_type(col_type_code, col_length, col_decimal_total, col_decimal_frac)
-
-                # Build field_id
-                field_id = f"{dataset_id}/{col_name}"
-
-                # Insert into volatile table
-                cursor.execute("""
-                    INSERT INTO vt_view_types (field_id, field_type)
-                    VALUES (?, ?)
-                """, [field_id, field_type])
-                insert_count += 1
-
-        except Exception as e:
-            # Skip views that fail (e.g., system views with special permissions)
-            error_msg = str(e).split('\n')[0] if '\n' in str(e) else str(e)
-            if "3523" not in error_msg:  # Only warn for non-permission errors
-                print(f"  Warning: Could not get column types for {view_name}: {error_msg}")
-            continue
-
-    if insert_count == 0:
-        print("  No view column types collected")
-        return 0
-
-    # Bulk update using UPDATE...FROM with volatile table
-    cursor.execute("""
-        UPDATE demo_user.OL_DATASET_FIELD
-        FROM vt_view_types vt
-        SET field_type = vt.field_type
-        WHERE demo_user.OL_DATASET_FIELD.field_id = vt.field_id
-          AND demo_user.OL_DATASET_FIELD.field_type = 'UNKNOWN'
-    """)
-
-    update_count = cursor.rowcount
-    print(f"  Updated {update_count} view column types")
-    return update_count
-
-
-def populate_openlineage_lineage(cursor, namespace_id: str, namespace_uri: str):
-    """Populate OL_COLUMN_LINEAGE from manual mappings."""
-    print("\n--- Populating OL_COLUMN_LINEAGE ---")
-
-    insert_sql = """
-        INSERT INTO demo_user.OL_COLUMN_LINEAGE
+    insert_sql = f"""
+        INSERT INTO {DATABASE}.OL_COLUMN_LINEAGE
         (lineage_id, run_id, source_namespace, source_dataset, source_field,
          target_namespace, target_dataset, target_field,
          transformation_type, transformation_subtype, transformation_description,
@@ -362,7 +239,10 @@ def populate_openlineage_lineage(cursor, namespace_id: str, namespace_uri: str):
     """
 
     count = 0
-    for src, tgt, trans_type, confidence in COLUMN_LINEAGE_MAPPINGS:
+    for src_template, tgt_template, trans_type, confidence in COLUMN_LINEAGE_MAPPINGS:
+        # Substitute {DATABASE} placeholder with actual database name
+        src = src_template.format(DATABASE=DATABASE)
+        tgt = tgt_template.format(DATABASE=DATABASE)
         src_parts = src.split(".")
         tgt_parts = tgt.split(".")
 
@@ -383,123 +263,76 @@ def populate_openlineage_lineage(cursor, namespace_id: str, namespace_uri: str):
                 tgt_parts[2],  # target_field
                 ol_type,
                 ol_subtype,
-                f"Mapped from {trans_type}",
+                f"Fixture mapping ({trans_type})",
                 confidence
             ))
             count += 1
         except Exception as e:
-            if "duplicate" not in str(e).lower():
+            if "duplicate" not in str(e).lower() and "2801" not in str(e):
                 print(f"  Warning: {src}->{tgt}: {e}")
 
-    print(f"  Created {count} lineage records")
+    print(f"  Created {count} lineage records from fixtures")
     return count
 
 
-# Column lineage records based on known data flows
-# Format: (source_column_id, target_column_id, transformation_type, confidence_score)
-COLUMN_LINEAGE_MAPPINGS = [
-    # SRC_CUSTOMER -> STG_CUSTOMER
-    ("demo_user.SRC_CUSTOMER.first_name", "demo_user.STG_CUSTOMER.full_name", "CALCULATION", 1.00),
-    ("demo_user.SRC_CUSTOMER.last_name", "demo_user.STG_CUSTOMER.full_name", "CALCULATION", 1.00),
-    ("demo_user.SRC_CUSTOMER.customer_id", "demo_user.STG_CUSTOMER.customer_id", "DIRECT", 1.00),
-    ("demo_user.SRC_CUSTOMER.email", "demo_user.STG_CUSTOMER.email_address", "DIRECT", 1.00),
-    ("demo_user.SRC_CUSTOMER.phone", "demo_user.STG_CUSTOMER.phone_number", "DIRECT", 1.00),
-    ("demo_user.SRC_CUSTOMER.created_date", "demo_user.STG_CUSTOMER.customer_since", "DIRECT", 1.00),
+def populate_lineage_from_dbql(cursor, namespace_uri: str, since: datetime = None,
+                               full: bool = False, verbose: bool = False,
+                               dry_run: bool = False):
+    """Populate OL_COLUMN_LINEAGE from DBQL tables via SQL parsing."""
+    print("\n--- Populating OL_COLUMN_LINEAGE from DBQL ---")
 
-    # SRC_PRODUCT -> STG_PRODUCT
-    ("demo_user.SRC_PRODUCT.product_id", "demo_user.STG_PRODUCT.product_id", "DIRECT", 1.00),
-    ("demo_user.SRC_PRODUCT.product_name", "demo_user.STG_PRODUCT.product_name", "DIRECT", 1.00),
-    ("demo_user.SRC_PRODUCT.category", "demo_user.STG_PRODUCT.category_name", "DIRECT", 1.00),
-    ("demo_user.SRC_PRODUCT.unit_price", "demo_user.STG_PRODUCT.unit_price", "DIRECT", 1.00),
-    ("demo_user.SRC_PRODUCT.cost_price", "demo_user.STG_PRODUCT.cost_price", "DIRECT", 1.00),
-    ("demo_user.SRC_PRODUCT.unit_price", "demo_user.STG_PRODUCT.profit_margin", "CALCULATION", 1.00),
-    ("demo_user.SRC_PRODUCT.cost_price", "demo_user.STG_PRODUCT.profit_margin", "CALCULATION", 1.00),
-
-    # SRC_SALES -> STG_SALES
-    ("demo_user.SRC_SALES.transaction_id", "demo_user.STG_SALES.transaction_id", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.customer_id", "demo_user.STG_SALES.customer_id", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.product_id", "demo_user.STG_SALES.product_id", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.store_id", "demo_user.STG_SALES.store_id", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.quantity", "demo_user.STG_SALES.quantity", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.sale_amount", "demo_user.STG_SALES.gross_amount", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.discount_amount", "demo_user.STG_SALES.discount_amount", "DIRECT", 1.00),
-    ("demo_user.SRC_SALES.sale_amount", "demo_user.STG_SALES.net_amount", "CALCULATION", 1.00),
-    ("demo_user.SRC_SALES.discount_amount", "demo_user.STG_SALES.net_amount", "CALCULATION", 1.00),
-    ("demo_user.SRC_SALES.sale_date", "demo_user.STG_SALES.sale_date", "DIRECT", 1.00),
-
-    # STG_CUSTOMER -> DIM_CUSTOMER
-    ("demo_user.STG_CUSTOMER.customer_key", "demo_user.DIM_CUSTOMER.customer_sk", "DIRECT", 1.00),
-    ("demo_user.STG_CUSTOMER.customer_id", "demo_user.DIM_CUSTOMER.customer_id", "DIRECT", 1.00),
-    ("demo_user.STG_CUSTOMER.full_name", "demo_user.DIM_CUSTOMER.full_name", "DIRECT", 1.00),
-    ("demo_user.STG_CUSTOMER.email_address", "demo_user.DIM_CUSTOMER.email_address", "DIRECT", 1.00),
-    ("demo_user.STG_CUSTOMER.phone_number", "demo_user.DIM_CUSTOMER.phone_number", "DIRECT", 1.00),
-    ("demo_user.STG_CUSTOMER.customer_since", "demo_user.DIM_CUSTOMER.customer_since", "DIRECT", 1.00),
-
-    # STG_PRODUCT -> DIM_PRODUCT
-    ("demo_user.STG_PRODUCT.product_key", "demo_user.DIM_PRODUCT.product_sk", "DIRECT", 1.00),
-    ("demo_user.STG_PRODUCT.product_id", "demo_user.DIM_PRODUCT.product_id", "DIRECT", 1.00),
-    ("demo_user.STG_PRODUCT.product_name", "demo_user.DIM_PRODUCT.product_name", "DIRECT", 1.00),
-    ("demo_user.STG_PRODUCT.category_name", "demo_user.DIM_PRODUCT.category_name", "DIRECT", 1.00),
-    ("demo_user.STG_PRODUCT.unit_price", "demo_user.DIM_PRODUCT.unit_price", "DIRECT", 1.00),
-    ("demo_user.STG_PRODUCT.cost_price", "demo_user.DIM_PRODUCT.cost_price", "DIRECT", 1.00),
-    ("demo_user.STG_PRODUCT.profit_margin", "demo_user.DIM_PRODUCT.profit_margin", "DIRECT", 1.00),
-
-    # SRC_STORE -> DIM_STORE
-    ("demo_user.SRC_STORE.store_id", "demo_user.DIM_STORE.store_id", "DIRECT", 1.00),
-    ("demo_user.SRC_STORE.store_name", "demo_user.DIM_STORE.store_name", "DIRECT", 1.00),
-    ("demo_user.SRC_STORE.region", "demo_user.DIM_STORE.region", "DIRECT", 1.00),
-    ("demo_user.SRC_STORE.city", "demo_user.DIM_STORE.city", "DIRECT", 1.00),
-    ("demo_user.SRC_STORE.state", "demo_user.DIM_STORE.state", "DIRECT", 1.00),
-    ("demo_user.SRC_STORE.open_date", "demo_user.DIM_STORE.open_date", "DIRECT", 1.00),
-
-    # Multi-source -> FACT_SALES
-    ("demo_user.STG_SALES.sales_key", "demo_user.FACT_SALES.sales_sk", "DIRECT", 1.00),
-    ("demo_user.DIM_DATE.date_sk", "demo_user.FACT_SALES.date_sk", "JOIN", 1.00),
-    ("demo_user.DIM_CUSTOMER.customer_sk", "demo_user.FACT_SALES.customer_sk", "JOIN", 1.00),
-    ("demo_user.DIM_PRODUCT.product_sk", "demo_user.FACT_SALES.product_sk", "JOIN", 1.00),
-    ("demo_user.DIM_STORE.store_sk", "demo_user.FACT_SALES.store_sk", "JOIN", 1.00),
-    ("demo_user.STG_SALES.transaction_id", "demo_user.FACT_SALES.transaction_id", "DIRECT", 1.00),
-    ("demo_user.STG_SALES.quantity", "demo_user.FACT_SALES.quantity", "DIRECT", 1.00),
-    ("demo_user.STG_SALES.gross_amount", "demo_user.FACT_SALES.gross_amount", "DIRECT", 1.00),
-    ("demo_user.STG_SALES.discount_amount", "demo_user.FACT_SALES.discount_amount", "DIRECT", 1.00),
-    ("demo_user.STG_SALES.net_amount", "demo_user.FACT_SALES.net_amount", "DIRECT", 1.00),
-    ("demo_user.STG_SALES.quantity", "demo_user.FACT_SALES.cost_amount", "CALCULATION", 1.00),
-    ("demo_user.DIM_PRODUCT.cost_price", "demo_user.FACT_SALES.cost_amount", "CALCULATION", 1.00),
-    ("demo_user.STG_SALES.net_amount", "demo_user.FACT_SALES.profit_amount", "CALCULATION", 1.00),
-    ("demo_user.FACT_SALES.cost_amount", "demo_user.FACT_SALES.profit_amount", "CALCULATION", 1.00),
-
-    # FACT_SALES -> FACT_SALES_DAILY (Aggregation)
-    ("demo_user.FACT_SALES.date_sk", "demo_user.FACT_SALES_DAILY.date_sk", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.store_sk", "demo_user.FACT_SALES_DAILY.store_sk", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.product_sk", "demo_user.FACT_SALES_DAILY.product_sk", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.quantity", "demo_user.FACT_SALES_DAILY.total_quantity", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.gross_amount", "demo_user.FACT_SALES_DAILY.total_gross_amount", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.discount_amount", "demo_user.FACT_SALES_DAILY.total_discount_amount", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.net_amount", "demo_user.FACT_SALES_DAILY.total_net_amount", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.cost_amount", "demo_user.FACT_SALES_DAILY.total_cost_amount", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.profit_amount", "demo_user.FACT_SALES_DAILY.total_profit_amount", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES.sales_sk", "demo_user.FACT_SALES_DAILY.transaction_count", "AGGREGATION", 1.00),
-
-    # FACT_SALES_DAILY + DIM -> RPT_MONTHLY_SALES
-    ("demo_user.FACT_SALES_DAILY.store_sk", "demo_user.RPT_MONTHLY_SALES.store_sk", "AGGREGATION", 1.00),
-    ("demo_user.DIM_STORE.store_name", "demo_user.RPT_MONTHLY_SALES.store_name", "JOIN", 1.00),
-    ("demo_user.DIM_STORE.region", "demo_user.RPT_MONTHLY_SALES.region", "JOIN", 1.00),
-    ("demo_user.DIM_DATE.year_number", "demo_user.RPT_MONTHLY_SALES.year_month", "CALCULATION", 1.00),
-    ("demo_user.DIM_DATE.month_number", "demo_user.RPT_MONTHLY_SALES.year_month", "CALCULATION", 1.00),
-    ("demo_user.FACT_SALES_DAILY.total_net_amount", "demo_user.RPT_MONTHLY_SALES.total_sales", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES_DAILY.total_profit_amount", "demo_user.RPT_MONTHLY_SALES.total_profit", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES_DAILY.transaction_count", "demo_user.RPT_MONTHLY_SALES.total_transactions", "AGGREGATION", 1.00),
-    ("demo_user.FACT_SALES_DAILY.total_net_amount", "demo_user.RPT_MONTHLY_SALES.avg_transaction_value", "CALCULATION", 1.00),
-    ("demo_user.FACT_SALES_DAILY.transaction_count", "demo_user.RPT_MONTHLY_SALES.avg_transaction_value", "CALCULATION", 1.00),
-]
-
-
-def clear_openlineage_data(cursor):
-    """Clear existing OpenLineage data."""
-    print("\n--- Clearing existing OpenLineage data ---")
-    for table in ["OL_COLUMN_LINEAGE", "OL_DATASET_FIELD", "OL_DATASET"]:
+    try:
+        from dbql_extractor import DBQLExtractor, configure_logging
+    except ImportError:
         try:
-            cursor.execute(f"DELETE FROM demo_user.{table}")
+            from scripts.populate.dbql_extractor import DBQLExtractor, configure_logging
+        except ImportError:
+            print("ERROR: Could not import dbql_extractor module.")
+            print("Make sure sqlglot is installed: pip install sqlglot>=25.0.0")
+            return 0
+
+    # Configure logging
+    configure_logging(verbose=verbose)
+
+    # Create extractor
+    extractor = DBQLExtractor(
+        cursor=cursor,
+        namespace_uri=namespace_uri,
+        verbose=verbose,
+        dry_run=dry_run
+    )
+
+    # Check DBQL access
+    has_access, message = extractor.check_dbql_access()
+    if not has_access:
+        print(f"\n{message}")
+        return 0
+
+    # Extract lineage
+    count = extractor.extract_lineage(since=since, full=full)
+
+    # Print summary
+    extractor.print_summary()
+
+    return count
+
+
+def clear_openlineage_data(cursor, lineage_only: bool = False):
+    """Clear existing OpenLineage data.
+
+    Args:
+        lineage_only: If True, only clear OL_COLUMN_LINEAGE (for DBQL refresh)
+    """
+    if lineage_only:
+        print("\n--- Clearing OL_COLUMN_LINEAGE ---")
+        tables = ["OL_COLUMN_LINEAGE"]
+    else:
+        print("\n--- Clearing existing OpenLineage data ---")
+        tables = ["OL_COLUMN_LINEAGE", "OL_DATASET_FIELD", "OL_DATASET"]
+
+    for table in tables:
+        try:
+            cursor.execute(f"DELETE FROM {DATABASE}.{table}")
             print(f"  Cleared {table}")
         except Exception as e:
             print(f"  Warning clearing {table}: {e}")
@@ -510,45 +343,99 @@ def verify_openlineage_data(cursor):
     print("\n--- Verifying OpenLineage data ---")
     for table in ["OL_NAMESPACE", "OL_DATASET", "OL_DATASET_FIELD", "OL_COLUMN_LINEAGE"]:
         try:
-            cursor.execute(f"SELECT COUNT(*) FROM demo_user.{table}")
+            cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.{table}")
             count = cursor.fetchone()[0]
             print(f"  {table}: {count} rows")
         except Exception as e:
             print(f"  {table}: ERROR - {e}")
 
 
+def parse_datetime(s: str) -> datetime:
+    """Parse datetime string in various formats."""
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d",
+        "%Y%m%d",
+    ]
+    for fmt in formats:
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Could not parse datetime: {s}")
+
+
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(
-        description="Populate OpenLineage tables from DBC views",
+        description="Populate OpenLineage tables from DBC views and lineage sources",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
+Lineage Sources:
+  --fixtures    Use hardcoded test/demo mappings (default)
+                Located in database/fixtures/lineage_mappings.py
+                Best for: testing, demos, development
+
+  --dbql        Extract lineage from DBQL (Database Query Log) tables
+                Parses executed SQL to discover column-level lineage
+                Best for: production environments with DBQL enabled
+
 Examples:
-  # Use manual/hardcoded mappings (default - for testing/demo)
+  # Populate with fixture mappings (testing/demo)
   python populate_lineage.py
-  python populate_lineage.py --manual
+  python populate_lineage.py --fixtures
 
-  # Extract lineage from DBQL (future)
+  # Extract lineage from DBQL (production)
   python populate_lineage.py --dbql
+  python populate_lineage.py --dbql --since "2024-01-01"
+  python populate_lineage.py --dbql --full
 
-  # Dry run (show what would be extracted)
+  # Dry run to preview
   python populate_lineage.py --dry-run
+  python populate_lineage.py --dbql --dry-run
 
-  # Skip clearing existing data (append mode)
+  # Append mode (don't clear existing lineage)
   python populate_lineage.py --skip-clear
+
+DBQL Requirements:
+  - SELECT access on DBC.DBQLogTbl and DBC.DBQLSQLTbl
+  - Query logging enabled: BEGIN QUERY LOGGING WITH SQL, OBJECTS ON ALL
+  - sqlglot library: pip install sqlglot>=25.0.0
         """
     )
+
+    # Lineage source mode
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
-        "--manual", "-m",
+        "--fixtures", "-f",
         action="store_true",
-        help="Use hardcoded lineage mappings (default)"
+        help="Use fixture mappings for lineage (default)"
     )
     mode_group.add_argument(
         "--dbql", "-d",
         action="store_true",
-        help="Extract lineage from DBQL tables (not yet implemented)"
+        help="Extract lineage from DBQL tables"
     )
+    # Legacy alias for --fixtures
+    mode_group.add_argument(
+        "--manual", "-m",
+        action="store_true",
+        help="Alias for --fixtures (deprecated)"
+    )
+
+    # DBQL-specific options
+    parser.add_argument(
+        "--since", "-s",
+        type=str,
+        help="Extract DBQL records since this date (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Full DBQL extraction (ignore time filter)"
+    )
+
+    # Common options
     parser.add_argument(
         "--dry-run", "-n",
         action="store_true",
@@ -564,6 +451,11 @@ Examples:
         action="store_true",
         help="Skip clearing existing data (append mode)"
     )
+    parser.add_argument(
+        "--lineage-only",
+        action="store_true",
+        help="Only populate lineage (skip datasets/fields)"
+    )
 
     args = parser.parse_args()
 
@@ -571,16 +463,29 @@ Examples:
     print("Populate OpenLineage Tables")
     print("=" * 60)
 
-    # Determine mode
+    # Determine lineage source mode
     use_dbql = args.dbql
+    use_fixtures = args.fixtures or args.manual or (not args.dbql)
+
+    # Parse since datetime if provided
+    since = None
+    if args.since:
+        try:
+            since = parse_datetime(args.since)
+        except ValueError as e:
+            print(f"ERROR: {e}")
+            return 1
 
     if use_dbql:
-        print("\nMode: DBQL-based extraction (not yet implemented)")
-        print("ERROR: DBQL mode is not yet implemented for OpenLineage tables.")
-        print("Please use --manual mode (default).")
-        sys.exit(1)
+        print("\nMode: DBQL-based extraction")
+        if since:
+            print(f"  Since: {since}")
+        elif args.full:
+            print("  Full extraction (all history)")
+        else:
+            print("  Default: last 30 days")
     else:
-        print("\nMode: Manual/hardcoded mappings")
+        print("\nMode: Fixture-based mappings")
 
     # Connect
     print(f"\nConnecting to {CONFIG['host']}...")
@@ -599,20 +504,41 @@ Examples:
     if args.dry_run:
         print("\n[DRY RUN] Would populate:")
         print(f"  - 1 namespace")
-        print(f"  - ~N datasets from DBC.TablesV")
-        print(f"  - ~N fields from DBC.ColumnsV")
-        print(f"  - {len(COLUMN_LINEAGE_MAPPINGS)} column lineage records")
+        if not args.lineage_only:
+            print(f"  - ~N datasets from DBC.TablesV")
+            print(f"  - ~N fields from DBC.ColumnsV")
+        if use_dbql:
+            print(f"  - Column lineage from DBQL tables")
+        else:
+            try:
+                from fixtures import COLUMN_LINEAGE_MAPPINGS
+            except ImportError:
+                from database.fixtures import COLUMN_LINEAGE_MAPPINGS
+            print(f"  - {len(COLUMN_LINEAGE_MAPPINGS)} column lineage records from fixtures")
     else:
         # Clear existing data (unless skipped)
         if not args.skip_clear:
-            clear_openlineage_data(cursor)
+            clear_openlineage_data(cursor, lineage_only=args.lineage_only)
 
-        # Populate OpenLineage tables
+        # Populate namespace
         namespace_id = populate_openlineage_namespace(cursor, namespace_uri)
-        populate_openlineage_datasets(cursor, namespace_id)
-        populate_openlineage_fields(cursor, namespace_id)
-        update_view_column_types(cursor, namespace_id)  # Fix view column types
-        populate_openlineage_lineage(cursor, namespace_id, namespace_uri)
+
+        # Populate datasets and fields (unless lineage-only mode)
+        if not args.lineage_only:
+            populate_openlineage_datasets(cursor, namespace_id)
+            populate_openlineage_fields(cursor, namespace_id)
+
+        # Populate lineage based on mode
+        if use_dbql:
+            populate_lineage_from_dbql(
+                cursor, namespace_uri,
+                since=since,
+                full=args.full,
+                verbose=args.verbose,
+                dry_run=args.dry_run
+            )
+        else:
+            populate_lineage_from_fixtures(cursor, namespace_id, namespace_uri)
 
         # Verify data
         verify_openlineage_data(cursor)

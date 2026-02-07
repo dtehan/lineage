@@ -29,6 +29,9 @@ from contextlib import contextmanager
 
 from db_config import CONFIG
 
+# Get database name from config
+DATABASE = CONFIG["database"]
+
 
 @dataclass
 class BenchmarkResult:
@@ -58,35 +61,35 @@ class BenchmarkResult:
 # Test configurations
 TEST_DATASETS = {
     'CHAIN_TEST': {
-        'dataset': 'demo_user.CHAIN_TEST',
+        'dataset': '{DATABASE}.CHAIN_TEST',
         'field': 'col_a',
         'description': 'Linear chain (4 levels)',
         'pattern': 'linear',
         'directions': ['upstream'],  # Chain is upstream: E->D->C->B->A
     },
     'FANOUT10_TEST': {
-        'dataset': 'demo_user.FANOUT10_TEST',
+        'dataset': '{DATABASE}.FANOUT10_TEST',
         'field': 'source',
         'description': 'Wide fan-out (1->10)',
         'pattern': 'wide',
         'directions': ['downstream'],  # Fan-out is downstream
     },
     'CYCLE5_TEST': {
-        'dataset': 'demo_user.CYCLE5_TEST',
+        'dataset': '{DATABASE}.CYCLE5_TEST',
         'field': 'col_a',
         'description': '5-node cycle',
         'pattern': 'cyclic',
         'directions': ['downstream'],  # Test cycle termination
     },
     'FANIN10_TEST': {
-        'dataset': 'demo_user.FANIN10_TEST',
+        'dataset': '{DATABASE}.FANIN10_TEST',
         'field': 'target',
         'description': 'Wide fan-in (10->1)',
         'pattern': 'wide',
         'directions': ['upstream'],  # Fan-in is upstream
     },
     'NESTED_DIAMOND': {
-        'dataset': 'demo_user.NESTED_DIAMOND',
+        'dataset': '{DATABASE}.NESTED_DIAMOND',
         'field': 'col_g',
         'description': 'Nested diamond pattern',
         'pattern': 'diamond',
@@ -124,7 +127,7 @@ def build_upstream_query(dataset: str, field: str, max_depth: int, count_only: b
                 l.target_dataset, l.target_field,
                 1 AS depth,
                 CAST(l.lineage_id AS VARCHAR(4000)) AS path
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.target_dataset = '{dataset}'
               AND l.target_field = '{field}'
               AND l.is_active = 'Y'
@@ -137,7 +140,7 @@ def build_upstream_query(dataset: str, field: str, max_depth: int, count_only: b
                 l.target_dataset, l.target_field,
                 lp.depth + 1,
                 lp.path || ',' || l.lineage_id
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             INNER JOIN lineage_path lp
                 ON l.target_dataset = lp.source_dataset
                 AND l.target_field = lp.source_field
@@ -174,7 +177,7 @@ def build_downstream_query(dataset: str, field: str, max_depth: int, count_only:
                 l.target_dataset, l.target_field,
                 1 AS depth,
                 CAST(l.lineage_id AS VARCHAR(4000)) AS path
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.source_dataset = '{dataset}'
               AND l.source_field = '{field}'
               AND l.is_active = 'Y'
@@ -187,7 +190,7 @@ def build_downstream_query(dataset: str, field: str, max_depth: int, count_only:
                 l.target_dataset, l.target_field,
                 lp.depth + 1,
                 lp.path || ',' || l.lineage_id
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             INNER JOIN lineage_path lp
                 ON l.source_dataset = lp.target_dataset
                 AND l.source_field = lp.target_field
@@ -266,7 +269,8 @@ def benchmark_dataset(cursor, dataset_name: str, config: Dict, depths: List[int]
                       iterations: int, capture_explain: bool = False) -> List[BenchmarkResult]:
     """Run benchmarks for a single dataset across all depths and directions."""
     results = []
-    dataset = config['dataset']
+    # Format dataset name with actual DATABASE value
+    dataset = config['dataset'].format(DATABASE=DATABASE)
     field = config['field']
     directions = config['directions']
 
@@ -318,13 +322,13 @@ def get_table_stats(cursor) -> Dict[str, int]:
     """Get record counts from OL_COLUMN_LINEAGE table."""
     stats = {}
     try:
-        cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE")
+        cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE")
         stats['total_records'] = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
+        cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
         stats['test_records'] = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE WHERE is_active = 'Y'")
+        cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE WHERE is_active = 'Y'")
         stats['active_records'] = cursor.fetchone()[0]
     except Exception as e:
         print(f"  Warning: Could not get table stats: {e}")
@@ -352,9 +356,9 @@ def print_results_table(results: List[BenchmarkResult]) -> None:
 def check_test_data_exists(cursor) -> bool:
     """Check if test data from insert_cte_test_data.py exists."""
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COUNT(*)
-            FROM demo_user.OL_COLUMN_LINEAGE
+            FROM {DATABASE}.OL_COLUMN_LINEAGE
             WHERE lineage_id LIKE 'TEST_%'
         """)
         count = cursor.fetchone()[0]
@@ -447,11 +451,12 @@ Examples:
 
         # Capture EXPLAIN for depth=10 if requested
         if args.explain:
+            dataset = config['dataset'].format(DATABASE=DATABASE)
             for direction in config['directions']:
                 if direction == 'upstream':
-                    query = build_upstream_query(config['dataset'], config['field'], 10)
+                    query = build_upstream_query(dataset, config['field'], 10)
                 else:
-                    query = build_downstream_query(config['dataset'], config['field'], 10)
+                    query = build_downstream_query(dataset, config['field'], 10)
 
                 explain_output = run_explain(cursor, query)
                 print(f"\n  EXPLAIN ({direction}, depth=10):")

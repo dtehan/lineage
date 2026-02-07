@@ -28,6 +28,9 @@ from contextlib import contextmanager
 
 from db_config import CONFIG
 
+# Get database name from config
+DATABASE = CONFIG["database"]
+
 # Test results tracking
 results = {"passed": 0, "failed": 0, "skipped": 0}
 test_details = []
@@ -167,7 +170,7 @@ def build_upstream_query(dataset: str, field: str, max_depth: int = 10) -> str:
                 l.target_dataset, l.target_field,
                 1 AS depth,
                 CAST(l.lineage_id AS VARCHAR(4000)) AS path
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.target_dataset = '{dataset}'
               AND l.target_field = '{field}'
               AND l.is_active = 'Y'
@@ -180,7 +183,7 @@ def build_upstream_query(dataset: str, field: str, max_depth: int = 10) -> str:
                 l.target_dataset, l.target_field,
                 lp.depth + 1,
                 lp.path || ',' || l.lineage_id
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             INNER JOIN lineage_path lp
                 ON l.target_dataset = lp.source_dataset
                 AND l.target_field = lp.source_field
@@ -209,7 +212,7 @@ def build_downstream_query(dataset: str, field: str, max_depth: int = 10) -> str
                 l.target_dataset, l.target_field,
                 1 AS depth,
                 CAST(l.lineage_id AS VARCHAR(4000)) AS path
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.source_dataset = '{dataset}'
               AND l.source_field = '{field}'
               AND l.is_active = 'Y'
@@ -222,7 +225,7 @@ def build_downstream_query(dataset: str, field: str, max_depth: int = 10) -> str
                 l.target_dataset, l.target_field,
                 lp.depth + 1,
                 lp.path || ',' || l.lineage_id
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             INNER JOIN lineage_path lp
                 ON l.source_dataset = lp.target_dataset
                 AND l.source_field = lp.target_field
@@ -250,7 +253,7 @@ def build_bidirectional_query(dataset: str, field: str, max_depth: int = 10) -> 
                 l.target_dataset, l.target_field,
                 1 AS depth,
                 CAST(l.lineage_id AS VARCHAR(4000)) AS path
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.target_dataset = '{dataset}'
               AND l.target_field = '{field}'
               AND l.is_active = 'Y'
@@ -260,7 +263,7 @@ def build_bidirectional_query(dataset: str, field: str, max_depth: int = 10) -> 
                 l.target_dataset, l.target_field,
                 up.depth + 1,
                 up.path || ',' || l.lineage_id
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             INNER JOIN upstream_path up
                 ON l.target_dataset = up.source_dataset
                 AND l.target_field = up.source_field
@@ -277,7 +280,7 @@ def build_bidirectional_query(dataset: str, field: str, max_depth: int = 10) -> 
                 l.target_dataset, l.target_field,
                 1 AS depth,
                 CAST(l.lineage_id AS VARCHAR(4000)) AS path
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.source_dataset = '{dataset}'
               AND l.source_field = '{field}'
               AND l.is_active = 'Y'
@@ -287,7 +290,7 @@ def build_bidirectional_query(dataset: str, field: str, max_depth: int = 10) -> 
                 l.target_dataset, l.target_field,
                 dp.depth + 1,
                 dp.path || ',' || l.lineage_id
-            FROM demo_user.OL_COLUMN_LINEAGE l
+            FROM {DATABASE}.OL_COLUMN_LINEAGE l
             INNER JOIN downstream_path dp
                 ON l.source_dataset = dp.target_dataset
                 AND l.source_field = dp.target_field
@@ -328,7 +331,7 @@ def test_cycle_detection(cursor) -> None:
                        "Pattern not defined")
             continue
 
-        dataset = f"demo_user.{pattern}"
+        dataset = f"{DATABASE}.{pattern}"
         field = expected['start_field']
 
         try:
@@ -384,7 +387,7 @@ def test_diamond_deduplication(cursor) -> None:
                        "Pattern not defined")
             continue
 
-        dataset = f"demo_user.{pattern}"
+        dataset = f"{DATABASE}.{pattern}"
         field = expected['start_field']
 
         try:
@@ -426,7 +429,7 @@ def test_fanout_completeness(cursor) -> None:
                        "Pattern not defined")
             continue
 
-        dataset = f"demo_user.{pattern}"
+        dataset = f"{DATABASE}.{pattern}"
         field = expected['start_field']
 
         try:
@@ -468,7 +471,7 @@ def test_fanin_completeness(cursor) -> None:
                        "Pattern not defined")
             continue
 
-        dataset = f"demo_user.{pattern}"
+        dataset = f"{DATABASE}.{pattern}"
         field = expected['start_field']
 
         try:
@@ -514,7 +517,7 @@ def test_combined_patterns(cursor) -> None:
                        "Pattern not defined")
             continue
 
-        dataset = f"demo_user.{pattern}"
+        dataset = f"{DATABASE}.{pattern}"
         field = expected['start_field']
 
         try:
@@ -561,7 +564,7 @@ def test_depth_limiting(cursor) -> None:
     print("=" * 60)
 
     # Use CHAIN_TEST which has 4 levels: E->D->C->B->A
-    dataset = "demo_user.CHAIN_TEST"
+    dataset = f"{DATABASE}.CHAIN_TEST"
     field = "col_a"
 
     try:
@@ -618,7 +621,7 @@ def test_active_filtering(cursor) -> None:
     print("=" * 60)
 
     # Use INACTIVE_TEST which has 1 active and 1 inactive source
-    dataset = "demo_user.INACTIVE_TEST"
+    dataset = f"{DATABASE}.INACTIVE_TEST"
     field = "target"
 
     try:
@@ -646,9 +649,9 @@ def test_active_filtering(cursor) -> None:
 def check_test_data_exists(cursor) -> bool:
     """Check if test data from insert_cte_test_data.py exists."""
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COUNT(*)
-            FROM demo_user.OL_COLUMN_LINEAGE
+            FROM {DATABASE}.OL_COLUMN_LINEAGE
             WHERE lineage_id LIKE 'TEST_%'
         """)
         count = cursor.fetchone()[0]

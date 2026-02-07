@@ -13,6 +13,9 @@ from typing import Tuple, List
 
 from db_config import CONFIG
 
+# Get database name from config
+DATABASE = CONFIG["database"]
+
 # Test results tracking
 results = {"passed": 0, "failed": 0, "skipped": 0}
 test_details = []
@@ -36,10 +39,10 @@ def test_schema_validation(cursor) -> None:
     print("=" * 60)
 
     # TC-SCH-001: OL_NAMESPACE table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName, ColumnType, Nullable
         FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_NAMESPACE'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_NAMESPACE'
         ORDER BY ColumnId
     """)
     cols = cursor.fetchall()
@@ -52,9 +55,9 @@ def test_schema_validation(cursor) -> None:
                    f"Missing columns: {set(expected_cols) - set(found_cols)}")
 
     # TC-SCH-002: OL_DATASET table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_DATASET'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_DATASET'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["dataset_id", "namespace_id", "name", "description", "source_type"]
@@ -64,9 +67,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-002", "Verify OL_DATASET Table Structure", "failed")
 
     # TC-SCH-003: OL_DATASET_FIELD table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_DATASET_FIELD'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_DATASET_FIELD'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["field_id", "dataset_id", "field_name", "field_type", "nullable"]
@@ -76,9 +79,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-003", "Verify OL_DATASET_FIELD Table Structure", "failed")
 
     # TC-SCH-004: OL_COLUMN_LINEAGE table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_COLUMN_LINEAGE'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_COLUMN_LINEAGE'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["lineage_id", "source_namespace", "source_dataset", "source_field",
@@ -90,9 +93,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-004", "Verify OL_COLUMN_LINEAGE Table Structure", "failed")
 
     # TC-SCH-005: OL_JOB table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_JOB'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_JOB'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["job_id", "namespace_id", "name", "description", "job_type"]
@@ -102,9 +105,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-005", "Verify OL_JOB Table Structure", "failed")
 
     # TC-SCH-006: OL_RUN table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_RUN'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_RUN'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["run_id", "job_id", "event_type", "event_time"]
@@ -114,9 +117,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-006", "Verify OL_RUN Table Structure", "failed")
 
     # TC-SCH-007: OL_RUN_INPUT table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_RUN_INPUT'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_RUN_INPUT'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["run_id", "dataset_id"]
@@ -126,9 +129,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-007", "Verify OL_RUN_INPUT Table Structure", "failed")
 
     # TC-SCH-008: OL_RUN_OUTPUT table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_RUN_OUTPUT'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_RUN_OUTPUT'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["run_id", "dataset_id"]
@@ -138,9 +141,9 @@ def test_schema_validation(cursor) -> None:
         log_result("TC-SCH-008", "Verify OL_RUN_OUTPUT Table Structure", "failed")
 
     # TC-SCH-009: OL_SCHEMA_VERSION table structure
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT ColumnName FROM DBC.ColumnsV
-        WHERE DatabaseName = 'demo_user' AND TableName = 'OL_SCHEMA_VERSION'
+        WHERE DatabaseName = '{DATABASE}' AND TableName = 'OL_SCHEMA_VERSION'
     """)
     cols = [c[0].strip().lower() for c in cursor.fetchall()]
     expected = ["version_id", "openlineage_spec_version", "schema_version"]
@@ -171,7 +174,7 @@ def test_data_extraction(cursor) -> None:
     print("=" * 60)
 
     # TC-EXT-001: Namespace extraction
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_NAMESPACE")
+    cursor.execute("SELECT COUNT(*) FROM {DATABASE}.OL_NAMESPACE")
     count = cursor.fetchone()[0]
     if count >= 1:
         log_result("TC-EXT-001", "Extract Namespaces - Basic Functionality", "passed")
@@ -180,7 +183,7 @@ def test_data_extraction(cursor) -> None:
                    f"Expected >= 1, got {count}")
 
     # TC-EXT-002: Dataset extraction
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_DATASET")
+    cursor.execute("SELECT COUNT(*) FROM {DATABASE}.OL_DATASET")
     count = cursor.fetchone()[0]
     if count >= 1:
         log_result("TC-EXT-002", "Extract Datasets - Basic Functionality", "passed")
@@ -189,7 +192,7 @@ def test_data_extraction(cursor) -> None:
                    f"Expected >= 1, got {count}")
 
     # TC-EXT-003: Dataset field extraction
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_DATASET_FIELD")
+    cursor.execute("SELECT COUNT(*) FROM {DATABASE}.OL_DATASET_FIELD")
     count = cursor.fetchone()[0]
     if count >= 1:
         log_result("TC-EXT-003", "Extract Dataset Fields - Basic Functionality", "passed")
@@ -198,9 +201,9 @@ def test_data_extraction(cursor) -> None:
                    f"Expected >= 1, got {count}")
 
     # TC-EXT-004: System database exclusion for datasets
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_DATASET d
-        JOIN demo_user.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_DATASET d
+        JOIN {DATABASE}.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
         WHERE d.name LIKE 'DBC.%' OR d.name LIKE 'SYSLIB.%' OR d.name LIKE 'SystemFe.%'
     """)
     count = cursor.fetchone()[0]
@@ -211,8 +214,8 @@ def test_data_extraction(cursor) -> None:
                    f"Found {count} system datasets (may be intentional)")
 
     # TC-EXT-005: Field data type accuracy
-    cursor.execute("""
-        SELECT field_type FROM demo_user.OL_DATASET_FIELD
+    cursor.execute(f"""
+        SELECT field_type FROM {DATABASE}.OL_DATASET_FIELD
         WHERE field_name = 'email'
         SAMPLE 1
     """)
@@ -224,8 +227,8 @@ def test_data_extraction(cursor) -> None:
                    "No email field found or type mismatch")
 
     # TC-EXT-006: Nullable flag accuracy
-    cursor.execute("""
-        SELECT nullable FROM demo_user.OL_DATASET_FIELD
+    cursor.execute(f"""
+        SELECT nullable FROM {DATABASE}.OL_DATASET_FIELD
         WHERE field_name = 'customer_id'
         SAMPLE 1
     """)
@@ -244,7 +247,7 @@ def test_lineage_extraction(cursor) -> None:
     print("=" * 60)
 
     # TC-LIN-001: Column lineage exists
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE")
+    cursor.execute("SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE")
     count = cursor.fetchone()[0]
     if count >= 1:
         log_result("TC-LIN-001", "Extract Column Lineage - Basic Functionality", "passed")
@@ -253,8 +256,8 @@ def test_lineage_extraction(cursor) -> None:
                    f"Expected >= 1, got {count}")
 
     # TC-LIN-002: Transformation type classification
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE transformation_type IN ('DIRECT', 'CALCULATION', 'AGGREGATION', 'JOIN')
     """)
     count = cursor.fetchone()[0]
@@ -264,8 +267,8 @@ def test_lineage_extraction(cursor) -> None:
         log_result("TC-LIN-002", "Extract Column Lineage - Transformation Types", "failed")
 
     # TC-LIN-003: Active lineage filtering
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE is_active = 'Y'
     """)
     count = cursor.fetchone()[0]
@@ -275,9 +278,9 @@ def test_lineage_extraction(cursor) -> None:
         log_result("TC-LIN-003", "Active Lineage Records Exist", "skipped")
 
     # TC-LIN-004: Confidence scores
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT MIN(confidence_score), MAX(confidence_score)
-        FROM demo_user.OL_COLUMN_LINEAGE
+        FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE confidence_score IS NOT NULL
     """)
     row = cursor.fetchone()
@@ -296,18 +299,18 @@ def test_recursive_ctes(cursor) -> None:
 
     # TC-CTE-001: Single level upstream
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             WITH RECURSIVE upstream_lineage AS (
                 SELECT source_dataset, source_field, target_dataset, target_field, 1 AS depth,
                        TRIM(target_dataset) || '.' || TRIM(target_field) || '->' ||
                        TRIM(source_dataset) || '.' || TRIM(source_field) AS path
-                FROM demo_user.OL_COLUMN_LINEAGE
-                WHERE TRIM(target_dataset) || '.' || TRIM(target_field) = 'demo_user.STG_CUSTOMER.full_name'
+                FROM {DATABASE}.OL_COLUMN_LINEAGE
+                WHERE TRIM(target_dataset) || '.' || TRIM(target_field) = '{DATABASE}.STG_CUSTOMER.full_name'
                   AND is_active = 'Y'
                 UNION ALL
                 SELECT cl.source_dataset, cl.source_field, cl.target_dataset, cl.target_field, ul.depth + 1,
                        ul.path || '->' || TRIM(cl.source_dataset) || '.' || TRIM(cl.source_field)
-                FROM demo_user.OL_COLUMN_LINEAGE cl
+                FROM {DATABASE}.OL_COLUMN_LINEAGE cl
                 JOIN upstream_lineage ul ON TRIM(cl.target_dataset) = TRIM(ul.source_dataset)
                                         AND TRIM(cl.target_field) = TRIM(ul.source_field)
                 WHERE cl.is_active = 'Y' AND ul.depth < 10
@@ -326,16 +329,16 @@ def test_recursive_ctes(cursor) -> None:
 
     # TC-CTE-002: Multi-level upstream
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             WITH RECURSIVE upstream_lineage AS (
                 SELECT source_dataset, source_field, 1 AS depth,
                        TRIM(source_dataset) || '.' || TRIM(source_field) AS path
-                FROM demo_user.OL_COLUMN_LINEAGE
+                FROM {DATABASE}.OL_COLUMN_LINEAGE
                 WHERE is_active = 'Y'
                 UNION ALL
                 SELECT cl.source_dataset, cl.source_field, ul.depth + 1,
                        ul.path || '->' || TRIM(cl.source_dataset) || '.' || TRIM(cl.source_field)
-                FROM demo_user.OL_COLUMN_LINEAGE cl
+                FROM {DATABASE}.OL_COLUMN_LINEAGE cl
                 JOIN upstream_lineage ul ON TRIM(cl.target_dataset) = TRIM(ul.source_dataset)
                                         AND TRIM(cl.target_field) = TRIM(ul.source_field)
                 WHERE cl.is_active = 'Y' AND ul.depth < 10
@@ -354,16 +357,16 @@ def test_recursive_ctes(cursor) -> None:
 
     # TC-CTE-003: Max depth limit
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             WITH RECURSIVE upstream_lineage AS (
                 SELECT source_dataset, source_field, 1 AS depth,
                        TRIM(source_dataset) || '.' || TRIM(source_field) AS path
-                FROM demo_user.OL_COLUMN_LINEAGE
+                FROM {DATABASE}.OL_COLUMN_LINEAGE
                 WHERE is_active = 'Y'
                 UNION ALL
                 SELECT cl.source_dataset, cl.source_field, ul.depth + 1,
                        ul.path || '->' || TRIM(cl.source_dataset) || '.' || TRIM(cl.source_field)
-                FROM demo_user.OL_COLUMN_LINEAGE cl
+                FROM {DATABASE}.OL_COLUMN_LINEAGE cl
                 JOIN upstream_lineage ul ON TRIM(cl.target_dataset) = TRIM(ul.source_dataset)
                                         AND TRIM(cl.target_field) = TRIM(ul.source_field)
                 WHERE cl.is_active = 'Y' AND ul.depth < 2
@@ -382,17 +385,17 @@ def test_recursive_ctes(cursor) -> None:
 
     # TC-CTE-004: Downstream lineage
     try:
-        cursor.execute("""
+        cursor.execute(f"""
             WITH RECURSIVE downstream_lineage AS (
                 SELECT source_dataset, source_field, target_dataset, target_field, 1 AS depth,
                        TRIM(source_dataset) || '.' || TRIM(source_field) || '->' ||
                        TRIM(target_dataset) || '.' || TRIM(target_field) AS path
-                FROM demo_user.OL_COLUMN_LINEAGE
+                FROM {DATABASE}.OL_COLUMN_LINEAGE
                 WHERE is_active = 'Y'
                 UNION ALL
                 SELECT cl.source_dataset, cl.source_field, cl.target_dataset, cl.target_field, dl.depth + 1,
                        dl.path || '->' || TRIM(cl.target_dataset) || '.' || TRIM(cl.target_field)
-                FROM demo_user.OL_COLUMN_LINEAGE cl
+                FROM {DATABASE}.OL_COLUMN_LINEAGE cl
                 JOIN downstream_lineage dl ON TRIM(cl.source_dataset) = TRIM(dl.target_dataset)
                                            AND TRIM(cl.source_field) = TRIM(dl.target_field)
                 WHERE cl.is_active = 'Y' AND dl.depth < 10
@@ -409,9 +412,9 @@ def test_recursive_ctes(cursor) -> None:
         log_result("TC-CTE-004", "Downstream Lineage - Basic Traversal", "failed", str(e)[:80])
 
     # TC-CTE-005: Transformation types
-    cursor.execute("""
+    cursor.execute(f"""
         SELECT DISTINCT transformation_type
-        FROM demo_user.OL_COLUMN_LINEAGE
+        FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE transformation_type IS NOT NULL
     """)
     types = [r[0].strip() if r[0] else None for r in cursor.fetchall()]
@@ -436,10 +439,10 @@ def test_edge_cases(cursor) -> None:
 
     # TC-EDGE-002: No upstream lineage (source columns)
     try:
-        cursor.execute("""
-            SELECT COUNT(*) FROM demo_user.OL_DATASET_FIELD f
+        cursor.execute(f"""
+            SELECT COUNT(*) FROM {DATABASE}.OL_DATASET_FIELD f
             WHERE NOT EXISTS (
-                SELECT 1 FROM demo_user.OL_COLUMN_LINEAGE cl
+                SELECT 1 FROM {DATABASE}.OL_COLUMN_LINEAGE cl
                 WHERE TRIM(cl.target_dataset) = TRIM(f.dataset_id)
                   AND TRIM(cl.target_field) = TRIM(f.field_name)
             )
@@ -455,10 +458,10 @@ def test_edge_cases(cursor) -> None:
 
     # TC-EDGE-003: No downstream lineage (leaf columns)
     try:
-        cursor.execute("""
-            SELECT COUNT(*) FROM demo_user.OL_DATASET_FIELD f
+        cursor.execute(f"""
+            SELECT COUNT(*) FROM {DATABASE}.OL_DATASET_FIELD f
             WHERE NOT EXISTS (
-                SELECT 1 FROM demo_user.OL_COLUMN_LINEAGE cl
+                SELECT 1 FROM {DATABASE}.OL_COLUMN_LINEAGE cl
                 WHERE TRIM(cl.source_dataset) = TRIM(f.dataset_id)
                   AND TRIM(cl.source_field) = TRIM(f.field_name)
             )
@@ -473,16 +476,16 @@ def test_edge_cases(cursor) -> None:
         log_result("TC-EDGE-003", "Empty Results - Leaf Columns Exist", "failed", str(e)[:80])
 
     # TC-EDGE-004: Non-existent column query
-    cursor.execute("""
+    cursor.execute(f"""
         WITH RECURSIVE upstream_lineage AS (
             SELECT source_dataset, source_field, 1 AS depth
-            FROM demo_user.OL_COLUMN_LINEAGE
+            FROM {DATABASE}.OL_COLUMN_LINEAGE
             WHERE TRIM(target_dataset) = 'NONEXISTENT.TABLE'
               AND TRIM(target_field) = 'COLUMN'
               AND is_active = 'Y'
             UNION ALL
             SELECT cl.source_dataset, cl.source_field, ul.depth + 1
-            FROM demo_user.OL_COLUMN_LINEAGE cl
+            FROM {DATABASE}.OL_COLUMN_LINEAGE cl
             JOIN upstream_lineage ul ON TRIM(cl.target_dataset) = TRIM(ul.source_dataset)
                                     AND TRIM(cl.target_field) = TRIM(ul.source_field)
             WHERE cl.is_active = 'Y' AND ul.depth < 10
@@ -508,10 +511,10 @@ def test_data_integrity(cursor) -> None:
     print("=" * 60)
 
     # TC-INT-001: Column lineage references valid fields (source)
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE cl
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE cl
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET_FIELD f
+            SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD f
             WHERE TRIM(f.dataset_id) = TRIM(cl.source_dataset)
               AND TRIM(f.field_name) = TRIM(cl.source_field)
         )
@@ -525,10 +528,10 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} orphaned source references")
 
     # TC-INT-002: Column lineage references valid fields (target)
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE cl
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE cl
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET_FIELD f
+            SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD f
             WHERE TRIM(f.dataset_id) = TRIM(cl.target_dataset)
               AND TRIM(f.field_name) = TRIM(cl.target_field)
         )
@@ -542,10 +545,10 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} orphaned target references")
 
     # TC-INT-003: Fields reference valid datasets
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_DATASET_FIELD f
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_DATASET_FIELD f
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET d
+            SELECT 1 FROM {DATABASE}.OL_DATASET d
             WHERE d.dataset_id = f.dataset_id
         )
     """)
@@ -557,10 +560,10 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} orphaned fields")
 
     # TC-INT-004: Datasets reference valid namespaces
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_DATASET d
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_DATASET d
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_NAMESPACE n
+            SELECT 1 FROM {DATABASE}.OL_NAMESPACE n
             WHERE n.namespace_id = d.namespace_id
         )
     """)
@@ -572,8 +575,8 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} orphaned datasets")
 
     # TC-INT-005: Lineage ID uniqueness
-    cursor.execute("""
-        SELECT lineage_id, COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE
+    cursor.execute(f"""
+        SELECT lineage_id, COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE
         GROUP BY lineage_id HAVING COUNT(*) > 1
     """)
     dupes = cursor.fetchall()
@@ -584,8 +587,8 @@ def test_data_integrity(cursor) -> None:
                    f"Found {len(dupes)} duplicate lineage IDs")
 
     # TC-INT-006: Confidence score range
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE confidence_score < 0 OR confidence_score > 1
     """)
     count = cursor.fetchone()[0]
@@ -596,8 +599,8 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} out-of-range scores")
 
     # TC-INT-007: Active flag values
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE
         WHERE is_active NOT IN ('Y', 'N')
     """)
     count = cursor.fetchone()[0]
@@ -608,10 +611,10 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} invalid is_active values")
 
     # TC-INT-008: Run references valid jobs
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_RUN r
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_RUN r
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_JOB j
+            SELECT 1 FROM {DATABASE}.OL_JOB j
             WHERE j.job_id = r.job_id
         )
     """)
@@ -623,10 +626,10 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} orphaned runs")
 
     # TC-INT-009: Run inputs reference valid datasets
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_RUN_INPUT ri
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_RUN_INPUT ri
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET d
+            SELECT 1 FROM {DATABASE}.OL_DATASET d
             WHERE d.dataset_id = ri.dataset_id
         )
     """)
@@ -638,10 +641,10 @@ def test_data_integrity(cursor) -> None:
                    f"Found {count} orphaned run inputs")
 
     # TC-INT-010: Run outputs reference valid datasets
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_RUN_OUTPUT ro
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_RUN_OUTPUT ro
         WHERE NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET d
+            SELECT 1 FROM {DATABASE}.OL_DATASET d
             WHERE d.dataset_id = ro.dataset_id
         )
     """)

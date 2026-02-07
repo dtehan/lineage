@@ -16,6 +16,9 @@ from datetime import datetime
 
 from db_config import CONFIG
 
+# Get database name from config
+DATABASE = CONFIG["database"]
+
 # Test namespace
 TEST_NAMESPACE = {
     'name': 'teradata://demo',
@@ -25,87 +28,87 @@ TEST_NAMESPACE = {
 # Test datasets (tables) with their columns
 TEST_DATASETS = [
     {
-        'name': 'demo_user.CYCLE_TEST',
+        'name': '{DATABASE}.CYCLE_TEST',
         'description': '2-node cycle test (A -> B -> A)',
         'columns': ['col_a', 'col_b']
     },
     {
-        'name': 'demo_user.MCYCLE_TEST',
+        'name': '{DATABASE}.MCYCLE_TEST',
         'description': '4-node cycle test (A -> B -> C -> D -> A)',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d']
     },
     {
-        'name': 'demo_user.CYCLE5_TEST',
+        'name': '{DATABASE}.CYCLE5_TEST',
         'description': '5-node cycle test (A -> B -> C -> D -> E -> A)',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d', 'col_e']
     },
     {
-        'name': 'demo_user.DIAMOND',
+        'name': '{DATABASE}.DIAMOND',
         'description': 'Simple diamond pattern (A -> B/C -> D)',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d']
     },
     {
-        'name': 'demo_user.NESTED_DIAMOND',
+        'name': '{DATABASE}.NESTED_DIAMOND',
         'description': 'Nested diamond pattern (A -> B/C -> D -> E/F -> G)',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d', 'col_e', 'col_f', 'col_g']
     },
     {
-        'name': 'demo_user.WIDE_DIAMOND',
+        'name': '{DATABASE}.WIDE_DIAMOND',
         'description': 'Wide diamond pattern (A -> B/C/D/E -> F)',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d', 'col_e', 'col_f']
     },
     {
-        'name': 'demo_user.INACTIVE_TEST',
+        'name': '{DATABASE}.INACTIVE_TEST',
         'description': 'Inactive lineage filtering test',
         'columns': ['active_source', 'inactive_source', 'target']
     },
     {
-        'name': 'demo_user.CHAIN_TEST',
+        'name': '{DATABASE}.CHAIN_TEST',
         'description': 'Multi-level chain test (A <- B <- C <- D <- E)',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d', 'col_e']
     },
     {
-        'name': 'demo_user.MULTISRC_TEST',
+        'name': '{DATABASE}.MULTISRC_TEST',
         'description': 'Multiple sources test (A <- B/C/D)',
         'columns': ['src_b', 'src_c', 'src_d', 'target_a']
     },
     {
-        'name': 'demo_user.FANOUT_TEST',
+        'name': '{DATABASE}.FANOUT_TEST',
         'description': 'Fan-out pattern test (1 -> many)',
         'columns': ['source', 'target_1', 'target_2', 'target_3', 'target_4', 'target_1a', 'target_1b']
     },
     {
-        'name': 'demo_user.FANOUT5_TEST',
+        'name': '{DATABASE}.FANOUT5_TEST',
         'description': 'Fan-out 5 pattern (source -> target_1..5)',
         'columns': ['source', 'target_1', 'target_2', 'target_3', 'target_4', 'target_5']
     },
     {
-        'name': 'demo_user.FANOUT10_TEST',
+        'name': '{DATABASE}.FANOUT10_TEST',
         'description': 'Fan-out 10 pattern (source -> target_01..10)',
         'columns': ['source'] + [f'target_{i:02d}' for i in range(1, 11)]
     },
     {
-        'name': 'demo_user.FANIN5_TEST',
+        'name': '{DATABASE}.FANIN5_TEST',
         'description': 'Fan-in 5 pattern (src_1..5 -> target)',
         'columns': ['src_1', 'src_2', 'src_3', 'src_4', 'src_5', 'target']
     },
     {
-        'name': 'demo_user.FANIN10_TEST',
+        'name': '{DATABASE}.FANIN10_TEST',
         'description': 'Fan-in 10 pattern (src_01..10 -> target)',
         'columns': [f'src_{i:02d}' for i in range(1, 11)] + ['target']
     },
     {
-        'name': 'demo_user.COMBINED_CYCLE_DIAMOND',
+        'name': '{DATABASE}.COMBINED_CYCLE_DIAMOND',
         'description': 'Combined cycle+diamond pattern',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d']
     },
     {
-        'name': 'demo_user.COMBINED_FAN',
+        'name': '{DATABASE}.COMBINED_FAN',
         'description': 'Combined fan-out+fan-in pattern',
         'columns': ['col_a', 'col_b', 'col_c', 'col_d', 'col_e']
     },
     {
-        'name': 'demo_user.TRANS_TEST',
+        'name': '{DATABASE}.TRANS_TEST',
         'description': 'Transformation types test',
         'columns': ['src1', 'src2', 'tgt1', 'tgt2']
     },
@@ -131,8 +134,8 @@ def main():
     print("\n--- Processing namespace ---")
     try:
         # Check if namespace exists
-        cursor.execute("""
-            SELECT namespace_id FROM demo_user.OL_NAMESPACE
+        cursor.execute(f"""
+            SELECT namespace_id FROM {DATABASE}.OL_NAMESPACE
             WHERE namespace_uri = ?
         """, (TEST_NAMESPACE['name'],))
 
@@ -144,8 +147,8 @@ def main():
             # Use namespace URI as ID (simple approach for test data)
             namespace_id = 'test-demo'
             now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-            cursor.execute("""
-                INSERT INTO demo_user.OL_NAMESPACE (namespace_id, namespace_uri, description, created_at)
+            cursor.execute(f"""
+                INSERT INTO {DATABASE}.OL_NAMESPACE (namespace_id, namespace_uri, description, created_at)
                 VALUES (?, ?, ?, CAST(? AS TIMESTAMP(0)))
             """, (namespace_id, TEST_NAMESPACE['name'], TEST_NAMESPACE['description'], now))
             print(f"  Created namespace '{TEST_NAMESPACE['name']}' (ID: {namespace_id})")
@@ -160,14 +163,18 @@ def main():
     dataset_count = 0
     field_count = 0
 
-    for dataset_info in TEST_DATASETS:
+    for dataset_template in TEST_DATASETS:
         try:
+            # Substitute {DATABASE} in dataset name
+            dataset_info = dataset_template.copy()
+            dataset_info['name'] = dataset_info['name'].format(DATABASE=DATABASE)
+
             # Create dataset ID from namespace and name
             dataset_id = f"{namespace_id}:{dataset_info['name']}"
 
             # Check if dataset exists
-            cursor.execute("""
-                SELECT dataset_id FROM demo_user.OL_DATASET
+            cursor.execute(f"""
+                SELECT dataset_id FROM {DATABASE}.OL_DATASET
                 WHERE namespace_id = ? AND name = ?
             """, (namespace_id, dataset_info['name']))
 
@@ -176,8 +183,8 @@ def main():
                 print(f"  Dataset '{dataset_info['name']}' already exists")
             else:
                 now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                cursor.execute("""
-                    INSERT INTO demo_user.OL_DATASET
+                cursor.execute(f"""
+                    INSERT INTO {DATABASE}.OL_DATASET
                     (dataset_id, namespace_id, name, source_type, description, created_at, is_active)
                     VALUES (?, ?, ?, 'TABLE', ?, CAST(? AS TIMESTAMP(0)), 'Y')
                 """, (dataset_id, namespace_id, dataset_info['name'], dataset_info['description'], now))
@@ -190,8 +197,8 @@ def main():
                     field_id = f"{dataset_id}:{column_name}"
 
                     # Check if field exists
-                    cursor.execute("""
-                        SELECT field_id FROM demo_user.OL_DATASET_FIELD
+                    cursor.execute(f"""
+                        SELECT field_id FROM {DATABASE}.OL_DATASET_FIELD
                         WHERE dataset_id = ? AND field_name = ?
                     """, (dataset_id, column_name))
 
@@ -199,8 +206,8 @@ def main():
                         print(f"    Field '{column_name}' already exists")
                     else:
                         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        cursor.execute("""
-                            INSERT INTO demo_user.OL_DATASET_FIELD
+                        cursor.execute(f"""
+                            INSERT INTO {DATABASE}.OL_DATASET_FIELD
                             (field_id, dataset_id, field_name, field_type, field_description, ordinal_position, created_at)
                             VALUES (?, ?, ?, 'VARCHAR(100)', ?, ?, CAST(? AS TIMESTAMP(0)))
                         """, (field_id, dataset_id, column_name, f'Test column {column_name}', ordinal_position, now))
@@ -215,51 +222,51 @@ def main():
 
     # 3. Summary
     print("\n--- Summary ---")
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_NAMESPACE WHERE namespace_uri LIKE '%demo%'")
+    cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.OL_NAMESPACE WHERE namespace_uri LIKE '%demo%'")
     ns_count = cursor.fetchone()[0]
     print(f"  Namespaces with 'demo': {ns_count}")
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_DATASET d
-        JOIN demo_user.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_DATASET d
+        JOIN {DATABASE}.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
         WHERE n.namespace_uri = ?
     """, (TEST_NAMESPACE['name'],))
     ds_count = cursor.fetchone()[0]
     print(f"  Datasets in test namespace: {ds_count}")
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_DATASET_FIELD f
-        JOIN demo_user.OL_DATASET d ON f.dataset_id = d.dataset_id
-        JOIN demo_user.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_DATASET_FIELD f
+        JOIN {DATABASE}.OL_DATASET d ON f.dataset_id = d.dataset_id
+        JOIN {DATABASE}.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
         WHERE n.namespace_uri = ?
     """, (TEST_NAMESPACE['name'],))
     field_total = cursor.fetchone()[0]
     print(f"  Fields in test datasets: {field_total}")
 
-    cursor.execute("SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
+    cursor.execute(f"SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE WHERE lineage_id LIKE 'TEST_%'")
     lineage_count = cursor.fetchone()[0]
     print(f"  Test lineage records: {lineage_count}")
 
     # 4. Verify lineage references
     print("\n--- Verifying lineage integrity ---")
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE cl
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE cl
         WHERE cl.lineage_id LIKE 'TEST_%'
         AND NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET d
-            JOIN demo_user.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+            SELECT 1 FROM {DATABASE}.OL_DATASET d
+            JOIN {DATABASE}.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
             WHERE n.namespace_uri = cl.source_namespace
             AND d.name = cl.source_dataset
         )
     """)
     missing_source = cursor.fetchone()[0]
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM demo_user.OL_COLUMN_LINEAGE cl
+    cursor.execute(f"""
+        SELECT COUNT(*) FROM {DATABASE}.OL_COLUMN_LINEAGE cl
         WHERE cl.lineage_id LIKE 'TEST_%'
         AND NOT EXISTS (
-            SELECT 1 FROM demo_user.OL_DATASET d
-            JOIN demo_user.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+            SELECT 1 FROM {DATABASE}.OL_DATASET d
+            JOIN {DATABASE}.OL_NAMESPACE n ON d.namespace_id = n.namespace_id
             WHERE n.namespace_uri = cl.target_namespace
             AND d.name = cl.target_dataset
         )

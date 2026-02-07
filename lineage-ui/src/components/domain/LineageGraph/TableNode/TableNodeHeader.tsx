@@ -10,6 +10,7 @@ export interface TableNodeHeaderProps {
   isExpanded: boolean;
   columnCount: number;
   onToggleExpand: () => void;
+  onNodeClick?: () => void;
 }
 
 const AssetIcon = ({ type }: { type: AssetType }) => {
@@ -58,6 +59,7 @@ export const TableNodeHeader = memo(function TableNodeHeader({
   isExpanded,
   columnCount,
   onToggleExpand,
+  onNodeClick,
 }: TableNodeHeaderProps) {
   const headerBgClass = getHeaderBgClass(assetType);
 
@@ -66,7 +68,7 @@ export const TableNodeHeader = memo(function TableNodeHeader({
       className={`flex items-center justify-between h-10 px-3 rounded-t-lg cursor-pointer transition-colors ${headerBgClass}`}
       onClick={(e) => {
         e.stopPropagation();
-        onToggleExpand();
+        onNodeClick?.();
       }}
       data-testid="table-node-header"
     >

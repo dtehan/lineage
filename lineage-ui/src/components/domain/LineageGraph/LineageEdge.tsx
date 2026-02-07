@@ -115,17 +115,6 @@ export const LineageEdge = memo(function LineageEdge({
 
   return (
     <>
-      {/* Invisible wider path for easier hover detection */}
-      <path
-        d={edgePath}
-        fill="none"
-        stroke="transparent"
-        strokeWidth={20}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        style={{ cursor: 'pointer' }}
-      />
-
       {/* Main edge */}
       <BaseEdge
         id={id}
@@ -137,6 +126,7 @@ export const LineageEdge = memo(function LineageEdge({
           opacity: finalOpacity,
           strokeDasharray: shouldAnimate ? '5 5' : undefined,
           transition: 'stroke-width 200ms ease-out, opacity 200ms ease-out',
+          pointerEvents: 'none', // Let invisible hover path handle events
         }}
         className={shouldAnimate ? 'animate-dash' : ''}
       />
@@ -149,9 +139,20 @@ export const LineageEdge = memo(function LineageEdge({
           stroke={baseColor}
           strokeWidth={6}
           strokeOpacity={0.3}
-          style={{ filter: 'blur(3px)' }}
+          style={{ filter: 'blur(3px)', pointerEvents: 'none' }}
         />
       )}
+
+      {/* Invisible wider path for easier hover detection - rendered last to be on top */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={20}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        style={{ cursor: 'pointer' }}
+      />
 
       {/* Edge label on hover or selection */}
       {(isHovered || isSelected) && edgeData?.transformationType && (

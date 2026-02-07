@@ -85,6 +85,14 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
     [setSelectedAssetId]
   );
 
+  const handleNodeClick = useCallback(() => {
+    // When the table node header is clicked, select the first column
+    // This triggers path highlighting and dimming animation
+    if (data.columns.length > 0) {
+      setSelectedAssetId(data.columns[0].id);
+    }
+  }, [data.columns, setSelectedAssetId]);
+
   return (
     <div
       className={`
@@ -103,6 +111,7 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
         isExpanded={isExpanded}
         columnCount={data.columns.length}
         onToggleExpand={handleToggleExpand}
+        onNodeClick={handleNodeClick}
       />
 
       {isExpanded && (

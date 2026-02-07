@@ -16,19 +16,79 @@ The schema is aligned with [OpenLineage spec v2-0-2](https://openlineage.io/):
 - **OL_COLUMN_LINEAGE** - Column lineage with transformation types
 - **OL_SCHEMA_VERSION** - Schema version tracking
 
-The `scripts/populate/populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. For view columns, it uses Teradata's `HELP COLUMN` command to retrieve actual column types (since `DBC.ColumnsV` returns NULL for view column types), ensuring accurate type information for both tables and views.
+The `scripts/populate/populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. It uses `DBC.ColumnsJQV` instead of `DBC.ColumnsV` because ColumnsJQV provides complete column type information for both tables AND views (ColumnsV returns NULL for view column types).
+
+**IMPORTANT:** The populate script requires QVCI (Queryable View Column Index) to be enabled on your Teradata system. See the [QVCI Requirements](#qvci-requirements) section below.
+
+## Lineage Population Modes
+
+The `populate_lineage.py` script supports two modes for populating column-level lineage:
+
+### Fixture Mode (Default)
+
+Uses hardcoded mappings from `fixtures/lineage_mappings.py` for the demo medallion architecture.
+
+```bash
+python scripts/populate/populate_lineage.py              # Default: fixtures
+python scripts/populate/populate_lineage.py --fixtures   # Explicit
+```
+
+**Best for:** Testing, demos, development environments.
+
+### DBQL Mode
+
+Extracts lineage by parsing executed SQL from Teradata's DBQL (Database Query Log) tables.
+
+```bash
+python scripts/populate/populate_lineage.py --dbql                    # Last 30 days
+python scripts/populate/populate_lineage.py --dbql --since 2024-01-01 # Since date
+python scripts/populate/populate_lineage.py --dbql --full             # All history
+```
+
+**Requirements:**
+- SELECT access on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`
+- Query logging enabled: `BEGIN QUERY LOGGING WITH SQL, OBJECTS ON ALL`
+- `sqlglot` library: `pip install sqlglot>=25.0.0`
+
+**Best for:** Production environments with DBQL enabled.
+
+## QVCI Requirements
+
+The `populate_lineage.py` script requires QVCI (Queryable View Column Index) to be enabled because it uses `DBC.ColumnsJQV` to extract column metadata.
+
+### Checking QVCI Status
+
+Try running the populate script. If QVCI is disabled, you'll receive error 9719: "QVCI feature is disabled."
+
+### Enabling QVCI
+
+Contact your Teradata DBA to enable QVCI using the `dbscontrol` utility:
+
+```bash
+dbscontrol << EOF
+M internal 551=false
+W
+EOF
+```
+
+**Note:** This requires a database restart. See `CLAUDE.md` for complete details and fallback options.
 
 ## Directory Structure
 
 ```
 database/
 ├── db_config.py                              # Database connection configuration
+├── fixtures/                                 # Test data fixtures
+│   ├── __init__.py
+│   └── lineage_mappings.py                   # Demo lineage mappings (SRC->STG->DIM->FACT)
 ├── scripts/
 │   ├── setup/                                # One-time setup operations
 │   │   ├── setup_lineage_schema.py           # Create OpenLineage tables (OL_*)
 │   │   └── setup_test_data.py                # Create test data tables
 │   ├── populate/                             # Data population scripts
-│   │   ├── populate_lineage.py               # Populate OpenLineage tables from DBC views
+│   │   ├── populate_lineage.py               # Main entry point (fixtures or DBQL)
+│   │   ├── dbql_extractor.py                 # DBQL extraction logic
+│   │   ├── sql_parser.py                     # SQLGlot-based SQL parser
 │   │   └── populate_test_metadata.py         # Populate OL_* metadata for test tables
 │   └── utils/                                # Testing & performance utilities
 │       ├── insert_cte_test_data.py           # Insert test lineage patterns
@@ -39,8 +99,8 @@ database/
 │   ├── test_credential_validation.py         # Credential validation tests
 │   └── test_dbql_error_handling.py           # DBQL error handling tests
 └── archive/                                  # Archived experimental code
-    ├── extract_dbql_lineage.py               # DBQL extraction (archived)
-    └── sql_parser.py                         # SQL parser (archived)
+    ├── extract_dbql_lineage.py               # Original DBQL extraction (for reference)
+    └── sql_parser.py                         # Original SQL parser (for reference)
 ```
 
 ## Usage
@@ -51,8 +111,11 @@ database/
 # 1. Create OpenLineage tables
 python scripts/setup/setup_lineage_schema.py --openlineage
 
-# 2. Populate with production data
+# 2. Populate with fixture mappings (testing/demo)
 python scripts/populate/populate_lineage.py
+
+# Or: Populate from DBQL (production)
+python scripts/populate/populate_lineage.py --dbql
 
 # Preview what would be populated (dry-run)
 python scripts/populate/populate_lineage.py --dry-run
@@ -79,7 +142,7 @@ Test data includes:
 - 89 lineage records covering 17 test patterns
 - 2-node, 4-node, and 5-node cycles
 - Simple, nested, and wide diamond patterns
-- Fan-out patterns (1→5, 1→10) and fan-in patterns (5→1, 10→1)
+- Fan-out patterns (1->5, 1->10) and fan-in patterns (5->1, 10->1)
 - Combined patterns (cycle+diamond, fan-out+fan-in)
 
 ## Configuration
@@ -100,3 +163,27 @@ Uses environment variables from `.env` or `db_config.py`:
 | AGGREGATION | DIRECT | AGGREGATION |
 | JOIN | INDIRECT | JOIN |
 | FILTER | INDIRECT | FILTER |
+
+## SQL Parsing
+
+The DBQL extraction mode uses [SQLGlot](https://github.com/tobymao/sqlglot) to parse SQL and extract column-level lineage. Supported statement types:
+
+| Statement Type | DBQL StatementType | Example |
+|----------------|-------------------|---------|
+| INSERT...SELECT | Insert | `INSERT INTO target SELECT ... FROM source` |
+| MERGE INTO | Merge Into | `MERGE INTO target USING source ...` |
+| CREATE TABLE AS | Create Table | `CREATE TABLE target AS SELECT ... FROM source` |
+| UPDATE...FROM | Update | `UPDATE target FROM source SET ...` |
+
+The parser handles:
+- Table aliases and qualified names
+- CTEs (Common Table Expressions)
+- JOINs (INNER, LEFT, RIGHT, FULL)
+- Subqueries in SELECT clause
+- Aggregation functions (SUM, COUNT, AVG, etc.)
+- Expression columns (CONCAT, CASE WHEN, etc.)
+
+**Limitations:**
+- SELECT * requires schema information for column expansion
+- Complex Teradata-specific syntax (NORMALIZE, PERIOD) may need custom handling
+- Unqualified column names in multi-table queries need schema for disambiguation
