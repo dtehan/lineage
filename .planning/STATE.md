@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Complete
+**Current focus:** Gap closure - fixing dataset ID format mismatch in statistics/DDL endpoints
 
 ## Current Position
 
-Milestone: v4.0 Interactive Graph Experience
-Phase: 23 of 23 (Testing & Validation)
-Plan: 3 of 3 (23-01, 23-02, 23-03 complete)
-Status: Milestone complete
-Last activity: 2026-02-07 - Completed 23-03-PLAN.md (E2E Panel Navigation Tests)
+Milestone: v4.0 Interactive Graph Experience (gap closure)
+Phase: 20 (Backend Statistics & DDL API)
+Plan: 3 of 3 (20-01, 20-02, 20-03 complete)
+Status: Gap closure plan complete
+Last activity: 2026-02-07 - Completed 20-03-PLAN.md (Fix dataset ID format mismatch)
 
-Progress: [##########] 100% (5/5 phases complete in v4.0)
+Progress: [##########] 100% (all Phase 20 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 53 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 13)
+- Total plans completed: 54 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 13, gap: 1)
 - Average duration: ~3.5 min
 - Total execution time: ~173 min
 
@@ -35,7 +35,7 @@ Progress: [##########] 100% (5/5 phases complete in v4.0)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 23-03 (3 min), 23-02 (3 min), 23-01 (3 min), 22-01 (4 min), 22-02 (2 min)
+- Last 5 plans: 20-03 (3 min), 23-03 (3 min), 23-02 (3 min), 23-01 (3 min), 22-01 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -68,6 +68,8 @@ v4.0 Phase 20 decisions:
 - Views return null sizeBytes, tables return null viewSql
 - Go backend: parseDatasetName helper splits namespace_id/database.table format
 - Go backend: MockOpenLineageRepository implements full OpenLineageRepository interface with error injection
+- Gap closure: OR "name" = ? fallback in all dataset lookups so endpoints accept "database.table" name format
+- Gap closure: Service layer resolves name to canonical dataset_id before passing to repo methods
 
 v4.0 Phase 21 decisions:
 - 5min staleTime for statistics hook (row counts change occasionally), 30min for DDL hook (view SQL rarely changes)
@@ -112,6 +114,6 @@ None
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 23-03-PLAN.md (E2E Panel Navigation Tests) - v4.0 milestone complete
+Stopped at: Completed 20-03-PLAN.md (Fix dataset ID format mismatch) - gap closure
 Resume file: None
-Next: v4.0 milestone complete. Next milestone planning if needed.
+Next: Re-run UAT tests to verify statistics/DDL endpoints work with name format.
