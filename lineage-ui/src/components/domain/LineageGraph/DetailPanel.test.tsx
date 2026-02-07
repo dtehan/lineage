@@ -414,4 +414,565 @@ describe('DetailPanel', () => {
       expect(screen.getByText('No item selected')).toBeInTheDocument();
     });
   });
+
+  describe('TC-PANEL-01: Tab switching', () => {
+    it('defaults to Columns tab when panel opens with selectedColumn', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      const columnsTab = screen.getByRole('tab', { name: /columns/i });
+      expect(columnsTab).toHaveAttribute('aria-selected', 'true');
+      // Columns tab content is visible (column name link)
+      expect(screen.getByTitle('View lineage for customer_id')).toBeInTheDocument();
+    });
+
+    it('shows Statistics tab content when clicked', () => {
+      mockUseDatasetStatistics.mockReturnValue({
+        data: {
+          datasetId: 'col',
+          databaseName: 'sales_db',
+          tableName: 'customers',
+          sourceType: 'TABLE',
+          creatorName: 'admin',
+          createTimestamp: '2024-01-15T10:00:00Z',
+          lastAlterTimestamp: '2024-06-01T14:30:00Z',
+          rowCount: 500,
+          sizeBytes: 1024,
+          tableComment: null,
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+      expect(screen.getByText('TABLE')).toBeInTheDocument();
+    });
+
+    it('shows DDL tab content when clicked', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: {
+          datasetId: 'ns1/analytics_db.customer_summary',
+          databaseName: 'analytics_db',
+          tableName: 'customer_summary',
+          sourceType: 'VIEW',
+          viewSql: 'SELECT 1 FROM test',
+          truncated: false,
+          tableComment: null,
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+      expect(screen.getByText('View Definition')).toBeInTheDocument();
+    });
+
+    it('returns to Columns content when switching back', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      // Switch to Statistics then back
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+      fireEvent.click(screen.getByRole('tab', { name: /columns/i }));
+
+      expect(screen.getByRole('tab', { name: /columns/i })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByTitle('View lineage for customer_id')).toBeInTheDocument();
+    });
+
+    it('has correct ARIA attributes on tabs', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      const tabs = screen.getAllByRole('tab');
+      // Each tab has role="tab"
+      tabs.forEach((tab) => {
+        expect(tab).toHaveAttribute('role', 'tab');
+      });
+
+      // Active tab has aria-selected=true, inactive have false
+      expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+      expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
+      expect(tabs[2]).toHaveAttribute('aria-selected', 'false');
+
+      // Each tab has aria-controls pointing to a tabpanel id
+      expect(tabs[0]).toHaveAttribute('aria-controls', 'tabpanel-columns');
+      expect(tabs[1]).toHaveAttribute('aria-controls', 'tabpanel-statistics');
+      expect(tabs[2]).toHaveAttribute('aria-controls', 'tabpanel-ddl');
+    });
+
+    it('has role="tabpanel" on active tab panel', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      const tabpanel = screen.getByRole('tabpanel');
+      expect(tabpanel).toHaveAttribute('id', 'tabpanel-columns');
+      expect(tabpanel).toHaveAttribute('aria-labelledby', 'tab-columns');
+    });
+
+    it('does not show tabs for edge details', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedEdge: mockEdgeDetail,
+      });
+
+      expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+      expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('TC-PANEL-02: Statistics tab content', () => {
+    it('displays statistics data when available', () => {
+      mockUseDatasetStatistics.mockReturnValue({
+        data: {
+          datasetId: 'ns1/sales_db.customers',
+          databaseName: 'sales_db',
+          tableName: 'customers',
+          sourceType: 'TABLE',
+          creatorName: 'admin',
+          createTimestamp: '2024-01-15T10:00:00Z',
+          lastAlterTimestamp: '2024-06-01T14:30:00Z',
+          rowCount: 1500000,
+          sizeBytes: 52428800,
+          tableComment: 'Main customer table',
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+
+      expect(screen.getByText('TABLE')).toBeInTheDocument();
+      expect(screen.getByText('admin')).toBeInTheDocument();
+      expect(screen.getByText('1,500,000')).toBeInTheDocument();
+      expect(screen.getByText('Main customer table')).toBeInTheDocument();
+    });
+
+    it('displays formatted size for tables', () => {
+      mockUseDatasetStatistics.mockReturnValue({
+        data: {
+          datasetId: 'ns1/sales_db.customers',
+          databaseName: 'sales_db',
+          tableName: 'customers',
+          sourceType: 'TABLE',
+          creatorName: 'admin',
+          createTimestamp: '2024-01-15T10:00:00Z',
+          lastAlterTimestamp: null,
+          rowCount: 100,
+          sizeBytes: 52428800,
+          tableComment: null,
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+
+      // 52428800 bytes = 50.0 MB
+      expect(screen.getByText('50.0 MB')).toBeInTheDocument();
+    });
+  });
+
+  describe('TC-PANEL-03: DDL tab content', () => {
+    it('displays view SQL when available', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: {
+          datasetId: 'ns1/analytics_db.customer_summary',
+          databaseName: 'analytics_db',
+          tableName: 'customer_summary',
+          sourceType: 'VIEW',
+          viewSql: 'SELECT customer_id, name FROM customers WHERE active = 1',
+          truncated: false,
+          tableComment: 'Customer summary view',
+          columnComments: { customer_id: 'Unique identifier' },
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      expect(screen.getByText('View Definition')).toBeInTheDocument();
+      expect(screen.getByText('Customer summary view')).toBeInTheDocument();
+      expect(screen.getByText('Unique identifier')).toBeInTheDocument();
+    });
+
+    it('shows truncation warning when SQL is truncated', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: {
+          datasetId: 'ns1/analytics_db.customer_summary',
+          databaseName: 'analytics_db',
+          tableName: 'customer_summary',
+          sourceType: 'VIEW',
+          viewSql: 'SELECT 1',
+          truncated: true,
+          tableComment: null,
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      expect(screen.getByText(/truncated/i)).toBeInTheDocument();
+    });
+
+    it('shows message for table type (no DDL available)', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: {
+          datasetId: 'ns1/sales_db.customers',
+          databaseName: 'sales_db',
+          tableName: 'customers',
+          sourceType: 'TABLE',
+          viewSql: null,
+          truncated: false,
+          tableComment: null,
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      expect(screen.getByText(/DDL is not available for tables/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('TC-PANEL-04: Loading states', () => {
+    it('shows loading indicator in Statistics tab', () => {
+      mockUseDatasetStatistics.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+
+      expect(screen.getByText('Loading statistics...')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+
+    it('shows loading indicator in DDL tab', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: undefined,
+        isLoading: true,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      expect(screen.getByText('Loading DDL...')).toBeInTheDocument();
+      expect(screen.getByRole('status')).toBeInTheDocument();
+    });
+
+    it('does not show loading in Columns tab (uses local data)', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      // Columns tab is active by default and should show content immediately
+      expect(screen.queryByText(/loading/i)).not.toBeInTheDocument();
+      expect(screen.getByTitle('View lineage for customer_id')).toBeInTheDocument();
+    });
+  });
+
+  describe('TC-PANEL-05: Error states', () => {
+    it('shows error message in Statistics tab', () => {
+      mockUseDatasetStatistics.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        error: new Error('Network error'),
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+
+      expect(screen.getByText('Failed to load statistics')).toBeInTheDocument();
+      expect(screen.getByText('Network error')).toBeInTheDocument();
+    });
+
+    it('shows Retry button in Statistics tab error state', () => {
+      const mockRefetch = vi.fn();
+      mockUseDatasetStatistics.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        error: new Error('Network error'),
+        refetch: mockRefetch,
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+
+      const retryButton = screen.getByText('Retry');
+      expect(retryButton).toBeInTheDocument();
+      fireEvent.click(retryButton);
+      expect(mockRefetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows error message in DDL tab', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        error: new Error('Server error'),
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      expect(screen.getByText('Failed to load DDL')).toBeInTheDocument();
+      expect(screen.getByText('Server error')).toBeInTheDocument();
+    });
+
+    it('shows Retry button in DDL tab error state', () => {
+      const mockRefetch = vi.fn();
+      mockUseDatasetDDL.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        error: new Error('Server error'),
+        refetch: mockRefetch,
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      const retryButton = screen.getByText('Retry');
+      expect(retryButton).toBeInTheDocument();
+      fireEvent.click(retryButton);
+      expect(mockRefetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('TC-PANEL-06: Column click navigation', () => {
+    it('navigates to lineage page when column name is clicked', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+        datasetId: 'ns1/sales_db.customers',
+      });
+
+      const columnLink = screen.getByTitle('View lineage for customer_id');
+      fireEvent.click(columnLink);
+
+      expect(mockNavigate).toHaveBeenCalledWith(
+        `/lineage/${encodeURIComponent('ns1/sales_db.customers')}/${encodeURIComponent('customer_id')}`
+      );
+    });
+
+    it('computes datasetId from column id when datasetId prop not provided', () => {
+      // Column id is 'col-1', which will be split at last '.' to get dataset
+      // The effectiveDatasetId logic: selectedColumn.id.substring(0, selectedColumn.id.lastIndexOf('.'))
+      // 'col-1' has no '.', so lastIndexOf('.') returns -1, substring(0, -1) returns empty string
+      // Let's use a more realistic id with dots
+      const columnWithDottedId: ColumnDetail = {
+        ...mockColumnDetail,
+        id: 'ns1/sales_db.customers.customer_id',
+      };
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: columnWithDottedId,
+      });
+
+      const columnLink = screen.getByTitle('View lineage for customer_id');
+      fireEvent.click(columnLink);
+
+      // effectiveDatasetId should be 'ns1/sales_db.customers' (everything before last '.')
+      expect(mockNavigate).toHaveBeenCalledWith(
+        `/lineage/${encodeURIComponent('ns1/sales_db.customers')}/${encodeURIComponent('customer_id')}`
+      );
+    });
+  });
+
+  describe('TC-PANEL-07: Tab state resets on selection change', () => {
+    it('resets to Columns tab when selectedColumn changes', () => {
+      const { rerender } = renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      // Switch to Statistics tab
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+      expect(screen.getByRole('tab', { name: /statistics/i })).toHaveAttribute('aria-selected', 'true');
+
+      // Change selected column (new id triggers useEffect reset)
+      const newColumn: ColumnDetail = {
+        ...mockColumnDetail,
+        id: 'col-2',
+        columnName: 'email',
+      };
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+      });
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter>
+            <DetailPanel
+              isOpen={true}
+              onClose={() => {}}
+              selectedColumn={newColumn}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>
+      );
+
+      // Tab should have reset to Columns
+      expect(screen.getByRole('tab', { name: /columns/i })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tab', { name: /statistics/i })).toHaveAttribute('aria-selected', 'false');
+    });
+  });
+
+  describe('TC-PANEL-08: Independent scroll behavior', () => {
+    it('tab panel has overflow-y-auto class for independent scrolling', () => {
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      const tabpanel = screen.getByRole('tabpanel');
+      expect(tabpanel).toHaveClass('overflow-y-auto');
+    });
+
+    it('tab panel maintains scroll class when switching tabs', () => {
+      mockUseDatasetStatistics.mockReturnValue({
+        data: {
+          datasetId: 'ns1/sales_db.customers',
+          databaseName: 'sales_db',
+          tableName: 'customers',
+          sourceType: 'TABLE',
+          creatorName: 'admin',
+          createTimestamp: null,
+          lastAlterTimestamp: null,
+          rowCount: 100,
+          sizeBytes: null,
+          tableComment: null,
+          columnComments: null,
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumn: mockColumnDetail,
+      });
+
+      // Switch to Statistics tab
+      fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
+
+      const tabpanel = screen.getByRole('tabpanel');
+      expect(tabpanel).toHaveClass('overflow-y-auto');
+    });
+  });
 });
