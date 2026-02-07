@@ -2,6 +2,8 @@
 
 This directory contains scripts for managing the Teradata lineage database schema.
 
+Part of [Teradata Column Lineage](../README.md)
+
 ## OpenLineage Schema
 
 The schema is aligned with [OpenLineage spec v2-0-2](https://openlineage.io/):
@@ -144,6 +146,25 @@ Test data includes:
 - Simple, nested, and wide diamond patterns
 - Fan-out patterns (1->5, 1->10) and fan-in patterns (5->1, 10->1)
 - Combined patterns (cycle+diamond, fan-out+fan-in)
+
+## Testing
+
+The database test suite includes 73 tests covering schema validation, CTE correctness, credential handling, and DBQL error handling.
+
+```bash
+# Run all database tests
+cd database
+python tests/run_tests.py
+```
+
+| Test File | Focus | Count |
+|-----------|-------|-------|
+| `tests/run_tests.py` | Schema and CTE tests | ~40 |
+| `tests/test_correctness.py` | CTE correctness validation | ~16 |
+| `tests/test_credential_validation.py` | Credential validation | ~6 |
+| `tests/test_dbql_error_handling.py` | DBQL error handling | ~11 |
+
+**Note:** 29 tests are skipped in ClearScape Analytics environments due to DBQL/index limitations.
 
 ## Configuration
 
