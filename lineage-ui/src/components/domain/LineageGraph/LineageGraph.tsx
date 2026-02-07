@@ -35,6 +35,7 @@ import {
   useKeyboardShortcuts,
   useLineageExport,
   useSmartViewport,
+  useFitToSelection,
 } from './hooks';
 
 /**
@@ -133,6 +134,9 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Use smart viewport hook for size-aware positioning
   const { applySmartViewport } = useSmartViewport();
+
+  // Use fit-to-selection hook for centering on highlighted path
+  const { fitToSelection, hasSelection } = useFitToSelection();
 
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
@@ -246,13 +250,25 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Handle column selection from TableNode/ColumnRow
   // This is called when a column row is clicked inside a table node
+  // Also re-runs when storeNodes change (depth change) to recompute or clear highlight
   useEffect(() => {
     if (selectedAssetId) {
-      const { highlightedNodes, highlightedEdges } = highlightPath(selectedAssetId);
-      setHighlightedPath(highlightedNodes, highlightedEdges);
-      openPanel('node');
+      // Verify selected column still exists in current graph after depth change
+      const stillExists = storeNodes.some((n) => n.id === selectedAssetId);
+      if (stillExists) {
+        const { highlightedNodes, highlightedEdges } = highlightPath(selectedAssetId);
+        setHighlightedPath(highlightedNodes, highlightedEdges);
+        if (!isPanelOpen) {
+          openPanel('node');
+        }
+      } else {
+        // Column no longer in graph (e.g., depth was reduced)
+        clearHighlight();
+        closePanel();
+      }
     }
-  }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
+  }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel, isPanelOpen,
+      storeNodes, clearHighlight, closePanel]);
 
   // Handle node click for selection and path highlighting
   const onNodeClick = useCallback(
@@ -290,6 +306,12 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const handleFitView = useCallback(() => {
     reactFlowInstance.fitView({ padding: 0.2 });
   }, [reactFlowInstance]);
+
+  // Handle fit to selection - mark user interaction to prevent smart viewport override
+  const handleFitToSelection = useCallback(() => {
+    hasUserInteractedRef.current = true;
+    fitToSelection();
+  }, [fitToSelection]);
 
   // Handle export menu selection
   const handleExport = useCallback(() => {
@@ -477,6 +499,8 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onFitView={handleFitView}
+        onFitToSelection={handleFitToSelection}
+        hasSelection={hasSelection}
         onExport={handleExport}
         onFullscreen={toggleFullscreen}
         isLoading={isLoading}
