@@ -1764,6 +1764,19 @@ def get_dataset_statistics(dataset_id):
                 except Exception:
                     pass  # Permission or availability issue, leave rowCount null
 
+                # Fallback: if DBC.TableStatsV had no row count, use COUNT(*)
+                if result["rowCount"] is None:
+                    try:
+                        cur.execute(f"""
+                            SELECT COUNT(*)
+                            FROM "{db_name}"."{table_name}"
+                        """)
+                        count_row = cur.fetchone()
+                        if count_row and count_row[0] is not None:
+                            result["rowCount"] = int(count_row[0])
+                    except Exception:
+                        pass  # Permission or lock issue, leave rowCount null
+
                 # Query DBC.TableSizeV for size (only meaningful for tables, not views)
                 if source_type == "TABLE":
                     try:

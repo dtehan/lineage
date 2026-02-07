@@ -882,6 +882,20 @@ func (r *OpenLineageRepository) GetDatasetStatistics(ctx context.Context, datase
 		stats.RowCount = &rowCount.Int64
 	}
 
+	// Fallback: if DBC.TableStatsV had no row count, use COUNT(*)
+	if stats.RowCount == nil {
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM "%s"."%s"`, dbName, tableName)
+		var fallbackCount sql.NullInt64
+		err = r.db.QueryRowContext(ctx, countQuery).Scan(&fallbackCount)
+		if err != nil {
+			// Log but don't fail - permission or lock issues possible
+			slog.WarnContext(ctx, "failed to get row count via COUNT(*)",
+				"database", dbName, "table", tableName, "error", err)
+		} else if fallbackCount.Valid {
+			stats.RowCount = &fallbackCount.Int64
+		}
+	}
+
 	// Query DBC.TableSizeV for size (only for tables, skip for views)
 	if stats.SourceType == "TABLE" {
 		sizeQuery := `
