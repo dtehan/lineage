@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** Gap closure - fixing dataset ID format mismatch in statistics/DDL endpoints
+**Current focus:** Gap closure complete - row count and table DDL fixes applied
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience (gap closure)
 Phase: 20 (Backend Statistics & DDL API)
-Plan: 3 of 3 (20-01, 20-02, 20-03 complete)
-Status: Gap closure plan complete
-Last activity: 2026-02-07 - Completed 20-03-PLAN.md (Fix dataset ID format mismatch)
+Plan: 4 of 4 (20-01, 20-02, 20-03, 20-04 complete)
+Status: All gap closure plans complete
+Last activity: 2026-02-07 - Completed 20-04-PLAN.md (Row count fix and table DDL)
 
 Progress: [##########] 100% (all Phase 20 plans complete)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 54 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 13, gap: 1)
+- Total plans completed: 55 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 13, gap: 2)
 - Average duration: ~3.5 min
 - Total execution time: ~173 min
 
@@ -35,7 +35,7 @@ Progress: [##########] 100% (all Phase 20 plans complete)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 20-03 (3 min), 23-03 (3 min), 23-02 (3 min), 23-01 (3 min), 22-01 (4 min)
+- Last 5 plans: 20-04 (3 min), 20-03 (3 min), 23-03 (3 min), 23-02 (3 min), 23-01 (3 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -70,6 +70,8 @@ v4.0 Phase 20 decisions:
 - Go backend: MockOpenLineageRepository implements full OpenLineageRepository interface with error injection
 - Gap closure: OR "name" = ? fallback in all dataset lookups so endpoints accept "database.table" name format
 - Gap closure: Service layer resolves name to canonical dataset_id before passing to repo methods
+- Gap closure: MAX(RowCount) without IndexNumber filter for robust statistics retrieval
+- Gap closure: SHOW TABLE command for CREATE TABLE DDL extraction with tableDdl field
 
 v4.0 Phase 21 decisions:
 - 5min staleTime for statistics hook (row counts change occasionally), 30min for DDL hook (view SQL rarely changes)
@@ -114,6 +116,6 @@ None
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 20-03-PLAN.md (Fix dataset ID format mismatch) - gap closure
+Stopped at: Completed 20-04-PLAN.md (Row count fix and table DDL) - gap closure
 Resume file: None
-Next: Re-run UAT tests to verify statistics/DDL endpoints work with name format.
+Next: Re-run UAT tests to verify row count displays and table DDL renders correctly.
