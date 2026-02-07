@@ -105,10 +105,11 @@ Plans:
   3. Panel header shows selection hierarchy breadcrumb (database > table > column)
   4. Breadcrumb updates immediately when user changes selection
   5. Selection state persists when user changes graph depth (when possible)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 22-01: TBD
+- [ ] 22-01-PLAN.md — Fit-to-selection viewport control and selection persistence
+- [ ] 22-02-PLAN.md — Selection hierarchy breadcrumb in DetailPanel header
 
 #### Phase 23: Testing & Validation
 **Goal**: Ensure all v4.0 features have comprehensive test coverage
@@ -135,9 +136,9 @@ Plans:
 | 19. Animation & Transitions | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 | 20. Backend Statistics & DDL API | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
 | 21. Detail Panel Enhancement | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
-| 22. Selection Features | v4.0 | 0/TBD | Not started | - |
+| 22. Selection Features | v4.0 | 0/2 | Not started | - |
 | 23. Testing & Validation | v4.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-06 (Phase 21 complete)*
+*Last updated: 2026-02-06 (Phase 22 planned)*
