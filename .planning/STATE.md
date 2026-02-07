@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 22 complete, ready for Phase 23
+**Current focus:** v4.0 Interactive Graph Experience - Phase 23 in progress
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
-Phase: 22 of 23 (Selection Features)
-Plan: 1 of 2 (22-01 complete, 22-02 complete)
-Status: Phase complete
-Last activity: 2026-02-06 - Completed Phase 22 (Selection Features)
+Phase: 23 of 23 (Testing & Validation)
+Plan: 1 of 3 (23-01 complete)
+Status: In progress
+Last activity: 2026-02-07 - Completed 23-01-PLAN.md (Tooltip Hover & Fit-to-Selection Tests)
 
-Progress: [########  ] 80% (4/5 phases complete in v4.0)
+Progress: [#########-] 90% (4/5 phases complete, 23-01 of 23-03 done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 50 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 10)
+- Total plans completed: 51 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 11)
 - Average duration: ~3.5 min
 - Total execution time: ~173 min
 
@@ -35,7 +35,7 @@ Progress: [########  ] 80% (4/5 phases complete in v4.0)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 22-01 (4 min), 22-02 (2 min), 21-03 (4 min), 21-02 (6 min), 21-01 (2 min)
+- Last 5 plans: 23-01 (3 min), 22-01 (4 min), 22-02 (2 min), 21-03 (4 min), 21-02 (6 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -91,6 +91,11 @@ v4.0 Phase 22 decisions:
 - Selection persistence checks storeNodes existence, clears on column disappearance
 - Only open panel if not already open to prevent re-triggering slide animation
 
+v4.0 Phase 23 decisions:
+- Mock @xyflow/react Handle as simple div for ColumnRow tests (avoids ReactFlow context requirement)
+- Follow useSmartViewport.test.ts pattern for useFitToSelection tests (ReactFlowProvider wrapper, module-level mocks)
+- Test position CSS classes on tooltip element (bottom-full/top-full/right-full/left-full) rather than computed styles
+
 ### Pending Todos
 
 1. Views not showing their column types (2026-01-31, area: ui)
@@ -103,7 +108,7 @@ None
 
 ## Session Continuity
 
-Last session: 2026-02-06
-Stopped at: Completed Phase 22 (Selection Features) - Phase 22 complete
+Last session: 2026-02-07
+Stopped at: Completed 23-01-PLAN.md (Tooltip Hover & Fit-to-Selection Tests)
 Resume file: None
-Next: Phase 23 (Testing & Verification)
+Next: 23-02-PLAN.md
