@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 21 execution in progress
+**Current focus:** v4.0 Interactive Graph Experience - Phase 21 complete, ready for Phase 22
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
 Phase: 21 of 23 (Detail Panel Enhancement)
-Plan: 2 of 3 (21-02 complete)
-Status: In progress
-Last activity: 2026-02-06 - Completed 21-02-PLAN.md (Tabbed Detail Panel UI)
+Plan: 3 of 3 (21-03 complete)
+Status: Phase complete
+Last activity: 2026-02-06 - Completed 21-03-PLAN.md (Test Coverage for Tabbed DetailPanel)
 
-Progress: [####      ] 40% (2/5 phases complete, plan 2/3 in phase 21)
+Progress: [######    ] 60% (3/5 phases complete in v4.0)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 47 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 7)
+- Total plans completed: 48 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 8)
 - Average duration: ~3.5 min
-- Total execution time: ~163 min
+- Total execution time: ~167 min
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [####      ] 40% (2/5 phases complete, plan 2/3 in phase 21)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 21-02 (6 min), 21-01 (2 min), 20-01 (4 min), 20-02 (1 min), 19-03 (2 min)
+- Last 5 plans: 21-03 (4 min), 21-02 (6 min), 21-01 (2 min), 20-01 (4 min), 20-02 (1 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -77,6 +77,8 @@ v4.0 Phase 21 decisions:
 - Tab state resets to "columns" on selection change to prevent stale tab data
 - effectiveDatasetId computed from prop or selectedColumn.id for graph compatibility
 - Edge details remain flat layout (no tabs) -- tabs only for column selection
+- Module-level vi.mock for TanStack Query hooks with vi.mocked for per-test state control
+- prism-react-renderer mocked with minimal token structure for DDL tab tests
 
 ### Pending Todos
 
@@ -86,11 +88,11 @@ v4.0 Phase 21 decisions:
 
 ### Blockers/Concerns
 
-None - Plan 21-02 complete, ready for Plan 21-03 (testing).
+None
 
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 21-02-PLAN.md (Tabbed Detail Panel UI)
+Stopped at: Completed 21-03-PLAN.md (Test Coverage for Tabbed DetailPanel) - Phase 21 complete
 Resume file: None
-Next: Plan 21-03 (Testing phase for detail panel enhancement)
+Next: Phase 22 (Performance Optimization) or Phase 23 (Integration Testing)
