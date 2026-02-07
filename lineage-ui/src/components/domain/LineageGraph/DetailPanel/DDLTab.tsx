@@ -113,10 +113,53 @@ export const DDLTab: React.FC<DDLTabProps> = ({ datasetId, isActive }) => {
             )}
           </Highlight>
         </div>
+      ) : data.sourceType === 'TABLE' && data.tableDdl ? (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-medium text-slate-600">Table Definition</h4>
+            <button
+              onClick={() => handleCopy(data.tableDdl!)}
+              className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded hover:bg-slate-600"
+              aria-label="Copy DDL"
+            >
+              {copied ? (
+                <>
+                  <Check className="w-3 h-3" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3 h-3" />
+                  Copy DDL
+                </>
+              )}
+            </button>
+          </div>
+
+          <Highlight theme={themes.vsDark} code={data.tableDdl} language="sql">
+            {({ style, tokens, getLineProps, getTokenProps }) => (
+              <pre
+                className="rounded-lg text-sm font-mono overflow-auto max-h-96 p-3"
+                style={style}
+              >
+                {tokens.map((line, i) => (
+                  <div key={i} {...getLineProps({ line })}>
+                    <span className="inline-block w-8 text-right mr-3 text-slate-500 select-none text-xs">
+                      {i + 1}
+                    </span>
+                    {line.map((token, key) => (
+                      <span key={key} {...getTokenProps({ token })} />
+                    ))}
+                  </div>
+                ))}
+              </pre>
+            )}
+          </Highlight>
+        </div>
       ) : (
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg">
           <p className="text-sm text-slate-600">
-            DDL is not available for tables. Table definitions are managed by CREATE TABLE statements.
+            No DDL available for this dataset.
           </p>
         </div>
       )}

@@ -686,6 +686,7 @@ describe('DetailPanel', () => {
           tableName: 'customers',
           sourceType: 'TABLE',
           viewSql: null,
+          tableDdl: null,
           truncated: false,
           tableComment: null,
           columnComments: null,
@@ -703,7 +704,35 @@ describe('DetailPanel', () => {
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
 
-      expect(screen.getByText(/DDL is not available for tables/i)).toBeInTheDocument();
+      expect(screen.getByText(/No DDL available/i)).toBeInTheDocument();
+    });
+
+    it('shows table DDL with syntax highlighting for table type', () => {
+      mockUseDatasetDDL.mockReturnValue({
+        data: {
+          datasetId: 'ns1/demo_user.SRC_CUSTOMERS',
+          databaseName: 'demo_user',
+          tableName: 'SRC_CUSTOMERS',
+          sourceType: 'TABLE',
+          tableDdl: 'CREATE TABLE demo_user.SRC_CUSTOMERS (id INTEGER, name VARCHAR(100))',
+          truncated: false,
+          columnComments: {},
+        },
+        isLoading: false,
+        error: null,
+        refetch: vi.fn(),
+      } as any);
+
+      renderDetailPanel({
+        isOpen: true,
+        onClose: () => {},
+        selectedColumns: [mockColumnDetail],
+      });
+
+      fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
+
+      expect(screen.getByText('Table Definition')).toBeInTheDocument();
+      expect(screen.getByLabelText('Copy DDL')).toBeInTheDocument();
     });
   });
 

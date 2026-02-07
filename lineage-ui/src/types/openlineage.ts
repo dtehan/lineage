@@ -153,6 +153,7 @@ export interface DatasetDDLResponse {
   tableName: string;
   sourceType: string;
   viewSql?: string;
+  tableDdl?: string;
   truncated: boolean;
   tableComment?: string;
   columnComments?: Record<string, string>;
