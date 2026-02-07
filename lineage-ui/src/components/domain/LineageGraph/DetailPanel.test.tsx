@@ -1,8 +1,51 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
+import { useDatasetStatistics, useDatasetDDL } from '../../../api/hooks/useOpenLineage';
+
+// Mock the navigate function from react-router-dom
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
+
+// Mock API hooks for Statistics and DDL tabs
+vi.mock('../../../api/hooks/useOpenLineage', () => ({
+  useDatasetStatistics: vi.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+  useDatasetDDL: vi.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  })),
+}));
+
+// Mock prism-react-renderer used by DDLTab
+vi.mock('prism-react-renderer', () => ({
+  Highlight: ({ children, code }: any) =>
+    children({
+      className: '',
+      style: {},
+      tokens: [[{ content: code, types: ['plain'] }]],
+      getLineProps: ({ line }: any) => ({ className: '' }),
+      getTokenProps: ({ token }: any) => ({ children: token.content }),
+    }),
+  themes: { vsDark: {} },
+}));
+
+const mockUseDatasetStatistics = vi.mocked(useDatasetStatistics);
+const mockUseDatasetDDL = vi.mocked(useDatasetDDL);
 
 // Wrap DetailPanel in Router and QueryClient since sub-components use useNavigate and useQuery
 function renderDetailPanel(props: React.ComponentProps<typeof DetailPanel>) {
@@ -19,6 +62,22 @@ function renderDetailPanel(props: React.ComponentProps<typeof DetailPanel>) {
 }
 
 describe('DetailPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseDatasetStatistics.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+    mockUseDatasetDDL.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as any);
+  });
+
   const mockColumnDetail: ColumnDetail = {
     id: 'col-1',
     databaseName: 'sales_db',
