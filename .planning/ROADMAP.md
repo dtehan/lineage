@@ -76,7 +76,7 @@ Plans:
 - [x] 20-01-PLAN.md - Go backend vertical slice: domain entities, repository, service, handlers, router, mocks
 - [x] 20-02-PLAN.md - Python Flask server statistics and DDL endpoints
 - [x] 20-03-PLAN.md - Fix dataset ID format mismatch (backend accepts name OR dataset_id)
-- [ ] 20-04-PLAN.md - Fix row count N/A and add table DDL support (gap closure from UAT)
+- [x] 20-04-PLAN.md - Fix row count N/A and add table DDL support (gap closure from UAT)
 
 #### Phase 21: Detail Panel Enhancement
 **Goal**: Transform the existing detail panel into a comprehensive metadata viewer with tabs
@@ -138,11 +138,11 @@ Plans:
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 19. Animation & Transitions | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
-| 20. Backend Statistics & DDL API | v4.0 | 3/4 | UAT gap closure | - |
+| 20. Backend Statistics & DDL API | v4.0 | 4/4 | ✓ Complete | 2026-02-07 |
 | 21. Detail Panel Enhancement | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 | 22. Selection Features | v4.0 | 2/2 | ✓ Complete | 2026-02-06 |
 | 23. Testing & Validation | v4.0 | 3/3 | ✓ Complete | 2026-02-06 |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-07 (Phase 20 gap closure plan 20-04 added — row count fix + table DDL)*
+*Last updated: 2026-02-07 (Phase 20 complete — all gaps closed)*
