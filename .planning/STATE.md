@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** The lineage application must be secure and stable for production use - no data exposure through error messages, no unbounded resource consumption, and clear security boundaries documented.
-**Current focus:** v4.0 Interactive Graph Experience - Phase 22 in progress
+**Current focus:** v4.0 Interactive Graph Experience - Phase 22 complete, ready for Phase 23
 
 ## Current Position
 
 Milestone: v4.0 Interactive Graph Experience
 Phase: 22 of 23 (Selection Features)
-Plan: 2 of 2 (22-02 complete)
-Status: In progress
-Last activity: 2026-02-06 - Completed 22-02-PLAN.md (Selection Breadcrumb)
+Plan: 1 of 2 (22-01 complete, 22-02 complete)
+Status: Phase complete
+Last activity: 2026-02-06 - Completed 22-01-PLAN.md (Fit-to-Selection and Selection Persistence)
 
-Progress: [######=#  ] 67% (3.5/5 phases in v4.0 - 22-01 remaining)
+Progress: [########  ] 80% (4/5 phases complete in v4.0)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 49 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 9)
+- Total plans completed: 50 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 10)
 - Average duration: ~3.5 min
-- Total execution time: ~169 min
+- Total execution time: ~173 min
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [######=#  ] 67% (3.5/5 phases in v4.0 - 22-01 remaining)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 22-02 (2 min), 21-03 (4 min), 21-02 (6 min), 21-01 (2 min), 20-01 (4 min)
+- Last 5 plans: 22-01 (4 min), 22-02 (2 min), 21-03 (4 min), 21-02 (6 min), 21-01 (2 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -85,6 +85,11 @@ v4.0 Phase 22 decisions:
 - Table icon aliased as TableIcon to avoid JSX element name conflict
 - Breadcrumb only in renderColumnTabbed(), edge details keep flat layout
 - Column icon uses text-blue-500 matching selection highlight, db/table icons use text-slate-400
+- FIT_TO_SELECTION_PADDING = 0.15 and DURATION = 300ms matching Phase 19 panel slide timing
+- Map column IDs to parent table node IDs via columns array for fitView targeting
+- Set hasUserInteractedRef before fitToSelection to prevent smart viewport override
+- Selection persistence checks storeNodes existence, clears on column disappearance
+- Only open panel if not already open to prevent re-triggering slide animation
 
 ### Pending Todos
 
@@ -99,6 +104,6 @@ None
 ## Session Continuity
 
 Last session: 2026-02-06
-Stopped at: Completed 22-02-PLAN.md (Selection Breadcrumb)
+Stopped at: Completed 22-01-PLAN.md (Fit-to-Selection and Selection Persistence) - Phase 22 complete
 Resume file: None
-Next: Phase 22-01 (Fit-to-Selection viewport control) then Phase 23 (Testing & Verification)
+Next: Phase 23 (Testing & Verification)
