@@ -9,13 +9,13 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 
 ## Current Position
 
-Milestone: v4.0 Interactive Graph Experience (COMPLETE)
-Phase: All 5 phases complete (19-23)
-Plan: 15/15 plans shipped
-Status: Milestone archived, ready for v5.0 planning
-Last activity: 2026-02-07 - v4.0 milestone complete
+Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-07 - v5.0 milestone started
 
-Progress: Milestone complete [##########] 100%
+Progress: Requirements definition [          ] 0%
 
 ## Performance Metrics
 

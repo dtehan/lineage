@@ -192,7 +192,17 @@ The lineage application must be secure and stable for production use - no data e
 
 ### Active
 
-<!-- Requirements for next milestone - to be defined -->
+<!-- Requirements for v5.0 milestone -->
+
+## Current Milestone: v5.0 Comprehensive Documentation
+
+**Goal:** Enable new teams to deploy and operate the lineage application using documentation alone.
+
+**Target deliverables:**
+- Update 4 README files to match current code (root, lineage-api, lineage-ui, database)
+- Refresh user guide with v4.0 features (pagination, detail panel, animations)
+- Create operations/deployment guide (installation, configuration, database setup, production hardening)
+- Create developer manual (environment setup, testing guide, architecture overview, contributing guidelines)
 
 **Deferred Concerns (Future Milestones):**
 - Redis integration or dead code removal
@@ -313,4 +323,4 @@ The lineage application must be secure and stable for production use - no data e
 | Comprehensive test patterns (v3.0) | Validate correctness with cycles, diamonds, fans, combined scenarios | ✓ Complete - 89 TEST_* records, 48 passing correctness tests |
 
 ---
-*Last updated: 2026-02-07 after v4.0 milestone completion*
+*Last updated: 2026-02-07 after v5.0 milestone start*
