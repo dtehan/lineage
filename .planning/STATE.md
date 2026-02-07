@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
 Phase: 24 of 27 (README Updates)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-02-07 -- v5.0 roadmap created (4 phases, 9 plans, 51 requirements)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-07 -- Completed 24-01-PLAN.md (root README rewrite)
 
-Progress: [░░░░░░░░░░] 0% (0/9 plans)
+Progress: [█░░░░░░░░░] 11% (1/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 55 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15)
+- Total plans completed: 56 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 1)
 - Average plan duration: ~3.5 min
-- Total execution time: ~193 min
+- Total execution time: ~194 min
 
 **By Milestone:**
 
@@ -48,6 +48,9 @@ Progress: [░░░░░░░░░░] 0% (0/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [24-01]: Used Mermaid diagram for architecture visualization (GitHub renders natively)
+- [24-01]: Included ops guide and dev manual links with "coming in v5.0" annotation
+- [24-01]: Kept CLAUDE.md link as AI development reference alongside human-facing docs
 - [v5.0 roadmap]: 4 phases from 4 natural doc groupings (READMEs, User Guide, Ops Guide, Dev Manual)
 - [v5.0 roadmap]: All phases independent -- can execute in any order
 - [v5.0 roadmap]: No research phase needed -- introspective documentation of existing codebase
@@ -65,5 +68,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: v5.0 roadmap created, ready to plan Phase 24
+Stopped at: Completed 24-01-PLAN.md (root README rewrite)
 Resume file: None
