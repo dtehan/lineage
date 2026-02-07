@@ -11,16 +11,16 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 
 Milestone: v4.0 Interactive Graph Experience
 Phase: 23 of 23 (Testing & Validation)
-Plan: 1 of 3 (23-01 complete)
+Plan: 2 of 3 (23-01, 23-02 complete)
 Status: In progress
-Last activity: 2026-02-07 - Completed 23-01-PLAN.md (Tooltip Hover & Fit-to-Selection Tests)
+Last activity: 2026-02-07 - Completed 23-02-PLAN.md (API Handler Tests & Hover Benchmarks)
 
-Progress: [#########-] 90% (4/5 phases complete, 23-01 of 23-03 done)
+Progress: [#########-] 93% (4/5 phases complete, 23-02 of 23-03 done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 51 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 11)
+- Total plans completed: 52 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 12)
 - Average duration: ~3.5 min
 - Total execution time: ~173 min
 
@@ -35,7 +35,7 @@ Progress: [#########-] 90% (4/5 phases complete, 23-01 of 23-03 done)
 | v4.0 | 5 | TBD | In progress |
 
 **Recent Trend:**
-- Last 5 plans: 23-01 (3 min), 22-01 (4 min), 22-02 (2 min), 21-03 (4 min), 21-02 (6 min)
+- Last 5 plans: 23-02 (3 min), 23-01 (3 min), 22-01 (4 min), 22-02 (2 min), 21-03 (4 min)
 - Trend: Stable
 
 *Updated after each plan completion*
@@ -95,6 +95,9 @@ v4.0 Phase 23 decisions:
 - Mock @xyflow/react Handle as simple div for ColumnRow tests (avoids ReactFlow context requirement)
 - Follow useSmartViewport.test.ts pattern for useFitToSelection tests (ReactFlowProvider wrapper, module-level mocks)
 - Test position CSS classes on tooltip element (bottom-full/top-full/right-full/left-full) rather than computed styles
+- Statistics/DDL error tests inject error on specific repo call (not GetDataset) to test actual error paths
+- Benchmark graphs pre-generated outside bench callbacks to exclude generation time
+- BFS traversal in benchmarks mirrors actual useLineageHighlight algorithm
 
 ### Pending Todos
 
@@ -109,6 +112,6 @@ None
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 23-01-PLAN.md (Tooltip Hover & Fit-to-Selection Tests)
+Stopped at: Completed 23-02-PLAN.md (API Handler Tests & Hover Benchmarks)
 Resume file: None
-Next: 23-02-PLAN.md
+Next: 23-03-PLAN.md
