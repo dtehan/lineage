@@ -149,41 +149,50 @@ The lineage application must be secure and stable for production use - no data e
 - ✓ **PERF-RENDER-05**: Test zoom/pan responsiveness with large graphs (target <100ms) — v3.0
 - ✓ **PERF-RENDER-06**: Performance tests automated and repeatable — v3.0
 
-## Current Milestone: v4.0 Interactive Graph Experience
+**v4.0 Interactive Graph Experience (shipped 2026-02-07):**
 
-**Goal:** Enable users to interact with graph nodes and view detailed metadata about tables and views.
+*Animation & Transitions:*
+- ✓ **ANIM-01**: Smooth opacity transitions (200-300ms) when highlighting/unhighlighting nodes — v4.0
+- ✓ **ANIM-02**: Smooth transitions (200-300ms) when dimming unrelated nodes during selection — v4.0
+- ✓ **ANIM-03**: Panel slides in/out with smooth animation (not instant) — v4.0
+- ✓ **ANIM-04**: Transition timing feels natural (ease-out curve, no jarring jumps) — v4.0
 
-**Target features:**
-- Node selection with click interaction
-- Bidirectional path highlighting (upstream + downstream lineage)
-- Detail panel showing table/view metadata (columns, statistics, DDL)
-- Column-level navigation from detail panel to lineage graph
+*Selection Enhancement:*
+- ✓ **SELECT-01**: "Fit to selection" button centers viewport on highlighted path — v4.0
+- ✓ **SELECT-02**: Fit-to-selection uses React Flow fitBounds API with padding — v4.0
+- ✓ **SELECT-03**: Breadcrumb shows selection hierarchy (database > table > column) in panel header — v4.0
+- ✓ **SELECT-04**: Breadcrumb updates immediately on selection change — v4.0
+- ✓ **SELECT-05**: Selection state persists when changing graph depth (if possible) — v4.0
+
+*Detail Panel - Backend API:*
+- ✓ **API-01**: GET /api/v2/openlineage/datasets/{id}/statistics returns row count, size, last modified — v4.0
+- ✓ **API-02**: Statistics endpoint returns owner, table/view type, created date — v4.0
+- ✓ **API-03**: GET /api/v2/openlineage/datasets/{id}/ddl returns view definition SQL — v4.0
+- ✓ **API-04**: DDL endpoint returns table comments, column comments — v4.0
+- ✓ **API-05**: Endpoints return 404 for missing datasets, 500 with generic errors (security) — v4.0
+- ✓ **API-06**: Endpoints support both table and view dataset types — v4.0
+
+*Detail Panel - Frontend:*
+- ✓ **PANEL-01**: Tabbed interface with "Columns", "Statistics", "DDL" tabs — v4.0
+- ✓ **PANEL-02**: Statistics tab shows table metadata (row count, size, dates, owner, type) — v4.0
+- ✓ **PANEL-03**: DDL tab shows view SQL with syntax highlighting — v4.0
+- ✓ **PANEL-04**: DDL tab shows table/column comments if available — v4.0
+- ✓ **PANEL-05**: Column list: click column name navigates to that column's lineage graph — v4.0
+- ✓ **PANEL-06**: Loading states for statistics and DDL tabs (separate from main panel) — v4.0
+- ✓ **PANEL-07**: Error states if statistics/DDL fetch fails (graceful degradation) — v4.0
+- ✓ **PANEL-08**: Panel scrollable independently per tab (large SQL, many columns) — v4.0
+
+*Testing:*
+- ✓ **TEST-01**: Unit tests for hover tooltip with different node types — v4.0
+- ✓ **TEST-02**: Integration tests for fit-to-selection viewport calculations — v4.0
+- ✓ **TEST-03**: E2E tests for panel navigation (column click → new lineage) — v4.0
+- ✓ **TEST-04**: Performance tests for hover on 100+ node graphs — v4.0
+- ✓ **TEST-05**: API tests for statistics and DDL endpoints — v4.0
+- ✓ **TEST-06**: Frontend tests for panel tab switching and error states — v4.0
 
 ### Active
 
-<!-- Requirements for v4.0 milestone -->
-
-**Graph Interaction:**
-- [ ] **SELECT-01**: User can click table/view nodes to select them
-- [ ] **SELECT-02**: Selected node highlighted with distinct visual style
-- [ ] **SELECT-03**: User can deselect by clicking elsewhere or pressing ESC
-- [ ] **SELECT-04**: Multi-select with ctrl/shift key support
-
-**Path Highlighting:**
-- [ ] **HIGHLIGHT-01**: Selected node emphasizes entire lineage tree (upstream + downstream)
-- [ ] **HIGHLIGHT-02**: Unrelated nodes dimmed/muted during selection
-- [ ] **HIGHLIGHT-03**: Connected edges highlighted along with nodes
-- [ ] **HIGHLIGHT-04**: Smooth transition animation when selecting/deselecting
-
-**Detail Panel:**
-- [ ] **PANEL-01**: Detail panel slides in from right when node selected
-- [ ] **PANEL-02**: Panel shows table/view name, type, database context
-- [ ] **PANEL-03**: Column list with names, types, nullable indicators
-- [ ] **PANEL-04**: Statistics section (row count, size, last modified, owner)
-- [ ] **PANEL-05**: DDL section showing view definition SQL and comments
-- [ ] **PANEL-06**: Click column in panel navigates to that column's lineage
-- [ ] **PANEL-07**: Panel closes when node deselected
-- [ ] **PANEL-08**: Panel scrollable for tables with many columns
+<!-- Requirements for next milestone - to be defined -->
 
 **Deferred Concerns (Future Milestones):**
 - Redis integration or dead code removal
@@ -206,17 +215,18 @@ The lineage application must be secure and stable for production use - no data e
 
 ## Context
 
-**Current State (v3.0 shipped):**
-- Production-ready Teradata column-level lineage application with enhanced graph usability and performance
-- Go backend: Chi router, hexagonal architecture, slog logging, input validation, v1 + v2 APIs, LOCKING ROW FOR ACCESS CTE optimization
-- React frontend: TypeScript, React Flow, TanStack Query hooks, five-stage loading progress, smart viewport positioning, size-aware zoom
+**Current State (v4.0 shipped):**
+- Production-ready Teradata column-level lineage application with interactive graph experience, comprehensive detail panel, and polished animations
+- Go backend: Chi router, hexagonal architecture, slog logging, input validation, v1 + v2 APIs, statistics/DDL endpoints with DBC queries
+- React frontend: TypeScript, React Flow, TanStack Query hooks, tabbed detail panel, syntax highlighting (prism-react-renderer), CSS animations
 - Python DBQL extraction: Continue-on-failure pattern, structured error tracking, OL_* table population, comprehensive test patterns
 - Database: LIN_* tables (custom schema) + OL_* tables (OpenLineage spec v2-0-2), 89 TEST_* records for correctness validation
-- Test coverage: 73 database tests, 20 API tests, 444+ frontend tests (inc. 32 correctness, 11 viewport, 44 loading), 21 E2E tests, 16 CTE correctness tests
+- Test coverage: 73 database tests, 20 API tests, 444+ frontend tests, 34 E2E tests, 11 Go handler tests, hover performance benchmarks
 - Security: Structured logging, generic error responses, fail-fast credential validation, SECURITY.md deployment guide
 - Configuration: Unified TERADATA_*/API_PORT variables with TD_*/PORT fallbacks for backwards compatibility
 - Scalability: Pagination (default 100, max 500), maxDepth limit (1-20 configurable)
-- Graph UX: Loading progress with ETA, compact layout (33% spacing reduction), top-left viewport, large graph warnings
+- Graph UX: Loading progress with ETA, compact layout (33% spacing reduction), top-left viewport, CSS animations (200-300ms), fit-to-selection viewport control
+- Detail Panel: Tabbed interface (Columns/Statistics/DDL), lazy loading, SQL/DDL syntax highlighting, click-to-navigate column links, selection breadcrumb
 - Performance: 19.3% CTE improvement (LOCKING ROW FOR ACCESS), benchmark suites for CTE and rendering, virtualization at 50 nodes
 
 **Milestone v1.0 Stats (Production Readiness):**
@@ -244,6 +254,13 @@ The lineage application must be secure and stable for production use - no data e
 - ~2.5 hours (2026-01-31 13:54 → 16:29)
 - 103 new tests (44 loading, 11 viewport, 32 correctness frontend, 16 correctness database)
 - Git range: `ac6893e` → `305f2c4`
+
+**Milestone v4.0 Stats (Interactive Graph Experience):**
+- 5 phases, 15 plans completed
+- 52 files modified (+6,518 / -1,136 lines)
+- 2 days (2026-02-06 → 2026-02-07)
+- All 29 requirements satisfied, 100% milestone audit (zero gaps)
+- Git range: `1bca6f3` → `c91ac98`
 
 **Technical Debt:**
 - Pagination bounds hardcoded (not configurable via env vars like validation bounds) — LOW priority, defaults safe
@@ -296,4 +313,4 @@ The lineage application must be secure and stable for production use - no data e
 | Comprehensive test patterns (v3.0) | Validate correctness with cycles, diamonds, fans, combined scenarios | ✓ Complete - 89 TEST_* records, 48 passing correctness tests |
 
 ---
-*Last updated: 2026-02-01 after v4.0 milestone initialization*
+*Last updated: 2026-02-07 after v4.0 milestone completion*

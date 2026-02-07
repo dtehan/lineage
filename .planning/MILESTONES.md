@@ -1,5 +1,36 @@
 # Project Milestones: Lineage Application
 
+## v4.0 Interactive Graph Experience (Shipped: 2026-02-07)
+
+**Delivered:** Transformed lineage graph into an interactive experience with polished CSS animations, comprehensive detail panel with statistics/DDL, and enhanced selection features.
+
+**Phases completed:** 19-23 (15 plans total)
+
+**Key accomplishments:**
+
+- Smooth CSS animations: 200ms opacity transitions for nodes/edges, 300ms panel slide-in/out, prefers-reduced-motion accessibility support
+- Backend statistics & DDL API: Row count (with COUNT(*) fallback), table metadata (owner, type, dates), view SQL and table DDL via SHOW TABLE with syntax highlighting
+- Tabbed detail panel: Columns/Statistics/DDL tabs with lazy loading, independent scrolling, graceful error states, and click-to-navigate column links
+- Selection enhancements: Fit-to-selection viewport control with 15% padding, selection hierarchy breadcrumb (database > table > column) with icon truncation
+- Comprehensive testing: 34 E2E tests, 444+ unit tests, 11 Go handler tests, hover performance benchmarks, 100% requirement coverage verified by audit
+
+**Stats:**
+
+- 52 files created/modified (+6,518 / -1,136 lines)
+- 5 phases, 15 plans, 16 commits
+- 2 days from start to ship (2026-02-06 → 2026-02-07)
+- All 29 v4.0 requirements satisfied
+
+**Test Coverage:**
+- Milestone audit: 100% requirements, 100% phases, 100% integration, 100% E2E flows (PASSED)
+- Zero gaps identified
+
+**Git range:** `1bca6f3` (feat(19-01)) → `c91ac98` (test(20) UAT round 2)
+
+**What's next:** Planning next milestone to address deferred concerns (Redis integration, SQL parser improvements, E2E validation, secrets vault, search performance).
+
+---
+
 ## v3.0 Graph Improvements (Shipped: 2026-01-31)
 
 **Delivered:** Enhanced lineage graph usability with loading progress, optimized viewport positioning, correctness validation, and performance optimization.
