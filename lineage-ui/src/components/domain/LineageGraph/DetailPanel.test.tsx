@@ -105,7 +105,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const panel = screen.getByTestId('detail-panel');
@@ -118,7 +118,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: false,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const panel = screen.getByTestId('detail-panel');
@@ -133,7 +133,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const panel = screen.getByTestId('detail-panel');
@@ -146,7 +146,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const panel = screen.getByTestId('detail-panel');
@@ -159,7 +159,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Breadcrumb renders database and table as separate segments
@@ -173,7 +173,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Column name appears as clickable link in ColumnsTab
@@ -184,7 +184,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       expect(screen.getByText('INTEGER')).toBeInTheDocument();
@@ -195,7 +195,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       expect(screen.getByText('3 upstream, 5 downstream')).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       expect(screen.getByRole('tablist')).toBeInTheDocument();
@@ -280,7 +280,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose,
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByLabelText('Close panel'));
@@ -292,7 +292,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
         onViewFullLineage,
       });
 
@@ -305,7 +305,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
         onViewImpactAnalysis,
       });
 
@@ -317,7 +317,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Columns tab is active by default
@@ -337,7 +337,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -347,7 +347,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       expect(screen.getByRole('dialog')).toHaveAttribute(
@@ -360,7 +360,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: false,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const panel = screen.getByTestId('detail-panel');
@@ -371,7 +371,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const panel = screen.getByTestId('detail-panel');
@@ -395,7 +395,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const tablist = screen.getByRole('tablist');
@@ -422,7 +422,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const columnsTab = screen.getByRole('tab', { name: /columns/i });
@@ -454,7 +454,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
@@ -481,7 +481,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -492,7 +492,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Switch to Statistics then back
@@ -507,7 +507,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const tabs = screen.getAllByRole('tab');
@@ -531,7 +531,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const tabpanel = screen.getByRole('tabpanel');
@@ -575,7 +575,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
@@ -609,7 +609,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
@@ -640,7 +640,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -670,7 +670,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -698,7 +698,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -719,7 +719,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
@@ -739,7 +739,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -752,7 +752,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Columns tab is active by default and should show content immediately
@@ -773,7 +773,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
@@ -794,7 +794,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /statistics/i }));
@@ -816,7 +816,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -837,7 +837,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       fireEvent.click(screen.getByRole('tab', { name: /ddl/i }));
@@ -854,7 +854,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
         datasetId: 'ns1/sales_db.customers',
       });
 
@@ -879,7 +879,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: columnWithDottedId,
+        selectedColumns: [columnWithDottedId],
       });
 
       const columnLink = screen.getByTitle('View lineage for customer_id');
@@ -897,7 +897,7 @@ describe('DetailPanel', () => {
       const { rerender } = renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Switch to Statistics tab
@@ -937,7 +937,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       const tabpanel = screen.getByRole('tabpanel');
@@ -967,7 +967,7 @@ describe('DetailPanel', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
-        selectedColumn: mockColumnDetail,
+        selectedColumns: [mockColumnDetail],
       });
 
       // Switch to Statistics tab

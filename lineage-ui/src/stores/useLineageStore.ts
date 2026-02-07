@@ -32,6 +32,8 @@ interface LineageState {
   // Selected asset
   selectedAssetId: string | null;
   setSelectedAssetId: (id: string | null) => void;
+  isTableSelection: boolean;
+  setIsTableSelection: (isTable: boolean) => void;
 
   // Graph state
   nodes: LineageNode[];
@@ -114,6 +116,8 @@ export const useLineageStore = create<LineageState>((set) => ({
   // Selected asset
   selectedAssetId: null,
   setSelectedAssetId: (id) => set({ selectedAssetId: id }),
+  isTableSelection: false,
+  setIsTableSelection: (isTable) => set({ isTableSelection: isTable }),
 
   // Graph state
   nodes: [],
@@ -146,6 +150,7 @@ export const useLineageStore = create<LineageState>((set) => ({
       highlightedEdgeIds: new Set(),
       selectedAssetId: null,
       selectedEdgeId: null,
+      isTableSelection: false,
     }),
 
   // Panel state

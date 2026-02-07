@@ -26,6 +26,7 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
     expandedTables,
     toggleTableExpanded,
     setSelectedAssetId,
+    setIsTableSelection,
   } = useLineageStore();
 
   // Check if this table is expanded
@@ -80,18 +81,21 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
 
   const handleColumnClick = useCallback(
     (columnId: string) => {
+      setIsTableSelection(false); // This is a column selection
       setSelectedAssetId(columnId);
     },
-    [setSelectedAssetId]
+    [setSelectedAssetId, setIsTableSelection]
   );
 
   const handleNodeClick = useCallback(() => {
     // When the table node header is clicked, select the first column
     // This triggers path highlighting and dimming animation
+    // Mark as table selection so the panel shows all columns
     if (data.columns.length > 0) {
+      setIsTableSelection(true);
       setSelectedAssetId(data.columns[0].id);
     }
-  }, [data.columns, setSelectedAssetId]);
+  }, [data.columns, setSelectedAssetId, setIsTableSelection]);
 
   return (
     <div

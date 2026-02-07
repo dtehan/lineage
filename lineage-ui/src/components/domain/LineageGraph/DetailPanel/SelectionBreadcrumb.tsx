@@ -4,7 +4,7 @@ import { ChevronRight, Database, Table as TableIcon, Columns } from 'lucide-reac
 interface SelectionBreadcrumbProps {
   databaseName: string;
   tableName: string;
-  columnName: string;
+  columnName?: string;
 }
 
 export const SelectionBreadcrumb: React.FC<SelectionBreadcrumbProps> = ({
@@ -23,14 +23,18 @@ export const SelectionBreadcrumb: React.FC<SelectionBreadcrumbProps> = ({
       </span>
       <ChevronRight className="w-3 h-3 flex-shrink-0 text-slate-300" />
       <TableIcon className="w-3 h-3 flex-shrink-0 text-slate-400" />
-      <span className="text-slate-500 truncate max-w-[80px]" title={tableName}>
+      <span className={`truncate max-w-[80px] ${columnName ? 'text-slate-500' : 'font-medium text-slate-700'}`} title={tableName}>
         {tableName}
       </span>
-      <ChevronRight className="w-3 h-3 flex-shrink-0 text-slate-300" />
-      <Columns className="w-3 h-3 flex-shrink-0 text-blue-500" />
-      <span className="font-medium text-slate-700 truncate" title={columnName}>
-        {columnName}
-      </span>
+      {columnName && (
+        <>
+          <ChevronRight className="w-3 h-3 flex-shrink-0 text-slate-300" />
+          <Columns className="w-3 h-3 flex-shrink-0 text-blue-500" />
+          <span className="font-medium text-slate-700 truncate" title={columnName}>
+            {columnName}
+          </span>
+        </>
+      )}
     </nav>
   );
 };

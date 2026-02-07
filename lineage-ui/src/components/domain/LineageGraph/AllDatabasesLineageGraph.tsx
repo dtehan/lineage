@@ -409,7 +409,9 @@ function AllDatabasesLineageGraphInner() {
     : null;
 
   // Get selected details for panel
-  const selectedColumn = selectedAssetId ? getColumnDetail(selectedAssetId) : null;
+  const selectedColumns = selectedAssetId
+    ? [getColumnDetail(selectedAssetId)].filter((c): c is ColumnDetail => c !== null)
+    : [];
   const selectedEdgeDetail = selectedEdgeId ? getEdgeDetail(selectedEdgeId) : null;
 
   return (
@@ -610,7 +612,7 @@ function AllDatabasesLineageGraphInner() {
       <DetailPanel
         isOpen={isPanelOpen}
         onClose={closePanel}
-        selectedColumn={panelContent === 'node' ? selectedColumn : undefined}
+        selectedColumns={panelContent === 'node' ? selectedColumns : undefined}
         selectedEdge={panelContent === 'edge' ? selectedEdgeDetail : undefined}
         onViewFullLineage={handleViewFullLineage}
         onViewImpactAnalysis={handleViewImpactAnalysis}

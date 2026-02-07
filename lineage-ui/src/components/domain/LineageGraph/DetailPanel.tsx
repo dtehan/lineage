@@ -31,7 +31,7 @@ export interface EdgeDetail {
 export interface DetailPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedColumn?: ColumnDetail | null;
+  selectedColumns?: ColumnDetail[];
   selectedEdge?: EdgeDetail | null;
   datasetId?: string;
   onViewFullLineage?: (columnId: string) => void;
@@ -85,7 +85,7 @@ const TABS = [
 export const DetailPanel: React.FC<DetailPanelProps> = ({
   isOpen,
   onClose,
-  selectedColumn,
+  selectedColumns = [],
   selectedEdge,
   datasetId,
   onViewFullLineage,
@@ -93,15 +93,15 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<TabId>('columns');
 
-  // Compute effective datasetId from prop or selectedColumn
-  const effectiveDatasetId = datasetId || (selectedColumn
-    ? selectedColumn.id.substring(0, selectedColumn.id.lastIndexOf('.'))
+  // Compute effective datasetId from prop or selectedColumns
+  const effectiveDatasetId = datasetId || (selectedColumns.length > 0
+    ? selectedColumns[0].id.substring(0, selectedColumns[0].id.lastIndexOf('.'))
     : '');
 
   // Reset tab to columns when selection changes
   useEffect(() => {
     setActiveTab('columns');
-  }, [selectedColumn?.id]);
+  }, [selectedColumns.length > 0 ? selectedColumns[0]?.id : null]);
 
   const renderEdgeDetails = () => {
     if (!selectedEdge) return null;
@@ -166,16 +166,20 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
   };
 
   const renderColumnTabbed = () => {
-    if (!selectedColumn) return null;
+    if (selectedColumns.length === 0) return null;
+
+    // Show column name in breadcrumb only if single column selected
+    const showColumnName = selectedColumns.length === 1;
+    const firstColumn = selectedColumns[0];
 
     return (
       <>
         {/* Selection breadcrumb */}
         <div className="px-4 py-2 border-b border-slate-100">
           <SelectionBreadcrumb
-            databaseName={selectedColumn.databaseName}
-            tableName={selectedColumn.tableName}
-            columnName={selectedColumn.columnName}
+            databaseName={firstColumn.databaseName}
+            tableName={firstColumn.tableName}
+            columnName={showColumnName ? firstColumn.columnName : undefined}
           />
         </div>
 
@@ -186,7 +190,7 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
         <div className="flex-1 overflow-hidden flex flex-col">
           <TabPanel id="columns" activeTab={activeTab}>
             <ColumnsTab
-              columns={[selectedColumn]}
+              columns={selectedColumns}
               datasetId={effectiveDatasetId}
               onViewFullLineage={onViewFullLineage}
               onViewImpactAnalysis={onViewImpactAnalysis}
@@ -223,13 +227,17 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
       `}
       role="dialog"
-      aria-label={selectedColumn ? 'Column details' : 'Edge details'}
+      aria-label={selectedColumns.length > 0 ? 'Column details' : 'Edge details'}
       aria-hidden={!isOpen}
     >
       {/* Sticky header */}
       <div className="shrink-0 bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-slate-600">
-          {selectedColumn ? 'Column Details' : 'Connection Details'}
+          {selectedColumns.length > 1
+            ? 'Table Details'
+            : selectedColumns.length === 1
+              ? 'Column Details'
+              : 'Connection Details'}
         </h2>
         <button
           onClick={onClose}
@@ -241,9 +249,9 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
       </div>
 
       {/* Content area */}
-      {selectedColumn && renderColumnTabbed()}
+      {selectedColumns.length > 0 && renderColumnTabbed()}
       {selectedEdge && renderEdgeDetails()}
-      {!selectedColumn && !selectedEdge && (
+      {selectedColumns.length === 0 && !selectedEdge && (
         <div className="p-4">
           <p className="text-slate-500 text-sm">No item selected</p>
         </div>

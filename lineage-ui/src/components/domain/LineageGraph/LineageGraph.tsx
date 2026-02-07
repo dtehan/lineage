@@ -98,6 +98,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     edges: storeEdges,
     assetTypeFilter,
     setAssetTypeFilter,
+    isTableSelection,
   } = useLineageStore();
 
   // Always use table lineage to show all columns
@@ -346,6 +347,46 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     [storeNodes, storeEdges]
   );
 
+  // Get all columns from a table for panel (when table is selected)
+  const getTableColumns = useCallback(
+    (columnId: string): ColumnDetail[] => {
+      // Find the column to get its table info
+      const node = storeNodes.find((n) => n.id === columnId);
+      if (!node || node.type !== 'column') return [];
+
+      const { databaseName, tableName } = node;
+
+      // Find all columns in the same table
+      const tableColumns = storeNodes
+        .filter((n) =>
+          n.type === 'column' &&
+          n.databaseName === databaseName &&
+          n.tableName === tableName
+        )
+        .map((col) => {
+          const upstreamCount = storeEdges.filter((e) => e.target === col.id).length;
+          const downstreamCount = storeEdges.filter((e) => e.source === col.id).length;
+
+          return {
+            id: col.id,
+            databaseName: col.databaseName,
+            tableName: col.tableName || '',
+            columnName: col.columnName || '',
+            dataType: (col.metadata?.columnType as string) || undefined,
+            nullable: (col.metadata?.nullable as boolean) || undefined,
+            isPrimaryKey: (col.metadata?.isPrimaryKey as boolean) || undefined,
+            description: (col.metadata?.description as string) || undefined,
+            upstreamCount,
+            downstreamCount,
+          };
+        })
+        .sort((a, b) => a.columnName.localeCompare(b.columnName));
+
+      return tableColumns;
+    },
+    [storeNodes, storeEdges]
+  );
+
   // Get edge detail for panel
   const getEdgeDetail = useCallback(
     (edgeId: string): EdgeDetail | null => {
@@ -480,7 +521,12 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   }
 
   // Get selected details for panel
-  const selectedColumn = selectedAssetId ? getColumnDetail(selectedAssetId) : null;
+  // If table selection, get all columns from the table; otherwise just the selected column
+  const selectedColumns = selectedAssetId
+    ? (isTableSelection
+        ? getTableColumns(selectedAssetId)
+        : [getColumnDetail(selectedAssetId)].filter((c): c is ColumnDetail => c !== null))
+    : [];
   const selectedEdgeDetail = selectedEdgeId ? getEdgeDetail(selectedEdgeId) : null;
 
   return (
@@ -608,7 +654,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
       <DetailPanel
         isOpen={isPanelOpen}
         onClose={closePanel}
-        selectedColumn={panelContent === 'node' ? selectedColumn : undefined}
+        selectedColumns={panelContent === 'node' ? selectedColumns : undefined}
         selectedEdge={panelContent === 'edge' ? selectedEdgeDetail : undefined}
         datasetId={datasetId}
         onViewFullLineage={handleViewFullLineage}
