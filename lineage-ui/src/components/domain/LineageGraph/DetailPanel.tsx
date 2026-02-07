@@ -4,6 +4,7 @@ import { TabBar, TabPanel } from './DetailPanel/TabBar';
 import { ColumnsTab } from './DetailPanel/ColumnsTab';
 import { StatisticsTab } from './DetailPanel/StatisticsTab';
 import { DDLTab } from './DetailPanel/DDLTab';
+import { SelectionBreadcrumb } from './DetailPanel/SelectionBreadcrumb';
 
 export interface ColumnDetail {
   id: string;
@@ -169,14 +170,13 @@ export const DetailPanel: React.FC<DetailPanelProps> = ({
 
     return (
       <>
-        {/* Entity header */}
+        {/* Selection breadcrumb */}
         <div className="px-4 py-2 border-b border-slate-100">
-          <h3 className="text-sm font-semibold text-slate-800 break-all">
-            {selectedColumn.databaseName}.{selectedColumn.tableName}
-          </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Selected: <span className="font-medium text-slate-600">{selectedColumn.columnName}</span>
-          </p>
+          <SelectionBreadcrumb
+            databaseName={selectedColumn.databaseName}
+            tableName={selectedColumn.tableName}
+            columnName={selectedColumn.columnName}
+          />
         </div>
 
         {/* Tab bar */}

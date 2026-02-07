@@ -155,16 +155,18 @@ describe('DetailPanel', () => {
   });
 
   describe('TC-COMP-017: Column details display', () => {
-    it('displays table name in entity header', () => {
+    it('displays selection breadcrumb with database and table names', () => {
       renderDetailPanel({
         isOpen: true,
         onClose: () => {},
         selectedColumn: mockColumnDetail,
       });
 
-      expect(
-        screen.getByText('sales_db.customers')
-      ).toBeInTheDocument();
+      // Breadcrumb renders database and table as separate segments
+      const breadcrumb = screen.getByLabelText('Selection hierarchy');
+      expect(breadcrumb).toBeInTheDocument();
+      expect(screen.getByText('sales_db')).toBeInTheDocument();
+      expect(screen.getByText('customers')).toBeInTheDocument();
     });
 
     it('displays selected column name', () => {
