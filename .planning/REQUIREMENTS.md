@@ -51,22 +51,22 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 ### Developer Manual
 
-- [ ] **DEV-01**: Developer manual documents Python venv setup with requirements.txt
-- [ ] **DEV-02**: Developer manual documents Node.js/npm setup for frontend
-- [ ] **DEV-03**: Developer manual documents .env configuration for local development
-- [ ] **DEV-04**: Developer manual documents database initialization steps
-- [ ] **DEV-05**: Developer manual documents running 73 database tests
-- [ ] **DEV-06**: Developer manual documents running 20 API tests
-- [ ] **DEV-07**: Developer manual documents running 444+ frontend unit tests
-- [ ] **DEV-08**: Developer manual documents running 34 E2E tests with Playwright
-- [ ] **DEV-09**: Developer manual documents hexagonal architecture pattern
-- [ ] **DEV-10**: Developer manual documents Go backend structure (domain/application/adapter layers)
-- [ ] **DEV-11**: Developer manual documents React frontend structure (components/features/stores)
-- [ ] **DEV-12**: Developer manual documents OpenLineage schema and v2 API
-- [ ] **DEV-13**: Developer manual documents code standards from specs/ directory
-- [ ] **DEV-14**: Developer manual documents commit message conventions
-- [ ] **DEV-15**: Developer manual documents PR process and review expectations
-- [ ] **DEV-16**: Developer manual includes architecture diagrams (backend, frontend, database)
+- [x] **DEV-01**: Developer manual documents Python venv setup with requirements.txt
+- [x] **DEV-02**: Developer manual documents Node.js/npm setup for frontend
+- [x] **DEV-03**: Developer manual documents .env configuration for local development
+- [x] **DEV-04**: Developer manual documents database initialization steps
+- [x] **DEV-05**: Developer manual documents running 73 database tests
+- [x] **DEV-06**: Developer manual documents running 20 API tests
+- [x] **DEV-07**: Developer manual documents running 444+ frontend unit tests
+- [x] **DEV-08**: Developer manual documents running 34 E2E tests with Playwright
+- [x] **DEV-09**: Developer manual documents hexagonal architecture pattern
+- [x] **DEV-10**: Developer manual documents Go backend structure (domain/application/adapter layers)
+- [x] **DEV-11**: Developer manual documents React frontend structure (components/features/stores)
+- [x] **DEV-12**: Developer manual documents OpenLineage schema and v2 API
+- [x] **DEV-13**: Developer manual documents code standards from specs/ directory
+- [x] **DEV-14**: Developer manual documents commit message conventions
+- [x] **DEV-15**: Developer manual documents PR process and review expectations
+- [x] **DEV-16**: Developer manual includes architecture diagrams (backend, frontend, database)
 
 ## Future Requirements
 

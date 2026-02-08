@@ -7,7 +7,7 @@
 - [x] **v2.1 Pagination UI - Asset Browser** - Phases 9-10 (shipped 2026-01-31)
 - [x] **v3.0 Graph Improvements** - Phases 13-18 (shipped 2026-01-31)
 - [x] **v4.0 Interactive Graph Experience** - Phases 19-23 (shipped 2026-02-07)
-- [ ] **v5.0 Comprehensive Documentation** - Phases 24-27 (in progress)
+- [x] **v5.0 Comprehensive Documentation** - Phases 24-27 (shipped 2026-02-08)
 
 ## Phases
 
@@ -46,7 +46,7 @@ See [milestones/v4.0-ROADMAP.md](milestones/v4.0-ROADMAP.md) for full details. 5
 
 </details>
 
-### v5.0 Comprehensive Documentation (In Progress)
+### v5.0 Comprehensive Documentation (SHIPPED 2026-02-08)
 
 **Milestone Goal:** Enable new teams to deploy and operate the lineage application using documentation alone.
 
@@ -110,9 +110,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 27-01-PLAN.md -- Create developer manual with quick start, environment setup, and running tests
-- [ ] 27-02-PLAN.md -- Add architecture overview, backend/frontend architecture, database schema, API reference, and code standards
-- [ ] 27-03-PLAN.md -- Add contributing guidelines (commit conventions, PR process) and update root README link
+- [x] 27-01-PLAN.md -- Create developer manual with quick start, environment setup, and running tests
+- [x] 27-02-PLAN.md -- Add architecture overview, backend/frontend architecture, database schema, API reference, and code standards
+- [x] 27-03-PLAN.md -- Add contributing guidelines (commit conventions, PR process) and update root README link
 
 ## Progress
 
@@ -128,8 +128,8 @@ Plans:
 | 24. README Updates | v5.0 | 2/2 | Complete | 2026-02-07 |
 | 25. User Guide Refresh | v5.0 | 2/2 | Complete | 2026-02-08 |
 | 26. Operations Guide | v5.0 | 2/2 | Complete | 2026-02-08 |
-| 27. Developer Manual | v5.0 | 0/3 | Not started | - |
+| 27. Developer Manual | v5.0 | 3/3 | Complete | 2026-02-08 |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-08 (Phase 26 complete)*
+*Last updated: 2026-02-08 (v5.0 milestone complete)*
