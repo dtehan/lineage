@@ -100,7 +100,7 @@ The frontend makes REST API calls to the backend, which queries Teradata for lin
 |----------|-------------|
 | [User Guide](docs/user_guide.md) | Application usage and features |
 | [Operations Guide](docs/operations_guide.md) | Deployment, configuration, and production hardening |
-| [Developer Manual](docs/developer_manual.md) | Architecture and contributing (coming in v5.0) |
+| [Developer Manual](docs/developer_manual.md) | Architecture, testing, and contributing guidelines |
 | [Security Guide](docs/SECURITY.md) | Production security requirements |
 | [Specifications](specs/) | Technical specs and test plans |
 | [CLAUDE.md](CLAUDE.md) | AI development reference |
