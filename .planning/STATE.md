@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** Phase 26 - Operations Guide
+**Current focus:** Phase 27 - Developer Manual
 
 ## Current Position
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: 26 of 27 (Operations Guide) -- In progress
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-08 -- Completed 26-01-PLAN.md (prerequisites through running)
+Phase: 26 of 27 (Operations Guide) -- Complete
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-08 -- Completed 26-02-PLAN.md (production deployment, architecture, troubleshooting)
 
-Progress: [█████░░░░░] 56% (5/9 plans)
+Progress: [██████░░░░] 67% (6/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 60 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 5)
+- Total plans completed: 61 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 6)
 - Average plan duration: ~3.4 min
-- Total execution time: ~203 min
+- Total execution time: ~205 min
 
 **By Milestone:**
 
@@ -48,6 +48,9 @@ Progress: [█████░░░░░] 56% (5/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [26-02]: Summarize-and-link pattern for security: overview table with deep links to SECURITY.md sections
+- [26-02]: Rate limiting uses v* wildcard endpoints to cover both v1 and v2 API versions
+- [26-02]: Troubleshooting uses consistent Symptoms/Cause/Solution format across all 10 issues
 - [26-01]: QVCI called out in Prerequisites as early warning, detailed procedure in Database Setup
 - [26-01]: Python backend recommended for most deployments, Go backend for high-concurrency
 - [26-01]: Redis documented as optional throughout (Prerequisites, Config, Startup Order)
@@ -77,5 +80,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 26-01-PLAN.md (prerequisites through running) -- Phase 26 in progress
+Stopped at: Completed 26-02-PLAN.md (production deployment, architecture, troubleshooting) -- Phase 26 complete
 Resume file: None
