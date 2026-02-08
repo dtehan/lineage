@@ -451,34 +451,61 @@ The progress bar appears automatically when loading lineage data and disappears 
 
 When you click on a column or edge in the lineage graph, a **Detail Panel** slides in from the right side of the screen showing detailed information. Click the X button or press Escape to close the panel.
 
-**Column Details:**
+When a table or column is selected, the panel displays a breadcrumb showing the `database > table > column` path at the top, followed by a **tabbed interface** with three tabs:
 
-When a column is selected, the panel displays:
-- **Full Path**: `database.table.column` identifier with breadcrumb navigation
-- **Metadata Section**:
-  - Data type (e.g., VARCHAR(100), INTEGER)
-  - Nullable status (Yes/No badge)
-  - Primary key indicator (badge if applicable)
-- **Description**: Column description (if available in metadata)
-- **Lineage Statistics**:
-  - Count of upstream connections (data sources)
-  - Count of downstream connections (data consumers)
+#### Columns Tab (LayoutList icon)
 
-**Quick Actions (Column Panel):**
-- **View Full Lineage**: Highlights the complete lineage path for this column
-- **View Impact Analysis**: Navigate to impact analysis page for change assessment
+Lists all columns in the selected table. Each column entry shows:
 
-**Edge/Connection Details:**
+- **Column name** (clickable link) -- click any column name to navigate directly to that column's lineage graph. This provides a quick way to explore lineage for related columns without returning to the Asset Browser.
+- **Data type** badge (e.g., `VARCHAR(100)`, `INTEGER`)
+- **Nullable** badge (yellow "NULL" badge if the column allows null values)
+- **Primary key** badge (green "PK" badge if the column is a primary key)
+- **Description** (if available in metadata)
+- **Lineage counts**: Number of upstream and downstream connections for each column
 
-When an edge (connection) is selected, the panel displays:
+**Quick Actions** appear below each column:
+- **View Full Lineage**: Highlights the complete lineage path for this column in the graph
+- **Impact Analysis**: Navigate to the impact analysis page for change assessment
+
+#### Statistics Tab (BarChart3 icon)
+
+Shows table-level metadata fetched from the database:
+
+| Field | Description |
+|-------|-------------|
+| **Type** | Table, View, or Materialized View |
+| **Owner** | The database user who owns the object |
+| **Created** | Date the object was created |
+| **Last Modified** | Date of the most recent alteration |
+| **Row Count** | Number of rows (formatted with locale-appropriate separators) |
+| **Size** | Storage size in human-readable format (e.g., "1.2 GB"). Shown for tables only; views do not have a size |
+| **Comment** | Table comment, if one has been set in the database |
+
+Data is loaded on demand when you switch to this tab.
+
+#### DDL Tab (Code icon)
+
+Displays the SQL definition of the selected table or view with syntax highlighting:
+
+- **For views**: Shows the View SQL definition (the `SELECT` statement that defines the view)
+- **For tables**: Shows the `CREATE TABLE` DDL statement
+- **Syntax highlighting**: SQL keywords, identifiers, and literals are color-coded using a dark theme for readability
+- **Line numbers**: Each line is numbered for easy reference
+- **Copy button**: Click "Copy SQL" or "Copy DDL" to copy the full definition to your clipboard (shows a "Copied" confirmation)
+- **Truncation warning**: Definitions longer than 12,500 characters display a yellow warning banner noting that the SQL has been truncated
+- **Column comments**: If any columns have comments defined in the database, they are listed below the SQL definition
+
+Data is loaded on demand when you switch to this tab.
+
+#### Edge/Connection Details
+
+When an edge (connection line) is selected instead of a column, the panel displays connection details rather than the tabbed interface:
 - **Source Column**: Full path of the data source (`database.table.column`)
 - **Target Column**: Full path of the data destination
-- **Transformation Type**: Color-coded badge (DIRECT, DERIVED, AGGREGATED, JOINED, etc.)
+- **Transformation Type**: The transformation label (DIRECT, DERIVED, AGGREGATED, JOINED, etc.)
 - **Confidence Score**: Visual progress bar showing confidence level (0-100%)
-  - Green (≥90%): High confidence
-  - Yellow (70-89%): Medium confidence
-  - Orange (50-69%): Low confidence
-  - Red (<50%): Very low confidence
+- **SQL**: If transformation SQL is available, it is displayed with a Copy button
 
 ### Impact Analysis
 
@@ -558,50 +585,35 @@ Toggle fullscreen mode for detailed analysis of complex lineages. The graph expa
 
 ### Search
 
-Access the Search page via the header search form or sidebar icon.
-
-**What You Can Search:**
-
-| Asset Type | Example Search | Result Navigation |
-|------------|----------------|-------------------|
-| **Database** | `SALES_DW` | `/lineage/database/SALES_DW` (database-level lineage) |
-| **Table** | `DIM_CUSTOMER` | `/lineage/SALES_DW.DIM_CUSTOMER` (table-level lineage) |
-| **Column** | `customer_id` | `/lineage/SALES_DW.DIM_CUSTOMER.customer_id` (column-level lineage) |
+Access the Search page via the header search form or the sidebar search icon. You can also navigate directly to `/search?q=your-query`.
 
 **Search Features:**
 - Minimum 2 characters to trigger search
-- Real-time results as you type (with debouncing)
-- URL persists search query (`/search?q=your-query`)
+- Real-time results as you type
+- URL persists the search query (`/search?q=your-query`) so you can bookmark or share searches
 - Results limited to 50 by default
-- Results ranked by relevance score
 
-**Search Parameters:**
-- `q` - Search query text (required, minimum 2 characters)
-- `type` - Filter by asset type: `database`, `table`, or `column` (can specify multiple)
-- `limit` - Maximum results (default: 50)
+**Grouped Results:**
 
-Example URL with filters: `/search?q=customer&type=table&type=column&limit=20`
+Search results are organized into two sections:
 
-**Result Cards:**
+| Section | Icon | What It Shows |
+|---------|------|---------------|
+| **Databases** | Blue database icon | Databases matching your query, with a count of matching tables |
+| **Tables** | Green table icon | Tables/datasets matching your query, with the full `database.table` path |
 
-Each result shows:
-```
-┌─────────────────────────────────────────┐
-│ [Icon] asset_name            [Type Badge]│
-│        database.table.column             │
-└─────────────────────────────────────────┘
-```
+A summary line at the top shows the total result count (e.g., "5 results found (2 databases, 3 tables)").
 
-| Asset Type | Icon Color | Badge |
-|------------|------------|-------|
-| Database | Blue (#3b82f6) | "DATABASE" |
-| Table | Green (#22c55e) | "TABLE" |
-| Column | Purple (#a855f7) | "COLUMN" |
+**Expandable Result Items:**
+
+Each result has an expand/collapse arrow:
+- **Expand a database** to see the tables within it that match the search. Click any listed table to navigate to its lineage.
+- **Expand a table** to see its columns (fields). Each column shows its name and data type. Click any column to navigate directly to that column's lineage graph.
 
 **Search Result Actions:**
-- Click a **database** result to view all table-to-table relationships in that database
-- Click a **table** result to view lineage for all columns in that table
-- Click a **column** result to view upstream and downstream lineage for that specific column
+- Click a **database name** to view all table-to-table relationships in that database (database-level lineage)
+- Click a **table name** to view lineage for all columns in that table (table-level lineage)
+- Click a **column name** (within an expanded table) to view upstream and downstream lineage for that specific column
 
 ### Lineage Levels
 
