@@ -605,3 +605,95 @@ Full standards: [specs/coding_standards_typescript.md](../specs/coding_standards
 | Performance | Use `MULTISET` over `SET` tables, qualify all column references |
 
 Full standards: [specs/coding_standards_sql.md](../specs/coding_standards_sql.md)
+
+---
+
+## Contributing
+
+### 10.1 Development Workflow
+
+The standard development cycle for contributing changes:
+
+1. **Branch** from `main` with a descriptive name (see Section 10.3)
+2. **Develop** your changes following the code standards in Section 9
+3. **Test** locally by running the relevant test suites (see Section 3)
+4. **Commit** with conventional commit messages (see Section 10.2)
+5. **Push** and create a pull request (see Section 10.3)
+
+### 10.2 Commit Conventions
+
+This project uses [Conventional Commits](https://www.conventionalcommits.org/). Every commit message follows the format:
+
+```
+type(scope): description
+```
+
+**Types:**
+
+| Type | When to Use | Example |
+|------|-------------|---------|
+| `feat` | New feature or functionality | `feat(api): add dataset search endpoint` |
+| `fix` | Bug fix | `fix(graph): correct edge routing for self-referencing tables` |
+| `docs` | Documentation changes | `docs(readme): update quick start commands` |
+| `test` | Adding or updating tests | `test(api): add lineage traversal test cases` |
+| `refactor` | Code restructuring (no behavior change) | `refactor(store): simplify lineage state management` |
+| `chore` | Maintenance, dependencies, config | `chore: update Node.js dependencies` |
+
+**Scope conventions:**
+
+- Use the component or area affected: `api`, `ui`, `graph`, `database`, `store`, `readme`
+- Phase numbers are used during planned development: `feat(24-01): add component READMEs`
+- Scope is optional for broad changes: `chore: update dependencies`
+
+**Rules:**
+
+- Write the description in lowercase, imperative mood ("add feature" not "added feature" or "adds feature")
+- No period at the end of the subject line
+- Keep the first line under 72 characters
+- Add a body for complex changes (blank line after the subject line):
+
+```
+feat(graph): add database cluster grouping
+
+Group tables by database in the lineage graph using ELKjs
+compound nodes. Clusters are collapsible and color-coded.
+```
+
+### 10.3 Pull Request Process
+
+1. **Branch:** Create a descriptive branch from `main`
+   - Feature: `feature/search-pagination`
+   - Bug fix: `fix/graph-edge-routing`
+   - Documentation: `docs/update-api-reference`
+
+2. **Develop:** Make changes and commit incrementally with conventional commits
+
+3. **Test:** Run all affected test suites locally before pushing. At minimum:
+   - Frontend changes: `npm test` (unit) and `npx playwright test` (E2E)
+   - Backend changes: `cd lineage-api && python tests/run_api_tests.py`
+   - Database changes: `cd database && python tests/run_tests.py`
+
+4. **Push:** Push your branch to the remote
+
+5. **Create PR:** Open a pull request against `main` with:
+   - A clear title following commit convention format (e.g., `feat(graph): add column search within graph`)
+   - Description of what changed and why
+   - List of test suites you ran
+
+> **Note:** This project does not currently have CI/CD pipelines or branch protection rules. All quality assurance is done through local testing and code review.
+
+### 10.4 Project Structure Reference
+
+When making changes, use this table to find the relevant code:
+
+| What You're Changing | Where to Look |
+|---------------------|---------------|
+| API endpoint | `lineage-api/internal/adapter/inbound/http/` (Go) or `lineage-api/python_server.py` (Python) |
+| Database query | `lineage-api/internal/adapter/outbound/teradata/` |
+| UI component | `lineage-ui/src/components/domain/` |
+| Graph behavior | `lineage-ui/src/components/domain/LineageGraph/` |
+| State management | `lineage-ui/src/stores/` |
+| API hook | `lineage-ui/src/api/hooks/` |
+| Database schema | `database/scripts/setup/setup_lineage_schema.py` |
+| Lineage data | `database/scripts/populate/populate_lineage.py` |
+| Coding standards | `specs/coding_standards_*.md` |
