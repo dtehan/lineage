@@ -474,4 +474,159 @@ graph TD
 
 ## Troubleshooting
 
-*Section content to be added.*
+### Cannot Connect to Teradata
+
+**Symptoms:** `Connection refused` or `Login failure` errors on backend startup.
+
+**Cause:** Incorrect hostname, port, or credentials in configuration.
+
+**Solution:**
+
+1. Verify `TERADATA_HOST`, `TERADATA_USER`, and `TERADATA_PASSWORD` in `.env`
+2. Test connectivity directly:
+   ```bash
+   python -c "import teradatasql; teradatasql.connect(host='YOUR_HOST', user='YOUR_USER', password='YOUR_PASS')"
+   ```
+3. Check firewall rules for port 1025 (or your configured `TERADATA_PORT`)
+4. Confirm the Teradata instance is running and accepting connections
+
+### QVCI Feature is Disabled (Error 9719)
+
+**Symptoms:** `populate_lineage.py` fails with error 9719 during metadata extraction.
+
+**Cause:** QVCI is not enabled on the Teradata instance.
+
+**Solution:** See [Database Setup > Verify QVCI Status](#41-verify-qvci-status) for verification and enablement instructions. Enabling QVCI requires DBA privileges and a database restart. If QVCI cannot be enabled, modify `populate_lineage.py` to use `DBC.ColumnsV` instead of `DBC.ColumnsJQV` (see the fallback instructions in [Database Setup](#41-verify-qvci-status)).
+
+### Empty Lineage Graph
+
+**Symptoms:** Graph page shows "No lineage data found" or renders with no edges.
+
+**Cause:** The `OL_COLUMN_LINEAGE` table is empty or not populated for the selected column.
+
+**Solution:**
+
+1. Run `populate_lineage.py` to populate lineage data (see [Database Setup > Populate Lineage Data](#44-populate-lineage-data))
+2. Verify data exists:
+   ```sql
+   SELECT COUNT(*) FROM OL_COLUMN_LINEAGE;
+   ```
+3. For DBQL mode, ensure the Teradata user has SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`
+
+### Port Already in Use
+
+**Symptoms:** `Address already in use` error when starting the backend.
+
+**Cause:** Another process is using port 8080 (or your configured `API_PORT`).
+
+**Solution:**
+
+1. Change `API_PORT` in `.env` to a different port, or
+2. Stop the conflicting process:
+   ```bash
+   # macOS / Linux: identify the process using port 8080
+   lsof -i :8080
+   ```
+
+### Redis Connection Failed
+
+**Symptoms:** Warning in Go backend logs about Redis connection failure.
+
+**Cause:** Redis is not running or not reachable at the configured `REDIS_ADDR`.
+
+**Solution:** This is **non-fatal** -- the application falls back to operating without caching. No action is required unless you want caching enabled.
+
+To enable Redis:
+1. Start a Redis server
+2. Verify `REDIS_ADDR` in `.env` points to the correct host and port
+
+**Note:** Redis is only used by the Go backend. The Python backend does not use Redis, so this warning will not appear when using the Python backend.
+
+### Frontend Build Fails
+
+**Symptoms:** `npm run build` fails with compilation errors.
+
+**Cause:** Missing dependencies or incompatible Node.js version.
+
+**Solution:**
+
+1. Verify Node.js version is 18 or higher:
+   ```bash
+   node --version
+   ```
+2. Delete `node_modules` and reinstall:
+   ```bash
+   cd lineage-ui
+   rm -rf node_modules
+   npm install
+   ```
+3. Retry the build:
+   ```bash
+   npm run build
+   ```
+4. If TypeScript errors persist, review the build output for specific file and line references
+
+### Slow Graph Loading
+
+**Symptoms:** Large lineage graphs take more than 30 seconds to render.
+
+**Cause:** Deep lineage traversal or wide fan-out patterns generating large result sets.
+
+**Solution:**
+
+1. Reduce the traversal depth in the UI toolbar (default is 5; try 3)
+2. For the Go backend, set `VALIDATION_DEFAULT_MAX_DEPTH` to a lower value in `.env`
+3. Enable Redis caching (Go backend only) to cache frequently accessed lineage graphs
+4. Check if the Teradata instance has the recommended indexes on `OL_COLUMN_LINEAGE` (created by `setup_lineage_schema.py`)
+
+### Frontend Cannot Reach Backend API
+
+**Symptoms:** Network errors in the browser console; "Loading..." spinner never resolves.
+
+**Cause:** Backend not running, wrong port, or CORS misconfiguration.
+
+**Solution:**
+
+1. Verify the backend is running:
+   ```bash
+   curl http://localhost:8080/health
+   ```
+2. **In development:** The Vite development server proxies `/api/*` to `localhost:8080` automatically. Ensure the backend is running on port 8080 (or update the proxy target in `lineage-ui/vite.config.ts`)
+3. **In production:** Verify the reverse proxy routes `/api/*` requests to the backend. Check the proxy configuration and backend logs for errors
+
+### Teradata Driver Not Found
+
+**Symptoms:** `ModuleNotFoundError: No module named 'teradatasql'` when running Python scripts.
+
+**Cause:** Python virtual environment not activated or dependencies not installed.
+
+**Solution:**
+
+1. Activate the virtual environment:
+   ```bash
+   source .venv/bin/activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Verify installation:
+   ```bash
+   python -c "import teradatasql; print(teradatasql.__version__)"
+   ```
+
+### Schema Already Exists
+
+**Symptoms:** `setup_lineage_schema.py` fails with "table already exists" errors.
+
+**Cause:** Running the schema setup script on a database that already has OL_* tables.
+
+**Solution:** The script is idempotent for indexes but not for tables. If you need to recreate the schema:
+
+1. Back up any existing lineage data
+2. Drop the existing OL_* tables
+3. Re-run the schema setup script:
+   ```bash
+   cd database
+   python scripts/setup/setup_lineage_schema.py --openlineage
+   ```
