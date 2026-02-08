@@ -338,13 +338,137 @@ Start components in the following order:
 
 ## Production Deployment
 
-*Section content to be added.*
+The application is designed to run behind a reverse proxy that handles authentication, TLS termination, rate limiting, and security headers. The application itself does NOT implement authentication -- this is intentional. See [Security Documentation](SECURITY.md) for complete configuration examples including Traefik + Docker Compose, Nginx, and Kubernetes Ingress.
+
+### 6.1 Security Overview
+
+| Requirement | Description | Details |
+|-------------|-------------|---------|
+| Authentication | API must be behind an auth proxy (OAuth2-Proxy, API Gateway) | [SECURITY.md - Authentication](SECURITY.md#2-authentication-requirements) |
+| TLS | All traffic must use HTTPS (TLS 1.2 minimum, TLS 1.3 recommended) | [SECURITY.md - TLS](SECURITY.md#1-tls-requirements) |
+| Security Headers | Reverse proxy must add HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cache-Control | [SECURITY.md - Headers](SECURITY.md#4-security-headers) |
+| CORS | Restrict allowed origins to your domain (never use wildcard `*`) | [SECURITY.md - CORS](SECURITY.md#5-cors-configuration) |
+| Rate Limiting | Configure per-endpoint rate limits at the proxy level | See [Rate Limiting](#62-rate-limiting) below |
+
+**Note:** The application's built-in CORS configuration (`localhost:3000`, `localhost:5173`) is for development only. In production, CORS must be configured at the reverse proxy level with your actual domain.
+
+### 6.2 Rate Limiting
+
+Configure rate limiting at the reverse proxy or API gateway level. The following limits are recommended by endpoint category:
+
+| Endpoint | Per-IP Limit | Per-User Limit | Rationale |
+|----------|-------------|----------------|-----------|
+| `GET /api/v*/assets/*` | 100/min | 300/min | Normal browsing |
+| `GET /api/v*/lineage/{id}` | 100/min | 300/min | Normal browsing |
+| `GET /api/v*/search` | 30/min | 60/min | Heavier database queries |
+| `GET /api/v*/lineage/{id}/impact` | 20/min | 40/min | Expensive recursive queries |
+| `GET /health` | 1000/min | unlimited | Monitoring systems |
+
+**Burst handling:** Allow a burst of 10-20 requests above the stated limits. Use a sliding window algorithm for smoother limiting rather than fixed windows.
+
+See [SECURITY.md - Rate Limiting](SECURITY.md#3-rate-limiting-requirements) for proxy-specific configuration examples (Traefik, Nginx, Kubernetes Ingress).
+
+### 6.3 Frontend Production Serving
+
+Build the frontend for production:
+
+```bash
+cd lineage-ui
+npm run build    # Outputs to dist/
+```
+
+The `dist/` directory contains static HTML, CSS, and JavaScript. Configure your reverse proxy to:
+
+1. Serve files from `dist/` for all non-API paths
+2. Proxy `/api/*` requests to the backend (port 8080 by default)
+3. Return `index.html` for all client-side routes (SPA fallback)
+
+Example Nginx location block:
+
+```nginx
+# Serve frontend static files
+location / {
+    root /path/to/lineage-ui/dist;
+    try_files $uri $uri/ /index.html;
+}
+
+# Proxy API requests to backend
+location /api/ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
+```
+
+**Do not use `npm run dev` in production.** The Vite development server is not designed for production use.
+
+### 6.4 Deployment Checklist
+
+Verify each item before going live:
+
+- [ ] Teradata credentials configured and tested
+- [ ] QVCI enabled on Teradata instance (see [Database Setup](#41-verify-qvci-status))
+- [ ] OL_* schema created and lineage data populated
+- [ ] Backend starts without errors
+- [ ] Frontend built (`npm run build`)
+- [ ] Reverse proxy configured with TLS
+- [ ] Authentication proxy configured and tested
+- [ ] Rate limiting configured
+- [ ] Security headers verified (see [SECURITY.md - Verification Checklist](SECURITY.md#verification-checklist))
+- [ ] Health endpoint accessible: `curl https://your-domain/health`
 
 ---
 
 ## Architecture
 
-*Section content to be added.*
+### Deployment Architecture
+
+```mermaid
+graph TD
+    subgraph "Client Layer"
+        Browser[Web Browser]
+    end
+
+    subgraph "Proxy Layer"
+        LB["Reverse Proxy<br/>(Nginx, Traefik, or K8s Ingress)"]
+        AuthProxy["Auth Proxy<br/>(OAuth2-Proxy)"]
+    end
+
+    subgraph "Application Layer"
+        Frontend["Frontend Static Files<br/>(React Build Output)"]
+        Backend["Backend API Server<br/>(Go or Python Flask · Port 8080)"]
+    end
+
+    subgraph "Data Layer"
+        TD[("Teradata<br/>(Port 1025)")]
+        Redis[("Redis Cache<br/>(Port 6379 · Optional)")]
+    end
+
+    Browser -->|HTTPS| LB
+    LB -->|ForwardAuth| AuthProxy
+    LB -->|"Static Files (/, /index.html)"| Frontend
+    LB -->|"/api/*"| Backend
+    Backend --> TD
+    Backend -.->|Optional| Redis
+```
+
+**Layer descriptions:**
+
+- **Client Layer:** Web browsers access the application over HTTPS. All HTTP requests are redirected to HTTPS by the reverse proxy.
+- **Proxy Layer:** The reverse proxy terminates TLS, enforces authentication via ForwardAuth to an OAuth2-Proxy, applies rate limiting, and injects security headers. See [Security Documentation](SECURITY.md) for complete proxy configuration examples.
+- **Application Layer:** The frontend is a set of static files built from React (`npm run build`). The backend is a Go or Python Flask server providing REST API endpoints. The frontend proxies API requests through the reverse proxy.
+- **Data Layer:** Teradata stores lineage metadata in OL_* tables (see [Database Setup](#database-setup)). Redis provides optional caching for the Go backend. The Python backend does not use Redis. The application operates normally without Redis.
+
+### Component Communication
+
+| From | To | Protocol | Port |
+|------|----|----------|------|
+| Browser | Reverse Proxy | HTTPS | 443 |
+| Reverse Proxy | Auth Proxy | HTTP | 4180 |
+| Reverse Proxy | Frontend Files | File system | -- |
+| Reverse Proxy | Backend API | HTTP | 8080 |
+| Backend API | Teradata | TCP (Teradata) | 1025 |
+| Backend API | Redis (optional) | TCP (Redis) | 6379 |
 
 ---
 
