@@ -22,17 +22,17 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 ### User Guide
 
-- [ ] **USER-01**: User guide documents asset browser navigation with pagination controls
-- [ ] **USER-02**: User guide documents page size selection (25, 50, 100, 200)
-- [ ] **USER-03**: User guide documents lineage graph depth/direction controls
-- [ ] **USER-04**: User guide documents loading progress bar and stage indicators
-- [ ] **USER-05**: User guide documents fit-to-selection viewport control
-- [ ] **USER-06**: User guide documents detail panel tabs (Columns, Statistics, DDL)
-- [ ] **USER-07**: User guide documents viewing table statistics (row count, size, owner, dates)
-- [ ] **USER-08**: User guide documents viewing DDL/SQL with syntax highlighting
-- [ ] **USER-09**: User guide documents click-to-navigate from column list to lineage
-- [ ] **USER-10**: User guide documents search functionality across databases/tables/columns
-- [ ] **USER-11**: User guide includes screenshots of key features
+- [x] **USER-01**: User guide documents asset browser navigation with pagination controls
+- [x] **USER-02**: User guide documents page size selection (25, 50, 100, 200)
+- [x] **USER-03**: User guide documents lineage graph depth/direction controls
+- [x] **USER-04**: User guide documents loading progress bar and stage indicators
+- [x] **USER-05**: User guide documents fit-to-selection viewport control
+- [x] **USER-06**: User guide documents detail panel tabs (Columns, Statistics, DDL)
+- [x] **USER-07**: User guide documents viewing table statistics (row count, size, owner, dates)
+- [x] **USER-08**: User guide documents viewing DDL/SQL with syntax highlighting
+- [x] **USER-09**: User guide documents click-to-navigate from column list to lineage
+- [x] **USER-10**: User guide documents search functionality across databases/tables/columns
+- [x] **USER-11**: User guide includes screenshots of key features
 
 ### Operations Guide
 
@@ -85,27 +85,27 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| README-01 | Phase 24 | Pending |
-| README-02 | Phase 24 | Pending |
-| README-03 | Phase 24 | Pending |
-| README-04 | Phase 24 | Pending |
-| README-05 | Phase 24 | Pending |
-| README-06 | Phase 24 | Pending |
-| README-07 | Phase 24 | Pending |
-| README-08 | Phase 24 | Pending |
-| README-09 | Phase 24 | Pending |
-| README-10 | Phase 24 | Pending |
-| USER-01 | Phase 25 | Pending |
-| USER-02 | Phase 25 | Pending |
-| USER-03 | Phase 25 | Pending |
-| USER-04 | Phase 25 | Pending |
-| USER-05 | Phase 25 | Pending |
-| USER-06 | Phase 25 | Pending |
-| USER-07 | Phase 25 | Pending |
-| USER-08 | Phase 25 | Pending |
-| USER-09 | Phase 25 | Pending |
-| USER-10 | Phase 25 | Pending |
-| USER-11 | Phase 25 | Pending |
+| README-01 | Phase 24 | Complete |
+| README-02 | Phase 24 | Complete |
+| README-03 | Phase 24 | Complete |
+| README-04 | Phase 24 | Complete |
+| README-05 | Phase 24 | Complete |
+| README-06 | Phase 24 | Complete |
+| README-07 | Phase 24 | Complete |
+| README-08 | Phase 24 | Complete |
+| README-09 | Phase 24 | Complete |
+| README-10 | Phase 24 | Complete |
+| USER-01 | Phase 25 | Complete |
+| USER-02 | Phase 25 | Complete |
+| USER-03 | Phase 25 | Complete |
+| USER-04 | Phase 25 | Complete |
+| USER-05 | Phase 25 | Complete |
+| USER-06 | Phase 25 | Complete |
+| USER-07 | Phase 25 | Complete |
+| USER-08 | Phase 25 | Complete |
+| USER-09 | Phase 25 | Complete |
+| USER-10 | Phase 25 | Complete |
+| USER-11 | Phase 25 | Complete |
 | OPS-01 | Phase 26 | Pending |
 | OPS-02 | Phase 26 | Pending |
 | OPS-03 | Phase 26 | Pending |
