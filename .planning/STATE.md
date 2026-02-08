@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** Phase 24 - README Updates
+**Current focus:** Phase 25 - User Guide Refresh
 
 ## Current Position
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: 24 of 27 (README Updates) -- COMPLETE ✓
-Plan: 2 of 2 in current phase
-Status: Phase verified and complete (5/5 must-haves passed)
-Last activity: 2026-02-07 -- Phase 24 complete: 4 READMEs updated (root, lineage-api, lineage-ui, database)
+Phase: 25 of 27 (User Guide Refresh) -- In progress
+Plan: 1 of 2 in current phase
+Status: Plan 25-01 complete
+Last activity: 2026-02-08 -- Completed 25-01-PLAN.md (user guide feature documentation)
 
-Progress: [██░░░░░░░░] 22% (2/9 plans)
+Progress: [███░░░░░░░] 33% (3/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 57 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 2)
+- Total plans completed: 58 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 3)
 - Average plan duration: ~3.4 min
-- Total execution time: ~196 min
+- Total execution time: ~199 min
 
 **By Milestone:**
 
@@ -48,6 +48,9 @@ Progress: [██░░░░░░░░] 22% (2/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [25-01]: Document Asset Browser without pagination controls (component does not implement them despite tests existing)
+- [25-01]: Added Asset Type Filter to toolbar docs (existed in component but was undocumented)
+- [25-01]: Kept Edge/Connection Details as separate subsection (not a tab) matching actual implementation
 - [24-02]: Include all Makefile targets and package.json scripts in component READMEs (verified from source)
 - [24-02]: Minimal database/README.md changes -- only add Testing section and back-link
 - [24-01]: Used Mermaid diagram for architecture visualization (GitHub renders natively)
@@ -69,6 +72,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-07
-Stopped at: Completed 24-02-PLAN.md (component READMEs) -- Phase 24 complete
+Last session: 2026-02-08
+Stopped at: Completed 25-01-PLAN.md (user guide feature documentation)
 Resume file: None
