@@ -63,8 +63,8 @@ See [milestones/v4.0-ROADMAP.md](milestones/v4.0-ROADMAP.md) for full details. 5
 **Plans**: 2 plans
 
 Plans:
-- [ ] 24-01-PLAN.md -- Rewrite root README with v4.0 features, quick start, architecture diagram, doc links
-- [ ] 24-02-PLAN.md -- Create lineage-api and lineage-ui READMEs, update database README testing section
+- [x] 24-01-PLAN.md -- Rewrite root README with v4.0 features, quick start, architecture diagram, doc links
+- [x] 24-02-PLAN.md -- Create lineage-api and lineage-ui READMEs, update database README testing section
 
 #### Phase 25: User Guide Refresh
 **Goal**: The user guide documents every user-facing feature so someone can learn the full application without external help
@@ -125,11 +125,11 @@ Plans:
 | 9-10. Pagination UI | v2.1 | 5/5 | Complete | 2026-01-31 |
 | 13-18. Graph Improvements | v3.0 | 11/11 | Complete | 2026-01-31 |
 | 19-23. Interactive Graph Experience | v4.0 | 15/15 | Complete | 2026-02-07 |
-| 24. README Updates | v5.0 | 0/2 | Not started | - |
+| 24. README Updates | v5.0 | 2/2 | Complete | 2026-02-07 |
 | 25. User Guide Refresh | v5.0 | 0/2 | Not started | - |
 | 26. Operations Guide | v5.0 | 0/2 | Not started | - |
 | 27. Developer Manual | v5.0 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-07 (Phase 24 plans created)*
+*Last updated: 2026-02-07 (Phase 24 complete)*

@@ -9,16 +9,16 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 ### README Updates
 
-- [ ] **README-01**: Root README.md reflects v4.0 features (detail panel, animations, statistics/DDL)
-- [ ] **README-02**: Root README.md has accurate quick start commands that work
-- [ ] **README-03**: Root README.md links to new documentation (user guide, ops guide, dev manual)
-- [ ] **README-04**: lineage-api/README.md documents Go backend structure and hexagonal architecture
-- [ ] **README-05**: lineage-api/README.md has accurate commands for running Python/Go servers
-- [ ] **README-06**: lineage-ui/README.md documents React component structure and new v4.0 components
-- [ ] **README-07**: lineage-ui/README.md has accurate dev/build/test commands
-- [ ] **README-08**: database/README.md documents OL_* schema and OpenLineage alignment
-- [ ] **README-09**: database/README.md explains lineage population methods (fixtures vs DBQL)
-- [ ] **README-10**: database/README.md has accurate test execution commands
+- [x] **README-01**: Root README.md reflects v4.0 features (detail panel, animations, statistics/DDL)
+- [x] **README-02**: Root README.md has accurate quick start commands that work
+- [x] **README-03**: Root README.md links to new documentation (user guide, ops guide, dev manual)
+- [x] **README-04**: lineage-api/README.md documents Go backend structure and hexagonal architecture
+- [x] **README-05**: lineage-api/README.md has accurate commands for running Python/Go servers
+- [x] **README-06**: lineage-ui/README.md documents React component structure and new v4.0 components
+- [x] **README-07**: lineage-ui/README.md has accurate dev/build/test commands
+- [x] **README-08**: database/README.md documents OL_* schema and OpenLineage alignment
+- [x] **README-09**: database/README.md explains lineage population methods (fixtures vs DBQL)
+- [x] **README-10**: database/README.md has accurate test execution commands
 
 ### User Guide
 
