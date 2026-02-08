@@ -127,3 +127,130 @@ The lineage population script supports two modes:
 | DBQL extraction | `python scripts/populate/populate_lineage.py --dbql` | Production -- extracts lineage from Teradata query logs |
 
 For local development, the fixtures mode provides a complete working dataset without requiring query log history.
+
+---
+
+## Running Tests
+
+The project has four test suites covering database, API, frontend unit, and end-to-end testing. Run all suites before submitting changes.
+
+### Test Suite Overview
+
+| Suite | Tests | Command | Requires |
+|-------|-------|---------|----------|
+| Database | 73 | `cd database && python tests/run_tests.py` | Teradata connection |
+| API | 20 | `cd lineage-api && python tests/run_api_tests.py` | Backend running on :8080 |
+| Frontend Unit | ~558 | `cd lineage-ui && npm test` | Nothing (runs in jsdom) |
+| E2E | 34 | `cd lineage-ui && npx playwright test` | Backend on :8080 |
+
+### 3.1 Database Tests (73 tests)
+
+**Command:**
+
+```bash
+cd database
+python tests/run_tests.py
+```
+
+**Requires:** Teradata connection (configured via `.env`).
+
+**What it validates:** Schema correctness, CTE lineage traversal (upstream and downstream), cycle detection, diamond patterns, fan-in/fan-out, and performance benchmarks.
+
+**Test files:**
+- `tests/run_tests.py` -- Main test runner
+- `tests/test_correctness.py` -- CTE correctness validation
+- `tests/test_credential_validation.py` -- Credential validation
+- `tests/test_dbql_error_handling.py` -- DBQL error handling
+
+**Note:** 29 tests are skipped in ClearScape Analytics environments due to DBQL and index limitations. Expected output is approximately 73 tests total with 29 skipped.
+
+### 3.2 API Tests (20 tests)
+
+**Command:**
+
+```bash
+cd lineage-api
+python tests/run_api_tests.py
+```
+
+**Requires:** The Python backend running on `:8080`. Start it first in a separate terminal:
+
+```bash
+cd lineage-api
+python python_server.py
+```
+
+**What it validates:** All REST API endpoints (v1 and v2), response shapes, error handling, and search functionality.
+
+### 3.3 Frontend Unit Tests (~558 tests)
+
+**Commands:**
+
+```bash
+cd lineage-ui
+
+# Watch mode (re-runs on file changes, best for development)
+npm test
+
+# Single run (CI-style, exits after completion)
+npx vitest --run
+
+# With coverage report
+npm run test:coverage
+```
+
+**Requires:** Nothing. Tests run in a jsdom environment via Vitest -- no backend or browser needed.
+
+**What it validates:** Component rendering, hook behavior, store logic, API client mocking, graph layout calculations, and accessibility.
+
+**Configuration:** `vitest.config.ts` sets the jsdom environment with a setup file at `src/test/setup.ts`. Coverage uses the v8 provider.
+
+**Note:** The test count changes as tests are added; currently ~558 tests across 32 test files. Some tests may have known failures (accessibility tests). Use watch mode during development for the fastest feedback loop.
+
+### 3.4 E2E Tests (34 tests)
+
+**Commands:**
+
+```bash
+cd lineage-ui
+
+# Headless (default)
+npx playwright test
+
+# With visible browser
+npx playwright test --headed
+
+# Interactive UI mode (inspect tests step by step)
+npx playwright test --ui
+```
+
+**Requires:** The Python backend running on `:8080`. You do NOT need to run `npm run dev` separately -- Playwright automatically starts the frontend on `:5173` via its `webServer` configuration.
+
+**What it validates:** Full user workflows including asset browsing, lineage graph navigation, search, and detail panel interaction.
+
+**Test file:** `e2e/lineage.spec.ts` (single file with 34 tests).
+
+**Configuration:** `playwright.config.ts` runs Chromium only, with `baseURL` set to `http://localhost:5173`. The `webServer` block starts `npm run dev -- --port 5173` automatically.
+
+**First-time setup:** Download browser binaries before your first run:
+
+```bash
+npx playwright install
+```
+
+### 3.5 Go Backend Tests (optional)
+
+**Command:**
+
+```bash
+cd lineage-api
+make test
+```
+
+**What it validates:** Go unit tests with race detection and coverage. Tests are colocated with source files (`*_test.go`) across the domain, application, and adapter layers.
+
+**Note:** These test the Go backend independently from the Python API tests. Most local development uses the Python backend, so these are optional unless you are modifying Go code.
+
+### Testing Guidance
+
+For day-to-day development, frontend unit tests (`npm test` in watch mode) provide the fastest feedback. Run the full suite across all four test types before committing changes.
