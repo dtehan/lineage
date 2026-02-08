@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** Phase 27 - Developer Manual
+**Current focus:** Phase 27 - Developer Manual (COMPLETE)
 
 ## Current Position
 
-Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: 27 of 27 (Developer Manual) -- In progress
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-08 -- Completed 27-02-PLAN.md (Architecture, schema, API reference, code standards)
+Milestone: v5.0 Comprehensive Documentation (COMPLETE)
+Phase: 27 of 27 (Developer Manual) -- Complete
+Plan: 3 of 3 in current phase
+Status: Complete
+Last activity: 2026-02-08 -- Completed 27-03-PLAN.md (Contributing guidelines, README update)
 
-Progress: [████████░░] 89% (8/9 plans)
+Progress: [██████████] 100% (9/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 63 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 8)
+- Total plans completed: 64 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9)
 - Average plan duration: ~3.3 min
-- Total execution time: ~210 min
+- Total execution time: ~211 min
 
 **By Milestone:**
 
@@ -33,7 +33,7 @@ Progress: [████████░░] 89% (8/9 plans)
 | v2.1 | 2 | 5 | 1 day |
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
-| v5.0 | 4 | 9 | - |
+| v5.0 | 4 | 9 | ~30 min |
 
 **Recent Trend:**
 - v4.0 average: 3.2 min per plan
@@ -48,6 +48,8 @@ Progress: [████████░░] 89% (8/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [27-03]: No CI/CD references beyond disclaimer note -- matches project reality (no pipelines or branch protection)
+- [27-03]: Project structure reference maps 9 change types to directories for fast contributor navigation
 - [27-02]: Added extra rows to coding standards summary tables (Naming for Go, State for TS, Performance for SQL) for practical completeness
 - [27-02]: All three DEV-16 diagram types embedded as Mermaid: system architecture, hexagonal architecture, database ER
 - [27-02]: Summarize-and-link pattern used for all coding standards (summary table + link to ../specs/ canonical file)
@@ -86,5 +88,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 27-02-PLAN.md (Architecture, schema, API reference, code standards)
+Stopped at: Completed 27-03-PLAN.md (Contributing guidelines, README update) -- Phase 27 complete, v5.0 milestone complete
 Resume file: None
