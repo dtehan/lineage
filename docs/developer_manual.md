@@ -46,11 +46,11 @@ cp .env.example .env
 
 # 4. Database setup
 cd database
-python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py
 python scripts/setup/setup_test_data.py
 
 # 5. Populate lineage data
-python scripts/populate/populate_lineage.py
+python scripts/populate/populate_lineage.py  # DBQL mode (default), use --fixtures for demo/testing
 
 # 6. Start backend (in this terminal)
 cd ../lineage-api

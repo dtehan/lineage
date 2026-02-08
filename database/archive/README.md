@@ -1,6 +1,6 @@
 # Archived Code
 
-Experimental and deprecated code preserved for historical reference.
+Archived experimental code preserved for historical reference.
 
 ## Files
 

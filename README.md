@@ -42,14 +42,14 @@ cp .env.example .env
 
 ```bash
 cd database
-python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py
 python scripts/setup/setup_test_data.py
 ```
 
 **4. Populate lineage data**
 
 ```bash
-python scripts/populate/populate_lineage.py
+python scripts/populate/populate_lineage.py  # Extracts from DBQL (production) by default
 ```
 
 **5. Start backend (Python Flask)**

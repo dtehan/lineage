@@ -11,19 +11,18 @@ Extracts metadata from DBC views and populates OpenLineage tables.
 
 | Mode | Command | Use Case |
 |------|---------|----------|
-| Fixtures (default) | `python populate_lineage.py` | Demo, testing, development |
-| DBQL extraction | `python populate_lineage.py --dbql` | Production - extracts from query logs |
+| DBQL extraction (default) | `python populate_lineage.py` | Production - extracts lineage from query logs |
+| Fixtures | `python populate_lineage.py --fixtures` | Demo, testing, development |
 
 **Usage:**
 ```bash
-# Fixtures mode (default) - uses hardcoded test mappings
-python scripts/populate/populate_lineage.py
-python scripts/populate/populate_lineage.py --fixtures   # Explicit fixtures mode
+# DBQL mode (default) - extracts lineage from executed SQL in query logs
+python scripts/populate/populate_lineage.py                           # Default: DBQL (last 30 days)
+python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"  # DBQL since date
+python scripts/populate/populate_lineage.py --dbql --full             # DBQL all history
 
-# DBQL mode - extracts lineage from executed SQL in query logs
-python scripts/populate/populate_lineage.py --dbql                    # Last 30 days
-python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"  # Since date
-python scripts/populate/populate_lineage.py --dbql --full             # All history
+# Fixtures mode - uses hardcoded test mappings
+python scripts/populate/populate_lineage.py --fixtures                # Explicit fixtures mode
 
 # Common options
 python scripts/populate/populate_lineage.py --dry-run    # Preview changes

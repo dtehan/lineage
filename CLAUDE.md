@@ -45,10 +45,10 @@ cp .env.example .env
 # Edit .env with your Teradata credentials
 
 # 3. Setup database (creates OL_* tables)
-cd database && python scripts/setup/setup_lineage_schema.py --openlineage && python scripts/setup/setup_test_data.py
+cd database && python scripts/setup/setup_lineage_schema.py && python scripts/setup/setup_test_data.py
 
 # 4. Populate OpenLineage tables
-python scripts/populate/populate_lineage.py              # Manual mappings (demo/testing)
+python scripts/populate/populate_lineage.py              # DBQL extraction (production) by default
 
 # 5. Start backend (Python Flask - recommended for testing)
 cd lineage-api && python python_server.py  # Runs on :8080
@@ -76,13 +76,13 @@ npx playwright test              # Run E2E tests
 # Database
 cd database
 python tests/run_tests.py              # Run 73 database tests
-python scripts/setup/setup_lineage_schema.py --openlineage  # Create OL_* tables
+python scripts/setup/setup_lineage_schema.py  # Create OL_* tables
 python scripts/utils/insert_cte_test_data.py   # Insert test lineage patterns (cycles, diamonds, fans)
 python scripts/populate/populate_test_metadata.py # Populate OL_* metadata for test tables (run after insert_cte_test_data.py)
 
 # Populate lineage (two modes available)
-python scripts/populate/populate_lineage.py                # Fixtures mode (default) - uses hardcoded mappings for demo/testing
-python scripts/populate/populate_lineage.py --dbql         # DBQL mode - extracts lineage from executed SQL in query logs
+python scripts/populate/populate_lineage.py                # DBQL mode (default) - production lineage from query logs
+python scripts/populate/populate_lineage.py --fixtures     # Fixtures mode - hardcoded mappings for demo/testing
 python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"  # DBQL since specific date
 python scripts/populate/populate_lineage.py --dry-run      # Preview what would be populated
 ```
@@ -286,9 +286,5 @@ cp .env.example .env
 | `REDIS_ADDR` | Redis address | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis password | - |
 | `REDIS_DB` | Redis database number | `0` |
-
-**Legacy aliases (deprecated, still supported):**
-- `TD_HOST`, `TD_USER`, `TD_PASSWORD`, `TD_DATABASE` - fallbacks for `TERADATA_*`
-- `PORT` - fallback for `API_PORT`
 
 The frontend proxies `/api/*` requests to `http://localhost:8080` via Vite config.

@@ -48,7 +48,7 @@ score: 5/5 must-haves verified
 |------|----|----|--------|---------|
 | Root README quick start | requirements.txt | Step 1 command | ✓ WIRED | File exists at /Users/Daniel.Tehan/Code/lineage/requirements.txt |
 | Root README quick start | .env.example | Step 2 command | ✓ WIRED | File exists with TERADATA_* variables |
-| Root README quick start | setup_lineage_schema.py | Step 3 command | ✓ WIRED | Script exists, accepts --openlineage flag |
+| Root README quick start | setup_lineage_schema.py | Step 3 command | ✓ WIRED | Script exists, creates OpenLineage tables |
 | Root README quick start | populate_lineage.py | Step 4 command | ✓ WIRED | Script exists, --help works, supports --fixtures and --dbql |
 | Root README quick start | python_server.py | Step 5 command | ✓ WIRED | Script exists at lineage-api/python_server.py |
 | Root README quick start | package.json dev script | Step 6 command | ✓ WIRED | npm run dev exists in package.json |
@@ -98,7 +98,7 @@ No gaps found. All 5 must-haves verified successfully.
 
 1. ✓ Python venv setup: `requirements.txt` exists at root (433 bytes, 20 lines)
 2. ✓ .env configuration: `.env.example` exists with TERADATA_* variables
-3. ✓ Database setup: `setup_lineage_schema.py` exists, accepts `--openlineage` flag
+3. ✓ Database setup: `setup_lineage_schema.py` exists, creates OpenLineage tables
 4. ✓ Setup test data: `setup_test_data.py` exists (26179 bytes)
 5. ✓ Populate lineage: `populate_lineage.py` exists, `--help` works, supports `--fixtures` and `--dbql`
 6. ✓ Start backend: `python_server.py` exists (125800 bytes), runs without syntax errors

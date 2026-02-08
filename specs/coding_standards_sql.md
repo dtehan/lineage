@@ -1310,7 +1310,7 @@ COMMENT ON COLUMN lineage.LIN_COLUMN_LINEAGE.confidence_score IS
 1.00 = explicitly parsed from SQL, < 1.00 = inferred';
 
 COMMENT ON COLUMN lineage.LIN_COLUMN_LINEAGE.is_active IS
-'Y = active lineage relationship, N = deprecated/replaced.
+'Y = active lineage relationship, N = superseded/replaced.
 Soft delete to maintain history.';
 ```
 

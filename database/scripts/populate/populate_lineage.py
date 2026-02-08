@@ -4,13 +4,13 @@ Populate OpenLineage Tables
 
 Extracts metadata from DBC views and populates OpenLineage-compliant lineage data.
 Supports multiple lineage sources:
+  - DBQL extraction (default): Parse executed SQL from query logs
   - Manual fixtures (--fixtures): Hardcoded test/demo mappings
-  - DBQL extraction (--dbql): Parse executed SQL from query logs
 
 Usage:
-  python populate_lineage.py              # Use fixtures (default, for testing/demo)
-  python populate_lineage.py --fixtures   # Explicitly use fixture mappings
-  python populate_lineage.py --dbql       # Extract from DBQL tables
+  python populate_lineage.py              # Use DBQL (default, for production)
+  python populate_lineage.py --fixtures   # Use fixture mappings (for testing/demo)
+  python populate_lineage.py --dbql       # Explicitly use DBQL (redundant but supported)
   python populate_lineage.py --dbql --since "2024-01-01"  # DBQL since date
   python populate_lineage.py --dry-run    # Preview without changes
 """
@@ -409,12 +409,12 @@ DBQL Requirements:
     mode_group.add_argument(
         "--fixtures", "-f",
         action="store_true",
-        help="Use fixture mappings for lineage (default)"
+        help="Use fixture mappings for lineage (for testing/demo)"
     )
     mode_group.add_argument(
         "--dbql", "-d",
         action="store_true",
-        help="Extract lineage from DBQL tables"
+        help="Extract lineage from DBQL tables (default)"
     )
     # Legacy alias for --fixtures
     mode_group.add_argument(
@@ -464,8 +464,8 @@ DBQL Requirements:
     print("=" * 60)
 
     # Determine lineage source mode
-    use_dbql = args.dbql
-    use_fixtures = args.fixtures or args.manual or (not args.dbql)
+    use_dbql = args.dbql or (not args.fixtures and not args.manual)
+    use_fixtures = args.fixtures or args.manual
 
     # Parse since datetime if provided
     since = None

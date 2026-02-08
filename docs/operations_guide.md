@@ -135,9 +135,9 @@ Configuration values are resolved in the following order (highest precedence fir
 - **Backend** = Both Python and Go backends
 - **Go backend** = Go backend only
 
-### Legacy Variables (Deprecated)
+### Legacy Variables (Fallbacks)
 
-The following legacy variable names are still supported as fallbacks but are deprecated. Use the primary names listed in the reference table above.
+The following legacy variable names are still supported as fallbacks. Use the primary names listed in the reference table above.
 
 | Legacy Variable | Replaced By | Notes |
 |----------------|-------------|-------|
@@ -201,10 +201,8 @@ After running this command, **restart the Teradata Database** for the change to 
 
 ```bash
 cd database
-python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py
 ```
-
-The `--openlineage` flag is required. Without it, the script creates the older `LIN_*` tables which are not compatible with the current application.
 
 This creates 9 OpenLineage tables with 17 indexes:
 
@@ -234,20 +232,20 @@ This creates sample medallion architecture tables (SRC -> STG -> DIM -> FACT) in
 
 Two population methods are available depending on your environment.
 
-**Fixtures mode (default)** -- uses hardcoded column mappings for demo and testing:
+**DBQL mode (default)** -- extracts lineage from executed SQL in Teradata query logs:
 
 ```bash
-python scripts/populate/populate_lineage.py
-```
-
-**DBQL mode** -- extracts lineage from executed SQL in Teradata query logs:
-
-```bash
-python scripts/populate/populate_lineage.py --dbql
-python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"    # Since a specific date
+python scripts/populate/populate_lineage.py                                # Default - uses DBQL
+python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"    # DBQL since a specific date
 ```
 
 DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. The Teradata user specified in your configuration must have access to these system views.
+
+**Fixtures mode** -- uses hardcoded column mappings for demo and testing:
+
+```bash
+python scripts/populate/populate_lineage.py --fixtures
+```
 
 **Dry run** -- preview what would be populated without making changes:
 
@@ -628,5 +626,5 @@ To enable Redis:
 3. Re-run the schema setup script:
    ```bash
    cd database
-   python scripts/setup/setup_lineage_schema.py --openlineage
+   python scripts/setup/setup_lineage_schema.py
    ```

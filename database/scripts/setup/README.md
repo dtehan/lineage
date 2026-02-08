@@ -9,8 +9,7 @@ Creates OpenLineage-aligned tables (OL_*) in the Teradata database.
 
 **Usage:**
 ```bash
-python scripts/setup/setup_lineage_schema.py --openlineage
-python scripts/setup/setup_lineage_schema.py --dry-run  # Preview only
+python scripts/setup/setup_lineage_schema.py
 ```
 
 **Creates:**

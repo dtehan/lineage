@@ -5,15 +5,14 @@ A comprehensive guide for using the column-level data lineage application for Te
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [Getting Started](#getting-started)
-3. [Core Concepts](#core-concepts)
-4. [Using the Application](#using-the-application)
-5. [API Reference](#api-reference)
-6. [Common Tasks](#common-tasks)
-7. [Troubleshooting](#troubleshooting)
-8. [Glossary](#glossary)
-9. [OpenLineage Integration](#openlineage-integration)
-10. [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction)
+2. [Core Concepts](#core-concepts)
+3. [Using the Application](#using-the-application)
+4. [API Reference](#api-reference)
+5. [Common Tasks](#common-tasks)
+6. [Troubleshooting](#troubleshooting)
+7. [Glossary](#glossary)
+8. [OpenLineage Integration](#openlineage-integration)
+9. [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction)
 
 ---
 
@@ -38,204 +37,6 @@ Data lineage tracks the flow of data from its source to its destination, showing
 | Root Cause Analysis | Trace data quality issues back to their source |
 | Regulatory Compliance | Document PII data flows for audits |
 | Data Governance | Understand how business metrics are calculated |
-
----
-
-## Getting Started
-
-### Prerequisites
-
-- **Teradata Database**: Access to a Teradata instance (or ClearScape Analytics)
-- **Python 3.9+**: For database setup scripts and Python backend
-- **Go 1.21+**: For the Go backend API (optional - Python alternative available)
-- **Node.js 18+**: For the frontend
-- **Redis** (optional): For caching (falls back gracefully if unavailable)
-
-### Python Environment Setup
-
-Create and activate a virtual environment:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-
-# Install required packages
-pip install teradatasql flask flask-cors requests python-dotenv
-```
-
-### Step 1: Database Setup
-
-The database connection can be configured using a `.env` file or environment variables.
-
-**Option A: Using .env file (recommended)**
-
-Copy the example file and edit with your credentials:
-
-```bash
-cp .env.example .env
-# Edit .env with your Teradata credentials
-```
-
-**Option B: Using environment variables**
-
-```bash
-export TERADATA_HOST="your-teradata-host"
-export TERADATA_USER="your-username"
-export TERADATA_PASSWORD="your-password"
-export TERADATA_DATABASE="demo_user"
-```
-
-**Note:** Environment variables take precedence over `.env` file values. Legacy `TD_*` variables are supported as fallbacks.
-
-Create the OpenLineage schema:
-
-```bash
-cd database/
-python3 scripts/setup/setup_lineage_schema.py --openlineage
-```
-
-This creates the following OpenLineage tables in your `demo_user` database:
-- `OL_NAMESPACE` - Data source namespaces (URI format)
-- `OL_DATASET` - Dataset registry (tables/views)
-- `OL_DATASET_FIELD` - Field definitions (columns)
-- `OL_JOB` - Job definitions (ETL processes)
-- `OL_RUN` - Job execution runs
-- `OL_RUN_INPUT` - Run input datasets
-- `OL_RUN_OUTPUT` - Run output datasets
-- `OL_COLUMN_LINEAGE` - Column-level lineage with transformation types
-- `OL_SCHEMA_VERSION` - Schema version tracking
-
-Plus performance indexes for efficient lineage traversal.
-
-**Note:** The legacy LIN_* tables are deprecated. Use `--openlineage` flag to create OpenLineage-compliant tables.
-
-### Step 2: Load Test Data
-
-Create test tables representing a medallion architecture ETL pipeline:
-
-```bash
-python3 scripts/setup/setup_test_data.py
-```
-
-This creates a realistic data pipeline with 4 layers:
-
-| Layer | Tables |
-|-------|--------|
-| Source | SRC_CUSTOMER, SRC_PRODUCT, SRC_SALES, SRC_STORE |
-| Staging | STG_CUSTOMER, STG_PRODUCT, STG_SALES |
-| Dimension | DIM_CUSTOMER, DIM_PRODUCT, DIM_STORE, DIM_DATE |
-| Fact/Report | FACT_SALES, FACT_SALES_DAILY, RPT_MONTHLY_SALES |
-
-### Step 3: Populate Lineage Metadata
-
-Extract metadata from Teradata system views and populate OpenLineage tables.
-
-```bash
-# Standard population (manual mappings)
-python3 scripts/populate/populate_lineage.py
-
-# Preview what would be populated
-python3 scripts/populate/populate_lineage.py --dry-run
-
-# Append mode (don't clear existing data)
-python3 scripts/populate/populate_lineage.py --skip-clear
-```
-
-This populates OpenLineage tables with:
-- Databases and tables from `DBC.TablesV`
-- Columns and their types from `DBC.ColumnsJQV` (provides complete type information for both tables and views)
-- 93 predefined column-level lineage relationships with OpenLineage transformation types (DIRECT/IDENTITY, DIRECT/TRANSFORMATION, DIRECT/AGGREGATION, INDIRECT/JOIN, INDIRECT/FILTER)
-
-**Requirements:**
-- QVCI (Queryable View Column Index) must be enabled on your Teradata system
-- If you receive error 9719 ("QVCI feature is disabled"), see the [QVCI Troubleshooting](#qvci-disabled-error) section below
-
-**Use for:**
-- Initial setup and testing
-- Demo environments
-- ClearScape Analytics environments
-- Development and debugging
-- Scheduled/automated extraction jobs
-
-See [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction) for detailed documentation.
-
-### Step 4: Add Edge Case Test Data (Optional)
-
-For testing recursive CTE functionality:
-
-```bash
-python3 scripts/utils/insert_cte_test_data.py
-```
-
-This adds test cases for cycles, diamond patterns, fan-out, and multi-source scenarios.
-
-### Step 5: Validate Setup (Optional)
-
-Run the test suite to validate your setup:
-
-```bash
-python3 tests/run_tests.py
-```
-
-This executes 73 test cases covering schema validation, data extraction, recursive CTEs, edge cases, and data integrity.
-
-### Step 6: Start the Backend API
-
-You have two options for running the backend API:
-
-#### Option A: Python Flask Server (Recommended for Testing)
-
-The Python server uses the same connection config as the database scripts:
-
-```bash
-cd lineage-api/
-
-# Activate virtual environment
-source ../.venv/bin/activate
-
-# Start the Flask server
-python python_server.py
-```
-
-#### Option B: Go Server
-
-```bash
-cd lineage-api/
-
-# Set configuration
-export TERADATA_HOST="your-host"
-export TERADATA_USER="your-user"
-export TERADATA_PASSWORD="your-password"
-
-# Run the server (option 1: direct)
-go run cmd/server/main.go
-
-# Run the server (option 2: using Makefile)
-make run
-
-# Build and run (option 3: compiled binary)
-make build
-./bin/server
-```
-
-Both servers start on `http://localhost:8080`. Verify with:
-
-```bash
-curl http://localhost:8080/health
-# Response: {"status":"ok"}
-```
-
-### Step 7: Start the Frontend
-
-```bash
-cd lineage-ui/
-npm install
-npm run dev
-```
-
-The UI opens at `http://localhost:3000`.
-
-The frontend is configured to proxy API requests to `http://localhost:8080` (see `vite.config.ts`).
 
 ---
 
@@ -1145,7 +946,7 @@ cp .env.example .env
 | `TERADATA_DATABASE` | Default database | `demo_user` |
 | `TERADATA_PORT` | Teradata port | `1025` |
 
-*Legacy aliases `TD_HOST`, `TD_USER`, `TD_PASSWORD`, `TD_DATABASE` are supported for backwards compatibility.*
+*Legacy aliases `TD_HOST`, `TD_USER`, `TD_PASSWORD`, `TD_DATABASE` are still supported as fallbacks.*
 
 **Server Configuration:**
 
@@ -1535,7 +1336,7 @@ pip install teradatasql flask flask-cors requests
 
 # 2. Setup database schema and load test data
 cd database/
-python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py
 python scripts/setup/setup_test_data.py
 python scripts/populate/populate_lineage.py
 python scripts/utils/insert_cte_test_data.py
@@ -1593,7 +1394,7 @@ The OpenLineage-aligned schema provides:
 ```bash
 # Create OpenLineage tables
 cd database
-python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py
 
 # Populate OpenLineage tables (now default behavior)
 python scripts/populate/populate_lineage.py

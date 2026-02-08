@@ -26,23 +26,12 @@ The `scripts/populate/populate_lineage.py` script populates these tables by extr
 
 The `populate_lineage.py` script supports two modes for populating column-level lineage:
 
-### Fixture Mode (Default)
-
-Uses hardcoded mappings from `fixtures/lineage_mappings.py` for the demo medallion architecture.
-
-```bash
-python scripts/populate/populate_lineage.py              # Default: fixtures
-python scripts/populate/populate_lineage.py --fixtures   # Explicit
-```
-
-**Best for:** Testing, demos, development environments.
-
-### DBQL Mode
+### DBQL Mode (Default)
 
 Extracts lineage by parsing executed SQL from Teradata's DBQL (Database Query Log) tables.
 
 ```bash
-python scripts/populate/populate_lineage.py --dbql                    # Last 30 days
+python scripts/populate/populate_lineage.py                           # Default: DBQL
 python scripts/populate/populate_lineage.py --dbql --since 2024-01-01 # Since date
 python scripts/populate/populate_lineage.py --dbql --full             # All history
 ```
@@ -53,6 +42,16 @@ python scripts/populate/populate_lineage.py --dbql --full             # All hist
 - `sqlglot` library: `pip install sqlglot>=25.0.0`
 
 **Best for:** Production environments with DBQL enabled.
+
+### Fixture Mode
+
+Uses hardcoded mappings from `fixtures/lineage_mappings.py` for the demo medallion architecture.
+
+```bash
+python scripts/populate/populate_lineage.py --fixtures   # Use fixture mode
+```
+
+**Best for:** Testing, demos, development environments.
 
 ## QVCI Requirements
 
@@ -111,7 +110,7 @@ database/
 
 ```bash
 # 1. Create OpenLineage tables
-python scripts/setup/setup_lineage_schema.py --openlineage
+python scripts/setup/setup_lineage_schema.py
 
 # 2. Populate with fixture mappings (testing/demo)
 python scripts/populate/populate_lineage.py
