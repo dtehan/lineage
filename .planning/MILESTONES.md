@@ -1,5 +1,39 @@
 # Project Milestones: Lineage Application
 
+## v5.0 Comprehensive Documentation (Shipped: 2026-02-08)
+
+**Delivered:** Complete production documentation suite enabling teams to deploy, operate, and contribute to the lineage application without external help.
+
+**Phases completed:** 24-27 (9 plans total)
+
+**Key accomplishments:**
+
+- Comprehensive README suite: Root README upgraded to v4.0 production status with Mermaid architecture diagram, component READMEs created for backend/frontend/database with accurate commands
+- Complete user guide: All v4.0 features documented including 3-tab detail panel, staged loading progress, fit-to-selection control, grouped search, 10 coarse-grained screenshots
+- Production operations guide: End-to-end deployment documentation covering prerequisites (QVCI requirements), 12-variable configuration reference, dual population methods, security hardening
+- Developer onboarding manual: Complete setup (Python venv, Node.js, .env), all 5 test suites documented, hexagonal architecture with Mermaid diagrams, contributing guidelines
+- Cross-reference architecture: Summarize-and-link pattern used throughout to avoid duplication (ops guide ← dev manual, specs/ ← code standards)
+- Documentation patterns: Reference-not-duplicate for setup procedures, consistent structure for test documentation, Mermaid for all architecture diagrams
+
+**Stats:**
+
+- 36 files modified (+7,540 / -193 lines)
+- 4 phases, 9 plans, 30 commits
+- 2 days from start to ship (2026-02-07 → 2026-02-08)
+- All 49 v5.0 requirements satisfied (100%)
+
+**Documentation Deliverables:**
+- 4 README files updated (root, lineage-api, lineage-ui, database)
+- 3 comprehensive guides created (user_guide.md, operations_guide.md, developer_manual.md)
+- 5 Mermaid architecture diagrams embedded
+- 10 screenshots with descriptive alt text
+
+**Git range:** `ead9b27` (docs(24) research) → `a799762` (docs(27) complete)
+
+**What's next:** Plan next milestone to address deferred technical concerns (Redis integration, SQL parser improvements, E2E validation, secrets vault, search performance).
+
+---
+
 ## v4.0 Interactive Graph Experience (Shipped: 2026-02-07)
 
 **Delivered:** Transformed lineage graph into an interactive experience with polished CSS animations, comprehensive detail panel with statistics/DDL, and enhanced selection features.
