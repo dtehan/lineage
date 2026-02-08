@@ -165,3 +165,189 @@ The Go backend has the following built-in timeouts:
 | Graceful shutdown | 30 seconds | Time allowed for in-flight requests to complete on shutdown |
 
 These timeouts are compiled into the binary and are not configurable via environment variables.
+
+---
+
+## Database Setup
+
+### 4.1 Verify QVCI Status
+
+QVCI (Queryable View Column Index) is a Teradata feature that enables efficient retrieval of view column information via the `DBC.ColumnsJQV` system view. The lineage application requires QVCI to extract complete column metadata (including data types) for both tables and views.
+
+**Check if QVCI is enabled:**
+
+```sql
+-- Try querying DBC.ColumnsJQV
+-- If you receive error 9719 ("QVCI feature is disabled"), QVCI needs to be enabled
+SELECT TOP 1 * FROM DBC.ColumnsJQV;
+```
+
+If the query returns a result, QVCI is enabled. If you receive error 9719, follow the enablement steps below.
+
+**Enable QVCI (requires DBA privileges):**
+
+```bash
+dbscontrol << EOF
+M internal 551=false
+W
+EOF
+```
+
+After running this command, **restart the Teradata Database** for the change to take effect. This is a system-level change that requires DBA privileges and a maintenance window.
+
+**If QVCI cannot be enabled:** A fallback approach is available. Modify `database/scripts/populate/populate_lineage.py` to use `DBC.ColumnsV` instead of `DBC.ColumnsJQV` in the `populate_openlineage_fields()` function, and re-enable the `update_view_column_types()` function (see git history for the original implementation). This fallback uses `HELP COLUMN` commands for each view column, which is slower but works without QVCI.
+
+### 4.2 Create Schema
+
+```bash
+cd database
+python scripts/setup/setup_lineage_schema.py --openlineage
+```
+
+The `--openlineage` flag is required. Without it, the script creates the older `LIN_*` tables which are not compatible with the current application.
+
+This creates 9 OpenLineage tables with 17 indexes:
+
+| Table | Purpose |
+|-------|---------|
+| `OL_NAMESPACE` | Data source namespaces (teradata://host:port) |
+| `OL_DATASET` | Dataset registry (tables/views) |
+| `OL_DATASET_FIELD` | Field definitions (columns) |
+| `OL_JOB` | Job definitions (ETL processes) |
+| `OL_RUN` | Job execution runs |
+| `OL_RUN_INPUT` | Run input datasets |
+| `OL_RUN_OUTPUT` | Run output datasets |
+| `OL_COLUMN_LINEAGE` | Column-level lineage with transformation types |
+| `OL_SCHEMA_VERSION` | Schema version tracking |
+
+### 4.3 Create Test Data (Optional)
+
+For testing and demo purposes only. Not needed for production deployments with existing Teradata tables.
+
+```bash
+python scripts/setup/setup_test_data.py
+```
+
+This creates sample medallion architecture tables (SRC -> STG -> DIM -> FACT) in the configured database. These tables provide a working example of multi-tier data lineage.
+
+### 4.4 Populate Lineage Data
+
+Two population methods are available depending on your environment.
+
+**Fixtures mode (default)** -- uses hardcoded column mappings for demo and testing:
+
+```bash
+python scripts/populate/populate_lineage.py
+```
+
+**DBQL mode** -- extracts lineage from executed SQL in Teradata query logs:
+
+```bash
+python scripts/populate/populate_lineage.py --dbql
+python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"    # Since a specific date
+```
+
+DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. The Teradata user specified in your configuration must have access to these system views.
+
+**Dry run** -- preview what would be populated without making changes:
+
+```bash
+python scripts/populate/populate_lineage.py --dry-run
+```
+
+**Populate metadata** -- after populating lineage data, populate the metadata for the tables:
+
+```bash
+python scripts/populate/populate_test_metadata.py
+```
+
+This populates `OL_NAMESPACE`, `OL_DATASET`, and `OL_DATASET_FIELD` records for the tables referenced in the lineage data.
+
+---
+
+## Running the Application
+
+### 5.1 Start the Backend
+
+#### Python Backend (recommended for most deployments)
+
+```bash
+cd lineage-api
+python python_server.py        # Starts on port 8080 (or API_PORT)
+```
+
+#### Go Backend
+
+```bash
+cd lineage-api
+make build && ./bin/server     # Build and run
+# Or run without building:
+go run cmd/server/main.go
+```
+
+Both backends serve the same API endpoints and are interchangeable. The Python backend is simpler to deploy (no compilation step). The Go backend offers better performance and includes built-in Redis caching support.
+
+### 5.2 Start the Frontend
+
+#### Development mode (hot reload, proxies API to localhost:8080)
+
+```bash
+cd lineage-ui
+npm run dev        # Starts on port 3000 or 5173
+```
+
+The Vite development server proxies `/api/*` requests to `http://localhost:8080` automatically.
+
+#### Production mode (static files served by a web server)
+
+```bash
+cd lineage-ui
+npm run build      # Outputs static files to dist/ directory
+```
+
+The `dist/` directory contains static HTML, CSS, and JavaScript files. In production, serve these files using a reverse proxy (Nginx, Traefik, etc.) that also proxies `/api/*` requests to the backend. See the [Production Deployment](#production-deployment) section and [Security Documentation](SECURITY.md) for reverse proxy configuration examples.
+
+**Do not use `npm run dev` in production.** The Vite development server is not designed for production use.
+
+### 5.3 Verify the Deployment
+
+```bash
+# Check backend health
+curl http://localhost:8080/health
+
+# Check API endpoint
+curl http://localhost:8080/api/v2/openlineage/namespaces
+
+# Access the frontend
+# Development: http://localhost:3000 or http://localhost:5173
+# Production: your configured domain
+```
+
+A successful health check returns HTTP 200. The namespaces endpoint returns a JSON array of configured namespaces, confirming both the backend and database connection are working.
+
+### 5.4 Startup Order
+
+Start components in the following order:
+
+1. **Teradata database** -- must already be running and accessible
+2. **Redis** (optional) -- start before the backend if using caching
+3. **Backend server** -- Python or Go
+4. **Frontend** -- development server or web server serving static files
+
+---
+
+## Production Deployment
+
+*Section content to be added.*
+
+---
+
+## Architecture
+
+*Section content to be added.*
+
+---
+
+## Troubleshooting
+
+*Section content to be added.*
