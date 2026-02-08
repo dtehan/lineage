@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: 25 of 27 (User Guide Refresh) -- In progress
-Plan: 1 of 2 in current phase
-Status: Plan 25-01 complete
-Last activity: 2026-02-08 -- Completed 25-01-PLAN.md (user guide feature documentation)
+Phase: 25 of 27 (User Guide Refresh) -- Complete
+Plan: 2 of 2 in current phase
+Status: Phase 25 complete
+Last activity: 2026-02-08 -- Completed 25-02-PLAN.md (screenshot references)
 
-Progress: [███░░░░░░░] 33% (3/9 plans)
+Progress: [████░░░░░░] 44% (4/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 58 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 3)
+- Total plans completed: 59 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 4)
 - Average plan duration: ~3.4 min
-- Total execution time: ~199 min
+- Total execution time: ~201 min
 
 **By Milestone:**
 
@@ -48,6 +48,7 @@ Progress: [███░░░░░░░] 33% (3/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [25-02]: 10 coarse-grained screenshots to resist UI rot, with descriptive alt text as fallback documentation
 - [25-01]: Document Asset Browser without pagination controls (component does not implement them despite tests existing)
 - [25-01]: Added Asset Type Filter to toolbar docs (existed in component but was undocumented)
 - [25-01]: Kept Edge/Connection Details as separate subsection (not a tab) matching actual implementation
@@ -73,5 +74,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 25-01-PLAN.md (user guide feature documentation)
+Stopped at: Completed 25-02-PLAN.md (screenshot references) -- Phase 25 complete
 Resume file: None
