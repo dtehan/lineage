@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** Phase 25 - User Guide Refresh
+**Current focus:** Phase 26 - Operations Guide
 
 ## Current Position
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: 25 of 27 (User Guide Refresh) -- Complete
-Plan: 2 of 2 in current phase
-Status: Phase 25 complete
-Last activity: 2026-02-08 -- Completed 25-02-PLAN.md (screenshot references)
+Phase: 26 of 27 (Operations Guide) -- In progress
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-08 -- Completed 26-01-PLAN.md (prerequisites through running)
 
-Progress: [████░░░░░░] 44% (4/9 plans)
+Progress: [█████░░░░░] 56% (5/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 59 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 4)
+- Total plans completed: 60 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 5)
 - Average plan duration: ~3.4 min
-- Total execution time: ~201 min
+- Total execution time: ~203 min
 
 **By Milestone:**
 
@@ -48,6 +48,9 @@ Progress: [████░░░░░░] 44% (4/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [26-01]: QVCI called out in Prerequisites as early warning, detailed procedure in Database Setup
+- [26-01]: Python backend recommended for most deployments, Go backend for high-concurrency
+- [26-01]: Redis documented as optional throughout (Prerequisites, Config, Startup Order)
 - [25-02]: 10 coarse-grained screenshots to resist UI rot, with descriptive alt text as fallback documentation
 - [25-01]: Document Asset Browser without pagination controls (component does not implement them despite tests existing)
 - [25-01]: Added Asset Type Filter to toolbar docs (existed in component but was undocumented)
@@ -74,5 +77,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 25-02-PLAN.md (screenshot references) -- Phase 25 complete
+Stopped at: Completed 26-01-PLAN.md (prerequisites through running) -- Phase 26 in progress
 Resume file: None
