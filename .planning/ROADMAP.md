@@ -76,11 +76,11 @@ Plans:
   3. Someone reading the user guide can use the detail panel to inspect table statistics, view DDL/SQL with syntax highlighting, and click columns to navigate lineage
   4. Someone reading the user guide can use search to find databases, tables, and columns
   5. Key features are illustrated with screenshots showing actual application UI
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 25-01: User guide content update (pagination, graph controls, detail panel, search)
-- [ ] 25-02: User guide screenshots and visual documentation
+- [ ] 25-01-PLAN.md -- Update user guide content: asset browser, loading progress, toolbar controls, detail panel tabs, search
+- [ ] 25-02-PLAN.md -- Add screenshot references and create screenshots directory with capture guide
 
 #### Phase 26: Operations Guide
 **Goal**: An operations team can deploy the application to production from scratch using only the ops guide
