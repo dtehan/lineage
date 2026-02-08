@@ -95,8 +95,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 26-01-PLAN.md -- Create operations guide with prerequisites, installation, configuration, database setup, running the application
-- [ ] 26-02-PLAN.md -- Add production deployment, architecture diagram, and troubleshooting sections
+- [x] 26-01-PLAN.md -- Create operations guide with prerequisites, installation, configuration, database setup, running the application
+- [x] 26-02-PLAN.md -- Add production deployment, architecture diagram, and troubleshooting sections
 
 #### Phase 27: Developer Manual
 **Goal**: A new developer can set up a local environment, run all test suites, understand the architecture, and contribute code using only the dev manual
@@ -127,9 +127,9 @@ Plans:
 | 19-23. Interactive Graph Experience | v4.0 | 15/15 | Complete | 2026-02-07 |
 | 24. README Updates | v5.0 | 2/2 | Complete | 2026-02-07 |
 | 25. User Guide Refresh | v5.0 | 2/2 | Complete | 2026-02-08 |
-| 26. Operations Guide | v5.0 | 0/2 | Not started | - |
+| 26. Operations Guide | v5.0 | 2/2 | Complete | 2026-02-08 |
 | 27. Developer Manual | v5.0 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-01-31*
-*Last updated: 2026-02-07 (Phase 24 complete)*
+*Last updated: 2026-02-08 (Phase 26 complete)*

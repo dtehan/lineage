@@ -36,18 +36,18 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 ### Operations Guide
 
-- [ ] **OPS-01**: Operations guide documents system prerequisites (Go, Node.js, Python, Teradata access)
-- [ ] **OPS-02**: Operations guide provides step-by-step installation instructions
-- [ ] **OPS-03**: Operations guide documents all TERADATA_* environment variables
-- [ ] **OPS-04**: Operations guide documents API_PORT and server configuration
-- [ ] **OPS-05**: Operations guide documents Redis configuration (optional)
-- [ ] **OPS-06**: Operations guide documents database schema creation (OL_* tables)
-- [ ] **OPS-07**: Operations guide documents lineage population options (fixtures vs DBQL)
-- [ ] **OPS-08**: Operations guide explains QVCI requirements for Teradata
-- [ ] **OPS-09**: Operations guide documents production security requirements (auth proxy, TLS, CORS)
-- [ ] **OPS-10**: Operations guide documents rate limiting recommendations
-- [ ] **OPS-11**: Operations guide includes deployment architecture diagram
-- [ ] **OPS-12**: Operations guide includes troubleshooting section for common issues
+- [x] **OPS-01**: Operations guide documents system prerequisites (Go, Node.js, Python, Teradata access)
+- [x] **OPS-02**: Operations guide provides step-by-step installation instructions
+- [x] **OPS-03**: Operations guide documents all TERADATA_* environment variables
+- [x] **OPS-04**: Operations guide documents API_PORT and server configuration
+- [x] **OPS-05**: Operations guide documents Redis configuration (optional)
+- [x] **OPS-06**: Operations guide documents database schema creation (OL_* tables)
+- [x] **OPS-07**: Operations guide documents lineage population options (fixtures vs DBQL)
+- [x] **OPS-08**: Operations guide explains QVCI requirements for Teradata
+- [x] **OPS-09**: Operations guide documents production security requirements (auth proxy, TLS, CORS)
+- [x] **OPS-10**: Operations guide documents rate limiting recommendations
+- [x] **OPS-11**: Operations guide includes deployment architecture diagram
+- [x] **OPS-12**: Operations guide includes troubleshooting section for common issues
 
 ### Developer Manual
 
@@ -106,18 +106,18 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 | USER-09 | Phase 25 | Complete |
 | USER-10 | Phase 25 | Complete |
 | USER-11 | Phase 25 | Complete |
-| OPS-01 | Phase 26 | Pending |
-| OPS-02 | Phase 26 | Pending |
-| OPS-03 | Phase 26 | Pending |
-| OPS-04 | Phase 26 | Pending |
-| OPS-05 | Phase 26 | Pending |
-| OPS-06 | Phase 26 | Pending |
-| OPS-07 | Phase 26 | Pending |
-| OPS-08 | Phase 26 | Pending |
-| OPS-09 | Phase 26 | Pending |
-| OPS-10 | Phase 26 | Pending |
-| OPS-11 | Phase 26 | Pending |
-| OPS-12 | Phase 26 | Pending |
+| OPS-01 | Phase 26 | Complete |
+| OPS-02 | Phase 26 | Complete |
+| OPS-03 | Phase 26 | Complete |
+| OPS-04 | Phase 26 | Complete |
+| OPS-05 | Phase 26 | Complete |
+| OPS-06 | Phase 26 | Complete |
+| OPS-07 | Phase 26 | Complete |
+| OPS-08 | Phase 26 | Complete |
+| OPS-09 | Phase 26 | Complete |
+| OPS-10 | Phase 26 | Complete |
+| OPS-11 | Phase 26 | Complete |
+| OPS-12 | Phase 26 | Complete |
 | DEV-01 | Phase 27 | Pending |
 | DEV-02 | Phase 27 | Pending |
 | DEV-03 | Phase 27 | Pending |
@@ -142,4 +142,4 @@ Requirements for milestone v5.0 focused on enabling production deployment throug
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after roadmap creation*
+*Last updated: 2026-02-08 (Phase 26 complete)*
