@@ -79,8 +79,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 25-01-PLAN.md -- Update user guide content: asset browser, loading progress, toolbar controls, detail panel tabs, search
-- [ ] 25-02-PLAN.md -- Add screenshot references and create screenshots directory with capture guide
+- [x] 25-01-PLAN.md -- Update user guide content: asset browser, loading progress, toolbar controls, detail panel tabs, search
+- [x] 25-02-PLAN.md -- Add screenshot references and create screenshots directory with capture guide
 
 #### Phase 26: Operations Guide
 **Goal**: An operations team can deploy the application to production from scratch using only the ops guide
@@ -126,7 +126,7 @@ Plans:
 | 13-18. Graph Improvements | v3.0 | 11/11 | Complete | 2026-01-31 |
 | 19-23. Interactive Graph Experience | v4.0 | 15/15 | Complete | 2026-02-07 |
 | 24. README Updates | v5.0 | 2/2 | Complete | 2026-02-07 |
-| 25. User Guide Refresh | v5.0 | 0/2 | Not started | - |
+| 25. User Guide Refresh | v5.0 | 2/2 | Complete | 2026-02-08 |
 | 26. Operations Guide | v5.0 | 0/2 | Not started | - |
 | 27. Developer Manual | v5.0 | 0/3 | Not started | - |
 
