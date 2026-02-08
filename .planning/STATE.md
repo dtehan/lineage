@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
-Phase: 26 of 27 (Operations Guide) -- Complete
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-08 -- Completed 26-02-PLAN.md (production deployment, architecture, troubleshooting)
+Phase: 27 of 27 (Developer Manual) -- In progress
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-08 -- Completed 27-01-PLAN.md (TOC, quick start, environment setup, running tests)
 
-Progress: [██████░░░░] 67% (6/9 plans)
+Progress: [███████░░░] 78% (7/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 61 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 6)
-- Average plan duration: ~3.4 min
-- Total execution time: ~205 min
+- Total plans completed: 62 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 7)
+- Average plan duration: ~3.3 min
+- Total execution time: ~207 min
 
 **By Milestone:**
 
@@ -48,6 +48,9 @@ Progress: [██████░░░░] 67% (6/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [27-01]: Used ~558 for frontend unit test count (approximate, changes as tests are added)
+- [27-01]: Documented 6 Python packages from actual requirements.txt (not ops guide's slightly different list)
+- [27-01]: Playwright port :5173 documented as distinct from dev server :3000
 - [26-02]: Summarize-and-link pattern for security: overview table with deep links to SECURITY.md sections
 - [26-02]: Rate limiting uses v* wildcard endpoints to cover both v1 and v2 API versions
 - [26-02]: Troubleshooting uses consistent Symptoms/Cause/Solution format across all 10 issues
@@ -80,5 +83,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 26-02-PLAN.md (production deployment, architecture, troubleshooting) -- Phase 26 complete
+Stopped at: Completed 27-01-PLAN.md (TOC, quick start, environment setup, running tests)
 Resume file: None
