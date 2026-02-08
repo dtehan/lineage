@@ -254,3 +254,231 @@ make test
 ### Testing Guidance
 
 For day-to-day development, frontend unit tests (`npm test` in watch mode) provide the fastest feedback. Run the full suite across all four test types before committing changes.
+
+---
+
+## Architecture Overview
+
+The application follows a three-tier architecture: React frontend, Go/Python backend, and Teradata database with optional Redis caching.
+
+```mermaid
+graph LR
+    subgraph Frontend["React Frontend (:3000)"]
+        Pages["Features/Pages"] --> Components["Domain Components"]
+        Components --> Hooks["TanStack Query Hooks"]
+        Components --> Stores["Zustand Stores"]
+        Hooks --> Client["Axios Client"]
+    end
+
+    subgraph Backend["Go/Python Backend (:8080)"]
+        Router["Chi Router"] --> Handlers["HTTP Handlers"]
+        Handlers --> Services["Application Services"]
+        Services --> Repos["Repository Interfaces"]
+    end
+
+    subgraph Data["Data Layer"]
+        TD[(Teradata)]
+        Redis[(Redis Cache)]
+    end
+
+    Client -->|REST API| Router
+    Repos --> TD
+    Repos -.->|Optional| Redis
+```
+
+**How the tiers connect:**
+
+- **Frontend to backend:** The React frontend communicates with the backend exclusively through REST API calls. During local development, Vite proxies all `/api/*` requests to `localhost:8080`, so no CORS configuration is needed.
+- **Two backend implementations:** The Go backend (Chi router, hexagonal architecture) is the production implementation. The Python Flask backend (`python_server.py`) serves identical API endpoints with a simpler architecture. Both are interchangeable -- the frontend does not know which backend is running.
+- **Data layer:** Teradata stores all lineage metadata in `OL_*` tables. Redis provides an optional caching layer; the application falls back gracefully without it and Redis is only beneficial for high-traffic deployments.
+
+---
+
+## Backend Architecture
+
+### 5.1 Hexagonal Architecture Pattern
+
+The Go backend uses hexagonal (ports and adapters) architecture. The core idea: the domain layer defines interfaces (ports) with no external dependencies, and adapters implement those interfaces for specific technologies. This means the core business logic can be tested without a Teradata connection or Redis instance.
+
+```mermaid
+graph TD
+    subgraph Inbound["Inbound Adapters"]
+        HTTP["HTTP Handlers<br/>(Chi Router)"]
+    end
+
+    subgraph Core["Core"]
+        Services["Application Services<br/>(Use Cases)"]
+        Domain["Domain Entities<br/>(Interfaces)"]
+    end
+
+    subgraph Outbound["Outbound Adapters"]
+        TeradataRepo["Teradata Repository"]
+        RedisCache["Redis Cache"]
+    end
+
+    HTTP --> Services
+    Services --> Domain
+    TeradataRepo -.->|implements| Domain
+    RedisCache -.->|implements| Domain
+```
+
+**Why hexagonal?** Dependency inversion keeps the domain pure. Services depend on interfaces, not concrete database code. When testing, mock implementations replace real adapters. When switching databases or caches, only the adapter layer changes.
+
+### 5.2 Directory Structure
+
+```
+lineage-api/internal/
+├── domain/                     # CORE LAYER - No external dependencies
+│   ├── entities.go             # Database, Table, Column, ColumnLineage,
+│   │                           # LineageGraph, OpenLineage* types
+│   ├── repository.go           # Repository interfaces (AssetRepository,
+│   │                           # LineageRepository, SearchRepository,
+│   │                           # CacheRepository, OpenLineageRepository)
+│   └── mocks/                  # Mock implementations for testing
+│
+├── application/                # USE CASE LAYER - Orchestrates domain
+│   ├── dto.go                  # Data transfer objects (request/response)
+│   ├── asset_service.go        # Asset browsing logic
+│   ├── lineage_service.go      # Lineage traversal logic
+│   ├── openlineage_service.go  # OpenLineage-aligned operations
+│   └── search_service.go       # Search logic
+│
+├── adapter/                    # ADAPTER LAYER - External integrations
+│   ├── inbound/http/           # Chi router, handlers, middleware
+│   │   ├── router.go           # Route definitions (v1 + v2 APIs)
+│   │   ├── handlers.go         # v1 API handlers
+│   │   ├── openlineage_handlers.go  # v2 API handlers
+│   │   ├── response.go         # Response helpers
+│   │   └── validation.go       # Input validation
+│   └── outbound/
+│       ├── teradata/           # Teradata repository implementations
+│       │   ├── connection.go   # Connection management
+│       │   ├── asset_repo.go   # AssetRepository impl
+│       │   ├── lineage_repo.go # LineageRepository impl
+│       │   ├── openlineage_repo.go  # OpenLineageRepository impl
+│       │   └── search_repo.go  # SearchRepository impl
+│       └── redis/
+│           └── cache.go        # CacheRepository impl (optional)
+│
+└── infrastructure/             # CROSS-CUTTING CONCERNS
+    ├── config/                 # Viper configuration loading
+    └── logging/                # slog structured logging
+```
+
+**Layer responsibilities:**
+
+- **domain/** -- Core entities (`Database`, `Table`, `Column`, `ColumnLineage`, `LineageGraph`, and all `OpenLineage*` types) and repository interfaces. This layer has zero external imports beyond the Go standard library.
+- **application/** -- Service layer implementing use cases. DTOs define the shapes of API requests and responses. Services orchestrate domain operations and enforce business rules.
+- **adapter/inbound/http/** -- Chi router, HTTP handlers for both v1 and v2 APIs, middleware, input validation, and response helpers. This is the only layer that knows about HTTP.
+- **adapter/outbound/teradata/** -- Teradata repository implementations. Contains SQL queries, connection management, and result mapping. This is the only layer that knows about Teradata.
+- **adapter/outbound/redis/** -- Optional Redis cache implementation. Implements `CacheRepository` for caching query results.
+- **infrastructure/** -- Cross-cutting concerns: Viper-based configuration loading and slog structured logging.
+
+### 5.3 Key Interfaces
+
+The domain layer defines five repository interfaces in `domain/repository.go`:
+
+| Interface | Purpose | Key Methods |
+|-----------|---------|-------------|
+| `AssetRepository` | Browse databases, tables, columns | `ListDatabases`, `GetTable`, `ListColumns` |
+| `LineageRepository` | Traverse lineage graph | `GetUpstreamLineage`, `GetDownstreamLineage` |
+| `SearchRepository` | Search across datasets | `Search` (with asset type filters) |
+| `CacheRepository` | Optional caching layer | `Get`, `Set`, `Delete`, `Exists` |
+| `OpenLineageRepository` | OpenLineage-aligned operations | `GetColumnLineageGraph`, `ListDatasets`, `ListFields` |
+
+Mock implementations in `domain/mocks/` enable testing services without a Teradata connection.
+
+### 5.4 Python Backend
+
+The Python Flask backend (`lineage-api/python_server.py`) serves the same API endpoints without the hexagonal architecture. It queries Teradata directly using `teradatasql` and returns JSON responses via Flask. This simpler implementation is recommended for local development because it requires no Go compilation and starts instantly.
+
+Both backends are interchangeable. The frontend works identically with either one.
+
+---
+
+## Frontend Architecture
+
+### 6.1 Technology Stack
+
+| Technology | Purpose |
+|-----------|---------|
+| React 18 | UI framework |
+| TypeScript | Type safety |
+| Vite | Build tool and dev server |
+| TanStack Query | Server state management (caching, refetching, loading) |
+| Zustand | Client state management (UI state, selections) |
+| React Flow (@xyflow/react) | Graph visualization |
+| ELKjs | Automatic hierarchical graph layout |
+
+### 6.2 Directory Structure
+
+```
+lineage-ui/src/
+├── api/                        # API LAYER - Server communication
+│   ├── client.ts               # Axios HTTP client
+│   └── hooks/                  # TanStack Query custom hooks
+│       ├── useAssets.ts        # Asset browser data fetching
+│       ├── useLineage.ts       # Lineage graph data fetching
+│       ├── useOpenLineage.ts   # OpenLineage v2 API hooks
+│       └── useSearch.ts        # Search data fetching
+│
+├── components/                 # COMPONENT LAYER - UI building blocks
+│   ├── common/                 # Reusable UI components
+│   │   ├── Button.tsx, Input.tsx
+│   │   ├── LoadingSpinner.tsx, LoadingProgress.tsx
+│   │   ├── Pagination.tsx, Tooltip.tsx
+│   │   └── ErrorBoundary.tsx
+│   ├── layout/                 # App chrome
+│   │   └── AppShell.tsx, Header.tsx, Sidebar.tsx
+│   └── domain/                 # Feature components
+│       ├── AssetBrowser/       # Hierarchical database/table/column navigation
+│       ├── LineageGraph/       # Graph visualization (largest component group)
+│       │   ├── LineageGraph.tsx
+│       │   ├── TableNode/, ColumnNode.tsx, LineageEdge.tsx
+│       │   ├── Toolbar.tsx, DetailPanel.tsx, Legend.tsx
+│       │   ├── DetailPanel/ (ColumnsTab, StatisticsTab, DDLTab)
+│       │   ├── LineageTableView/
+│       │   └── hooks/ (useLineageHighlight, useDatabaseClusters, etc.)
+│       ├── ImpactAnalysis/     # Impact summary and analysis table
+│       └── Search/             # SearchBar, SearchResults
+│
+├── features/                   # PAGE LAYER - Route-level components
+│   ├── ExplorePage.tsx         # Asset browser page
+│   ├── LineagePage.tsx         # Single-column lineage
+│   ├── DatabaseLineagePage.tsx # Database-scoped lineage
+│   ├── AllDatabasesLineagePage.tsx  # Cross-database lineage
+│   ├── ImpactPage.tsx          # Impact analysis
+│   └── SearchPage.tsx          # Search results
+│
+├── stores/                     # STATE LAYER - Zustand stores
+│   ├── useLineageStore.ts      # Graph state (selection, depth, direction)
+│   └── useUIStore.ts           # UI state (sidebar, panels, view mode)
+│
+├── hooks/                      # SHARED HOOKS
+│   └── useLoadingProgress.ts   # Loading stage tracking
+│
+├── types/                      # TYPE DEFINITIONS
+│   └── openlineage.ts          # OpenLineage API types
+│
+└── utils/graph/                # GRAPH UTILITIES
+    ├── layoutEngine.ts         # ELKjs layout integration
+    └── openLineageAdapter.ts   # API response to React Flow adapter
+```
+
+### 6.3 Data Flow
+
+Data flows through the frontend in a consistent pattern:
+
+1. **User navigates** to a page (`features/` component bound to a route)
+2. **Page calls a hook** from `api/hooks/` (e.g., `useOpenLineage` for lineage data)
+3. **Hook fetches data** from the backend via the Axios client (`api/client.ts`)
+4. **Response is transformed** by the adapter (`utils/graph/openLineageAdapter.ts`) into React Flow nodes and edges
+5. **Graph components render** using React Flow with custom `TableNode` and `ColumnNode` components
+6. **Client-side state** (current selection, depth, direction, sidebar visibility) is managed by Zustand stores
+
+### 6.4 Key Patterns
+
+- **TanStack Query for all server data.** Every API call goes through a TanStack Query hook, which provides automatic caching, background refetching, loading states, and error handling. Components never call the API directly.
+- **Zustand for client-only state.** UI state (sidebar open/closed, selected node, graph depth/direction) lives in Zustand stores. These stores have no server sync -- they are purely client-side.
+- **React Flow custom nodes.** The lineage graph renders tables as `TableNode` components containing `ColumnNode` children. Each column row is interactive (click to view lineage, hover to highlight).
+- **ELKjs for automatic layout.** Graph layout is computed by ELKjs using a hierarchical/layered algorithm. The layout engine runs in `utils/graph/layoutEngine.ts` and positions nodes before React Flow renders them.
