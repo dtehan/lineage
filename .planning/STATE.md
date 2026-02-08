@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 
 Milestone: v5.0 Comprehensive Documentation (IN PROGRESS)
 Phase: 27 of 27 (Developer Manual) -- In progress
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-08 -- Completed 27-01-PLAN.md (TOC, quick start, environment setup, running tests)
+Last activity: 2026-02-08 -- Completed 27-02-PLAN.md (Architecture, schema, API reference, code standards)
 
-Progress: [███████░░░] 78% (7/9 plans)
+Progress: [████████░░] 89% (8/9 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 62 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 7)
+- Total plans completed: 63 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 8)
 - Average plan duration: ~3.3 min
-- Total execution time: ~207 min
+- Total execution time: ~210 min
 
 **By Milestone:**
 
@@ -48,6 +48,9 @@ Progress: [███████░░░] 78% (7/9 plans)
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [27-02]: Added extra rows to coding standards summary tables (Naming for Go, State for TS, Performance for SQL) for practical completeness
+- [27-02]: All three DEV-16 diagram types embedded as Mermaid: system architecture, hexagonal architecture, database ER
+- [27-02]: Summarize-and-link pattern used for all coding standards (summary table + link to ../specs/ canonical file)
 - [27-01]: Used ~558 for frontend unit test count (approximate, changes as tests are added)
 - [27-01]: Documented 6 Python packages from actual requirements.txt (not ops guide's slightly different list)
 - [27-01]: Playwright port :5173 documented as distinct from dev server :3000
@@ -83,5 +86,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 27-01-PLAN.md (TOC, quick start, environment setup, running tests)
+Stopped at: Completed 27-02-PLAN.md (Architecture, schema, API reference, code standards)
 Resume file: None
