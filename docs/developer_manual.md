@@ -482,3 +482,126 @@ Data flows through the frontend in a consistent pattern:
 - **Zustand for client-only state.** UI state (sidebar open/closed, selected node, graph depth/direction) lives in Zustand stores. These stores have no server sync -- they are purely client-side.
 - **React Flow custom nodes.** The lineage graph renders tables as `TableNode` components containing `ColumnNode` children. Each column row is interactive (click to view lineage, hover to highlight).
 - **ELKjs for automatic layout.** Graph layout is computed by ELKjs using a hierarchical/layered algorithm. The layout engine runs in `utils/graph/layoutEngine.ts` and positions nodes before React Flow renders them.
+
+---
+
+## Database and Schema
+
+### 7.1 OpenLineage Alignment
+
+The database schema follows the [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-model). All lineage metadata tables use the `OL_` prefix and are stored in the `demo_user` database (configurable via `TERADATA_DATABASE`).
+
+```mermaid
+erDiagram
+    OL_NAMESPACE ||--o{ OL_DATASET : contains
+    OL_NAMESPACE ||--o{ OL_JOB : contains
+    OL_DATASET ||--o{ OL_DATASET_FIELD : has
+    OL_JOB ||--o{ OL_RUN : executes
+    OL_RUN ||--o{ OL_RUN_INPUT : reads
+    OL_RUN ||--o{ OL_RUN_OUTPUT : writes
+    OL_RUN_INPUT }o--|| OL_DATASET : references
+    OL_RUN_OUTPUT }o--|| OL_DATASET : references
+    OL_DATASET_FIELD ||--o{ OL_COLUMN_LINEAGE : "source or target"
+```
+
+### 7.2 Table Reference
+
+| Table | Purpose | Key Fields |
+|-------|---------|------------|
+| `OL_NAMESPACE` | Data source namespaces | `namespace_id`, `name` (URI: `teradata://host:port`) |
+| `OL_DATASET` | Dataset registry (tables/views) | `dataset_id`, `namespace_id`, `name` (`database.table`) |
+| `OL_DATASET_FIELD` | Field definitions (columns) | `field_id`, `dataset_id`, `name`, `type` |
+| `OL_JOB` | Job definitions (ETL processes) | `job_id`, `namespace_id`, `name` |
+| `OL_RUN` | Job execution runs | `run_id`, `job_id`, `state` |
+| `OL_RUN_INPUT` | Run input datasets | `run_id`, `dataset_id` |
+| `OL_RUN_OUTPUT` | Run output datasets | `run_id`, `dataset_id` |
+| `OL_COLUMN_LINEAGE` | Column-level lineage | `source_field_id`, `target_field_id`, `transformation_type` |
+| `OL_SCHEMA_VERSION` | Schema version tracking | `version`, `applied_at` |
+
+### 7.3 Lineage Traversal
+
+Column-level lineage is stored in `OL_COLUMN_LINEAGE`, where each row represents a relationship from a source field to a target field. The backend traverses this graph using recursive CTEs in Teradata:
+
+- **Upstream traversal:** Follows the chain `target_field_id` -> `source_field_id` to find all columns that feed into a given column (answering "where does this data come from?").
+- **Downstream traversal:** Follows the chain `source_field_id` -> `target_field_id` to find all columns that depend on a given column (answering "what does this data affect?").
+- **Cycle detection:** The recursive CTE tracks the traversal path. If a column appears again in the path, the recursion stops for that branch, preventing infinite loops.
+- **Depth control:** A `maxDepth` parameter limits how many levels the CTE traverses (default: 3).
+
+### 7.4 Lineage Population
+
+Lineage data is populated into the `OL_*` tables using `database/scripts/populate/populate_lineage.py`, which supports two modes:
+
+- **Fixtures mode (default):** Uses hardcoded column mappings for demo and testing. Provides a complete working dataset without requiring query log history.
+- **DBQL mode (`--dbql`):** Extracts lineage from executed SQL statements in Teradata's query logs (DBC.DBQLSqlTbl). Used for production environments with real query activity.
+
+See [database/README.md](../database/README.md) for detailed population procedures and options.
+
+---
+
+## API Reference
+
+### 8.1 API Versioning
+
+The backend serves two API versions:
+
+- **v1 API:** Original endpoints. Still available for backward compatibility.
+- **v2 API:** OpenLineage-aligned endpoints. Used by the frontend and recommended for all new integrations.
+
+### 8.2 v2 Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v2/openlineage/namespaces` | List all namespaces |
+| GET | `/api/v2/openlineage/namespaces/{namespaceId}` | Get namespace details |
+| GET | `/api/v2/openlineage/namespaces/{namespaceId}/datasets` | List datasets in namespace |
+| GET | `/api/v2/openlineage/datasets/{datasetId}` | Get dataset with fields |
+| GET | `/api/v2/openlineage/datasets/search?q=query` | Search datasets by name |
+| GET | `/api/v2/openlineage/lineage/{datasetId}/{fieldName}` | Get lineage graph for a column |
+
+All endpoints return JSON. Error responses use standard HTTP status codes with a JSON body containing an `error` field.
+
+See [lineage-api/README.md](../lineage-api/README.md) for complete endpoint documentation including request/response examples and v1 endpoints.
+
+---
+
+## Code Standards
+
+The project maintains coding standards for all three languages. Full standards are documented in the `specs/` directory; this section summarizes key conventions.
+
+### 9.1 Go Standards
+
+| Convention | Rule |
+|-----------|------|
+| Formatting | `gofmt`/`goimports` on save |
+| Line length | 100 characters |
+| Imports | Three groups: stdlib, third-party, internal |
+| Errors | Wrap with `fmt.Errorf("context: %w", err)` |
+| Test files | Colocated with source (`*_test.go`) |
+| Naming | Exported = `PascalCase`, unexported = `camelCase` |
+
+Full standards: [specs/coding_standards_go.md](../specs/coding_standards_go.md)
+
+### 9.2 TypeScript/React Standards
+
+| Convention | Rule |
+|-----------|------|
+| Formatting | Prettier + ESLint |
+| Components | PascalCase, functional with hooks |
+| Hooks | camelCase with `use` prefix |
+| Test files | `*.test.tsx` colocated with source |
+| Imports | 7 groups (React, external, internal, components, hooks, stores, types) |
+| State | TanStack Query for server state, Zustand for client state |
+
+Full standards: [specs/coding_standards_typescript.md](../specs/coding_standards_typescript.md)
+
+### 9.3 SQL Standards
+
+| Convention | Rule |
+|-----------|------|
+| Naming | `snake_case` for all identifiers |
+| Keywords | `UPPERCASE` for all SQL keywords |
+| Tables | `MULTISET` tables, `OL_` prefix for lineage system tables |
+| Formatting | One clause per line, consistent indentation |
+| Performance | Use `MULTISET` over `SET` tables, qualify all column references |
+
+Full standards: [specs/coding_standards_sql.md](../specs/coding_standards_sql.md)
