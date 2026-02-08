@@ -92,11 +92,11 @@ Plans:
   3. Someone can set up the database schema (OL_* tables), enable QVCI, and populate lineage data using documented procedures
   4. Someone can harden the deployment for production using documented security requirements (auth proxy, TLS, CORS, rate limiting) and the deployment architecture diagram
   5. Someone can diagnose and resolve common issues using the troubleshooting section
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 26-01: Operations guide - prerequisites, installation, configuration
-- [ ] 26-02: Operations guide - database setup, security, architecture diagram, troubleshooting
+- [ ] 26-01-PLAN.md -- Create operations guide with prerequisites, installation, configuration, database setup, running the application
+- [ ] 26-02-PLAN.md -- Add production deployment, architecture diagram, and troubleshooting sections
 
 #### Phase 27: Developer Manual
 **Goal**: A new developer can set up a local environment, run all test suites, understand the architecture, and contribute code using only the dev manual
