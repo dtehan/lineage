@@ -399,10 +399,12 @@ Edges display confidence levels visually:
 | Shortcut | Action |
 |----------|--------|
 | `Escape` | Clear selection and close panel |
-| `F` | Fit graph to view |
+| `F` | Fit all nodes to view |
 | `+` / `-` | Zoom in / out |
 | `Ctrl+F` or `/` | Focus search box |
 | `Ctrl+G` | Toggle database cluster backgrounds |
+
+**Note:** Fit to Selection is available via the toolbar button only (Crosshair icon) and does not have a keyboard shortcut. It differs from Fit View (F key) in that it centers only on the nodes in the highlighted lineage path rather than all nodes in the graph.
 
 ### Toolbar Controls
 
@@ -413,8 +415,10 @@ The lineage graph includes an advanced toolbar with the following controls:
 | **View Mode Toggle** | Switch between Graph view (visual) and Table view (tabular list) |
 | **Search Box** | Autocomplete search for columns within the current lineage graph |
 | **Direction Dropdown** | Select Upstream, Downstream, or Both directions |
+| **Asset Type Filter** | Filter visible nodes by type: Tables, Views, Materialized Views (checkbox dropdown) |
 | **Depth Slider** | Interactive slider to adjust traversal depth (1-10) |
-| **Fit View Button** | Automatically fit all nodes within the viewport (or press F) |
+| **Fit View Button** | Fit all graph nodes within the viewport (Focus icon, or press F) |
+| **Fit to Selection** | Center the viewport on the highlighted lineage path (Crosshair icon). Only active when a column is selected and its lineage path is highlighted |
 | **Export Button** | Export the current lineage graph as PNG, SVG, or JSON |
 | **Fullscreen Button** | Toggle fullscreen mode for the graph view |
 
@@ -426,6 +430,22 @@ The search box provides real-time autocomplete as you type:
 - Use arrow keys to navigate results, Enter to select
 - Selected column is highlighted and centered in view
 - Press Escape to close the dropdown
+
+### Loading Progress
+
+When loading a lineage graph, a progress bar appears showing the current stage of processing:
+
+| Stage | Progress | Message |
+|-------|----------|---------|
+| Fetching | 15-30% | "Loading data..." |
+| Layout | 30-70% | "Calculating layout..." |
+| Rendering | 70-95% | "Rendering graph..." |
+
+For larger graphs, timing information is displayed alongside the progress bar:
+- **Elapsed time**: How long the current operation has been running (e.g., "5s", "1m 30s")
+- **Estimated time remaining**: Approximate time until completion (e.g., "~10s"), shown once progress reaches at least 10%
+
+The progress bar appears automatically when loading lineage data and disappears when the graph is fully rendered. A simple loading spinner is used separately in the Asset Browser sidebar for loading database/table/column lists.
 
 ### Detail Panel
 
@@ -636,13 +656,13 @@ View all table-to-table relationships within a database. This provides a high-le
 
 **Use case:** Understanding the overall architecture of a data warehouse or identifying cross-table dependencies.
 
-### Loading More Tables
+### Loading More Tables (Database-Level View)
 
-For databases with many tables, the lineage graph uses pagination to maintain performance.
+When viewing database-level lineage (accessed by clicking a database name in the Asset Browser or navigating to `/lineage/database/{databaseName}`), the graph uses pagination to maintain performance with large databases.
 
 **Pagination Controls:**
 
-The database lineage view header shows:
+The database-level lineage view header shows:
 ```
 Database: SALES_DW (50 of 200 tables loaded)
                          [Page Size ▼] [Load More Tables]
