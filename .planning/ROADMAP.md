@@ -107,12 +107,12 @@ Plans:
   2. A new developer can run all four test suites (73 database, 20 API, 444+ frontend unit, 34 E2E) using the documented commands and understand what each suite validates
   3. A new developer understands the hexagonal architecture (Go backend layers), React frontend structure (components/features/stores), and OpenLineage schema from the architecture documentation and diagrams
   4. A new developer knows the code standards (Go, TypeScript, SQL), commit message conventions, and PR process before submitting their first contribution
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 27-01: Developer manual - environment setup and testing guide
-- [ ] 27-02: Developer manual - architecture, OpenLineage schema, and code standards
-- [ ] 27-03: Developer manual - contributing guidelines and architecture diagrams
+- [ ] 27-01-PLAN.md -- Create developer manual with quick start, environment setup, and running tests
+- [ ] 27-02-PLAN.md -- Add architecture overview, backend/frontend architecture, database schema, API reference, and code standards
+- [ ] 27-03-PLAN.md -- Add contributing guidelines (commit conventions, PR process) and update root README link
 
 ## Progress
 
