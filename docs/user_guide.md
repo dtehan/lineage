@@ -309,6 +309,8 @@ The application has a consistent layout across all pages:
 
 The Asset Browser provides hierarchical navigation through your data assets in the left panel of the Explore page.
 
+![Asset Browser showing database hierarchy with expanded tables and columns](screenshots/asset-browser.png)
+
 **Navigation Structure:**
 ```
 Databases (blue icon)
@@ -342,6 +344,8 @@ Views and materialized views display a colored badge next to their name for quic
 ### Lineage Graph
 
 The Lineage Graph visualizes data relationships as an interactive directed graph using React Flow with ELKjs layout.
+
+![Lineage graph showing column-level data flow between table nodes](screenshots/lineage-graph.png)
 
 **Graph Elements:**
 
@@ -410,6 +414,8 @@ Edges display confidence levels visually:
 
 The lineage graph includes an advanced toolbar with the following controls:
 
+![Toolbar with direction, depth, fit-to-selection, and export controls](screenshots/toolbar-controls.png)
+
 | Control | Description |
 |---------|-------------|
 | **View Mode Toggle** | Switch between Graph view (visual) and Table view (tabular list) |
@@ -435,6 +441,8 @@ The search box provides real-time autocomplete as you type:
 
 When loading a lineage graph, a progress bar appears showing the current stage of processing:
 
+![Loading progress bar showing stage and timing information](screenshots/loading-progress.png)
+
 | Stage | Progress | Message |
 |-------|----------|---------|
 | Fetching | 15-30% | "Loading data..." |
@@ -450,6 +458,8 @@ The progress bar appears automatically when loading lineage data and disappears 
 ### Detail Panel
 
 When you click on a column or edge in the lineage graph, a **Detail Panel** slides in from the right side of the screen showing detailed information. Click the X button or press Escape to close the panel.
+
+![Detail panel showing the Columns tab with column list, types, and lineage counts](screenshots/detail-panel-columns.png)
 
 When a table or column is selected, the panel displays a breadcrumb showing the `database > table > column` path at the top, followed by a **tabbed interface** with three tabs:
 
@@ -484,6 +494,8 @@ Shows table-level metadata fetched from the database:
 
 Data is loaded on demand when you switch to this tab.
 
+![Detail panel showing the Statistics tab with table metadata](screenshots/detail-panel-statistics.png)
+
 #### DDL Tab (Code icon)
 
 Displays the SQL definition of the selected table or view with syntax highlighting:
@@ -497,6 +509,8 @@ Displays the SQL definition of the selected table or view with syntax highlighti
 - **Column comments**: If any columns have comments defined in the database, they are listed below the SQL definition
 
 Data is loaded on demand when you switch to this tab.
+
+![Detail panel showing DDL with syntax highlighting](screenshots/detail-panel-ddl.png)
 
 #### Edge/Connection Details
 
@@ -563,6 +577,8 @@ Tables are visually grouped by their parent database with semi-transparent color
 
 **Path Highlighting:**
 
+![Highlighted lineage path with dimmed non-path nodes](screenshots/lineage-graph-highlighted.png)
+
 When you click on a column:
 - The full upstream and downstream lineage path is highlighted
 - Nodes not in the path are dimmed to 20% opacity
@@ -586,6 +602,8 @@ Toggle fullscreen mode for detailed analysis of complex lineages. The graph expa
 ### Search
 
 Access the Search page via the header search form or the sidebar search icon. You can also navigate directly to `/search?q=your-query`.
+
+![Search results with grouped databases and tables](screenshots/search-results.png)
 
 **Search Features:**
 - Minimum 2 characters to trigger search
@@ -671,6 +689,8 @@ View all table-to-table relationships within a database. This provides a high-le
 ### Loading More Tables (Database-Level View)
 
 When viewing database-level lineage (accessed by clicking a database name in the Asset Browser or navigating to `/lineage/database/{databaseName}`), the graph uses pagination to maintain performance with large databases.
+
+![Database lineage view with Load More pagination](screenshots/database-lineage.png)
 
 **Pagination Controls:**
 
