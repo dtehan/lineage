@@ -35,37 +35,46 @@ const apiClientV2 = axios.create({
 
 export const openLineageApi = {
   // Namespaces
-  async getNamespaces(): Promise<NamespacesResponse> {
-    const response = await apiClientV2.get<NamespacesResponse>('/api/v2/openlineage/namespaces');
+  async getNamespaces(options?: { refresh?: boolean }): Promise<NamespacesResponse> {
+    const response = await apiClientV2.get<NamespacesResponse>(
+      '/api/v2/openlineage/namespaces',
+      { params: options?.refresh ? { refresh: 'true' } : undefined }
+    );
     return response.data;
   },
 
-  async getNamespace(namespaceId: string): Promise<OpenLineageNamespace> {
+  async getNamespace(namespaceId: string, options?: { refresh?: boolean }): Promise<OpenLineageNamespace> {
     const response = await apiClientV2.get<OpenLineageNamespace>(
-      `/api/v2/openlineage/namespaces/${encodeURIComponent(namespaceId)}`
+      `/api/v2/openlineage/namespaces/${encodeURIComponent(namespaceId)}`,
+      { params: options?.refresh ? { refresh: 'true' } : undefined }
     );
     return response.data;
   },
 
   // Datasets
-  async getDatasets(namespaceId: string, params?: OpenLineagePaginationParams): Promise<DatasetsResponse> {
+  async getDatasets(
+    namespaceId: string,
+    params?: OpenLineagePaginationParams,
+    options?: { refresh?: boolean }
+  ): Promise<DatasetsResponse> {
     const response = await apiClientV2.get<DatasetsResponse>(
       `/api/v2/openlineage/namespaces/${encodeURIComponent(namespaceId)}/datasets`,
-      { params }
+      { params: { ...params, ...(options?.refresh ? { refresh: 'true' } : {}) } }
     );
     return response.data;
   },
 
-  async getDataset(datasetId: string): Promise<OpenLineageDataset> {
+  async getDataset(datasetId: string, options?: { refresh?: boolean }): Promise<OpenLineageDataset> {
     const response = await apiClientV2.get<OpenLineageDataset>(
-      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}`
+      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}`,
+      { params: options?.refresh ? { refresh: 'true' } : undefined }
     );
     return response.data;
   },
 
-  async searchDatasets(query: string, limit?: number): Promise<DatasetSearchResponse> {
+  async searchDatasets(query: string, limit?: number, options?: { refresh?: boolean }): Promise<DatasetSearchResponse> {
     const response = await apiClientV2.get<DatasetSearchResponse>('/api/v2/openlineage/datasets/search', {
-      params: { q: query, limit },
+      params: { q: query, limit, ...(options?.refresh ? { refresh: 'true' } : {}) },
     });
     return response.data;
   },
@@ -78,16 +87,18 @@ export const openLineageApi = {
   },
 
   // Statistics and DDL
-  async getDatasetStatistics(datasetId: string): Promise<DatasetStatisticsResponse> {
+  async getDatasetStatistics(datasetId: string, options?: { refresh?: boolean }): Promise<DatasetStatisticsResponse> {
     const response = await apiClientV2.get<DatasetStatisticsResponse>(
-      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}/statistics`
+      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}/statistics`,
+      { params: options?.refresh ? { refresh: 'true' } : undefined }
     );
     return response.data;
   },
 
-  async getDatasetDDL(datasetId: string): Promise<DatasetDDLResponse> {
+  async getDatasetDDL(datasetId: string, options?: { refresh?: boolean }): Promise<DatasetDDLResponse> {
     const response = await apiClientV2.get<DatasetDDLResponse>(
-      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}/ddl`
+      `/api/v2/openlineage/datasets/${encodeURIComponent(datasetId)}/ddl`,
+      { params: options?.refresh ? { refresh: 'true' } : undefined }
     );
     return response.data;
   },
@@ -98,9 +109,10 @@ export const openLineageApi = {
     fieldName: string,
     params?: LineageQueryParams
   ): Promise<OpenLineageLineageResponse> {
+    const { refresh, ...queryParams } = params || {};
     const response = await apiClientV2.get<OpenLineageLineageResponse>(
       `/api/v2/openlineage/lineage/${encodeURIComponent(datasetId)}/${encodeURIComponent(fieldName)}`,
-      { params }
+      { params: { ...queryParams, ...(refresh ? { refresh: 'true' } : {}) } }
     );
     return response.data;
   },
@@ -110,9 +122,10 @@ export const openLineageApi = {
     datasetId: string,
     params?: LineageQueryParams
   ): Promise<OpenLineageLineageResponse> {
+    const { refresh, ...queryParams } = params || {};
     const response = await apiClientV2.get<OpenLineageLineageResponse>(
       `/api/v2/openlineage/lineage/table/${encodeURIComponent(datasetId)}`,
-      { params }
+      { params: { ...queryParams, ...(refresh ? { refresh: 'true' } : {}) } }
     );
     return response.data;
   },
@@ -122,9 +135,10 @@ export const openLineageApi = {
     databaseName: string,
     params?: LineageQueryParams
   ): Promise<DatabaseLineageResponse> {
+    const { refresh, ...queryParams } = params || {};
     const response = await apiClientV2.get<DatabaseLineageResponse>(
       `/api/v2/openlineage/lineage/database/${encodeURIComponent(databaseName)}`,
-      { params }
+      { params: { ...queryParams, ...(refresh ? { refresh: 'true' } : {}) } }
     );
     return response.data;
   },

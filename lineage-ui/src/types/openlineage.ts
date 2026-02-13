@@ -130,6 +130,7 @@ export type LineageDirection = 'upstream' | 'downstream' | 'both';
 export interface LineageQueryParams {
   direction?: LineageDirection;
   maxDepth?: number;
+  refresh?: boolean;
 }
 
 // Dataset Statistics and DDL Response Types (Phase 20 API)
