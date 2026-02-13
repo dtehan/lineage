@@ -129,6 +129,11 @@ Configuration values are resolved in the following order (highest precedence fir
 | `VALIDATION_MAX_DEPTH_LIMIT` | Maximum traversal depth upper bound | `20` | No | Go backend |
 | `VALIDATION_DEFAULT_MAX_DEPTH` | Default lineage traversal depth | `5` | No | Go backend |
 | `VALIDATION_MIN_MAX_DEPTH` | Minimum traversal depth lower bound | `1` | No | Go backend |
+| `CACHE_TTL_LINEAGE` | Cache TTL for lineage graphs (seconds) | `1800` | No | Go backend |
+| `CACHE_TTL_ASSETS` | Cache TTL for asset listings (seconds) | `900` | No | Go backend |
+| `CACHE_TTL_STATISTICS` | Cache TTL for table statistics (seconds) | `900` | No | Go backend |
+| `CACHE_TTL_DDL` | Cache TTL for DDL definitions (seconds) | `1800` | No | Go backend |
+| `CACHE_TTL_SEARCH` | Cache TTL for search results (seconds) | `300` | No | Go backend |
 
 **"Used By" key:**
 - **All** = Python backend, Go backend, and database scripts
@@ -539,6 +544,40 @@ To enable Redis:
 2. Verify `REDIS_ADDR` in `.env` points to the correct host and port
 
 **Note:** Redis is only used by the Go backend. The Python backend does not use Redis, so this warning will not appear when using the Python backend.
+
+**Verifying cache is active:**
+
+When the Go backend starts with Redis available, the logs will show:
+```
+level=INFO msg="Redis cache connected" addr=localhost:6379
+```
+
+If Redis is unavailable, the logs will show:
+```
+level=WARN msg="Redis unavailable, running without cache" error="..."
+```
+
+**Monitoring cache effectiveness:**
+
+API responses include cache status headers on all v2 endpoints:
+- `X-Cache: HIT` -- response served from Redis cache
+- `X-Cache: MISS` -- response fetched from Teradata
+- `X-Cache-TTL: N` -- seconds until expiration (only on HIT)
+
+Use these headers to monitor cache hit rates. A high proportion of MISS responses may indicate TTLs are too short for the access pattern.
+
+**Forcing fresh data:**
+
+Add `?refresh=true` to any v2 API request to bypass the cache. This is useful when data has been updated in Teradata and the cached response is stale. The UI also provides refresh buttons in the lineage toolbar and asset browser.
+
+**Clearing all cached data:**
+
+To clear all cached data, flush the Redis database:
+```bash
+redis-cli -h <host> -p <port> FLUSHDB
+```
+
+Or restart Redis. The application will automatically repopulate the cache on subsequent requests.
 
 ### Frontend Build Fails
 
