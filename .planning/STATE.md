@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 
 Milestone: v6.0 Redis Caching Layer (COMPLETE)
 Phase: 31 of 31 (Cache Control & Observability)
-Plan: 1 of 1 in current phase
+Plan: 2 of 2 in current phase
 Status: Milestone complete
-Last activity: 2026-02-12 -- Completed 31-01-PLAN.md (cache control & observability)
+Last activity: 2026-02-12 -- Completed 31-02-PLAN.md (UI refresh buttons for cache bypass)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 70 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 6)
+- Total plans completed: 71 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 7)
 - Average plan duration: ~3.3 min
-- Total execution time: ~232 min
+- Total execution time: ~236 min
 
 **By Milestone:**
 
@@ -34,7 +34,7 @@ Progress: [██████████] 100%
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
 | v5.0 | 4 | 9 | ~30 min |
-| v6.0 | 4 | 6 | ~21 min |
+| v6.0 | 4 | 7 | ~25 min |
 
 **Recent Trend:**
 - v6.0 Plan 28-01: 2 min
@@ -43,6 +43,7 @@ Progress: [██████████] 100%
 - v6.0 Plan 29-02: 6 min
 - v6.0 Plan 30-01: 2 min
 - v6.0 Plan 31-01: 5 min
+- v6.0 Plan 31-02: 4 min
 - Trend: Stable velocity
 
 *Updated after each plan completion*
@@ -54,6 +55,10 @@ Progress: [██████████] 100%
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [31-02]: Manual fetch + setQueryData (not invalidateQueries) ensures ?refresh=true is sent to backend for cache bypass
+- [31-02]: Refresh button disabled during isLoading (initial) but enabled during isFetching (refetch)
+- [31-02]: Asset browser refresh fetches namespaces and datasets in parallel with Promise.all
+- [31-02]: Lineage toolbar refresh targets exact TanStack query key matching hook's key pattern
 - [31-01]: CacheMetadata uses pointer in context -- repository writes visible to middleware without re-injecting
 - [31-01]: contextKey type unexported; only exported helper functions cross package boundaries
 - [31-01]: CacheControl middleware mounted only on v2 route group -- v1/health/jobs/runs get no X-Cache headers
@@ -91,5 +96,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: v6.0 Redis Caching Layer milestone complete
+Stopped at: Completed 31-02-PLAN.md (UI refresh buttons for cache bypass)
 Resume file: None
