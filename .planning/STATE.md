@@ -12,10 +12,10 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 Milestone: v6.0 Redis Caching Layer (ACTIVE)
 Phase: 29 of 31 (Cache Keys, TTL & Full Coverage)
 Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-12 -- Completed 29-02-PLAN.md (full cache coverage + per-type TTL)
+Status: Phase complete - verified
+Last activity: 2026-02-12 -- Phase 29 complete and verified (Cache keys, TTL config, full endpoint coverage)
 
-Progress: [████░░░░░░] 34%
+Progress: [████░░░░░░] 50%
 
 ## Performance Metrics
 

@@ -17,11 +17,11 @@ Requirements for Redis caching integration. Each maps to roadmap phases.
 
 ### Cache Keys & TTL
 
-- [ ] **KEY-01**: Cache keys are deterministic from request parameters (datasetId, fieldName, direction, depth)
-- [ ] **KEY-02**: Cache keys use format `ol:{entity}:{operation}:{params}` with pipe delimiters
-- [ ] **KEY-03**: Lineage query cache entries expire after configurable TTL (default 30 minutes)
-- [ ] **KEY-04**: Asset listing cache entries expire after configurable TTL (default 15 minutes)
-- [ ] **KEY-05**: TTL values are configurable via environment variables per data type
+- [x] **KEY-01**: Cache keys are deterministic from request parameters (datasetId, fieldName, direction, depth)
+- [x] **KEY-02**: Cache keys use format `ol:{entity}:{operation}:{params}` with pipe delimiters
+- [x] **KEY-03**: Lineage query cache entries expire after configurable TTL (default 30 minutes)
+- [x] **KEY-04**: Asset listing cache entries expire after configurable TTL (default 15 minutes)
+- [x] **KEY-05**: TTL values are configurable via environment variables per data type
 
 ### Graceful Degradation
 
@@ -89,11 +89,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CACHE-03 | Phase 28 | Complete |
 | CACHE-04 | Phase 28 | Complete |
 | CACHE-05 | Phase 28 | Complete |
-| KEY-01 | Phase 29 | Pending |
-| KEY-02 | Phase 29 | Pending |
-| KEY-03 | Phase 29 | Pending |
-| KEY-04 | Phase 29 | Pending |
-| KEY-05 | Phase 29 | Pending |
+| KEY-01 | Phase 29 | Complete |
+| KEY-02 | Phase 29 | Complete |
+| KEY-03 | Phase 29 | Complete |
+| KEY-04 | Phase 29 | Complete |
+| KEY-05 | Phase 29 | Complete |
 | DEGRADE-01 | Phase 30 | Pending |
 | DEGRADE-02 | Phase 30 | Pending |
 | DEGRADE-03 | Phase 30 | Pending |

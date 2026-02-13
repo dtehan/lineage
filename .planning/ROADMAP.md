@@ -65,8 +65,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 29-01-PLAN.md -- Cache key builder functions with determinism tests and CacheTTLConfig with env var loading
-- [ ] 29-02-PLAN.md -- Refactor decorator to use key builders and CacheTTLConfig, add cache-aside for all read endpoints
+- [x] 29-01-PLAN.md -- Cache key builder functions with determinism tests and CacheTTLConfig with env var loading
+- [x] 29-02-PLAN.md -- Refactor decorator to use key builders and CacheTTLConfig, add cache-aside for all read endpoints
 
 ---
 
@@ -123,7 +123,7 @@ Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could e
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
 | 28. Redis Connection & Cache Decorator Foundation | 2/2 | Complete | 2026-02-12 |
-| 29. Cache Keys, TTL & Full Coverage | 0/2 | Not started | - |
+| 29. Cache Keys, TTL & Full Coverage | 2/2 | Complete | 2026-02-12 |
 | 30. Graceful Degradation | 0/1 | Not started | - |
 | 31. Cache Control & Observability | 0/2 | Not started | - |
 
