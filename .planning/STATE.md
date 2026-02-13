@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** v6.0 Redis Caching Layer - All phases complete, ready for audit
+**Current focus:** v6.0 Redis Caching Layer - Phase 32 added for documentation updates
 
 ## Current Position
 
-Milestone: v6.0 Redis Caching Layer (COMPLETE)
-Phase: 31 of 31 (Cache Control & Observability)
-Plan: 2 of 2 in current phase
-Status: Phase complete, milestone complete
-Last activity: 2026-02-12 -- Completed Phase 31 (cache control & observability), milestone ready for audit
+Milestone: v6.0 Redis Caching Layer (IN PROGRESS)
+Phase: 32 of 32 (Update Documentation)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-13 -- Completed 32-01-PLAN.md
 
-Progress: [██████████] 100%
+Progress: [█████████░] 98%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 71 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 7)
+- Total plans completed: 72 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 8)
 - Average plan duration: ~3.3 min
-- Total execution time: ~236 min
+- Total execution time: ~238 min
 
 **By Milestone:**
 
@@ -34,7 +34,7 @@ Progress: [██████████] 100%
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
 | v5.0 | 4 | 9 | ~30 min |
-| v6.0 | 4 | 7 | ~25 min |
+| v6.0 | 5 | 8 | ~27 min |
 
 **Recent Trend:**
 - v6.0 Plan 28-01: 2 min
@@ -44,6 +44,7 @@ Progress: [██████████] 100%
 - v6.0 Plan 30-01: 2 min
 - v6.0 Plan 31-01: 5 min
 - v6.0 Plan 31-02: 4 min
+- v6.0 Plan 32-01: 2 min
 - Trend: Stable velocity
 
 *Updated after each plan completion*
@@ -55,6 +56,8 @@ Progress: [██████████] 100%
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [32-01]: Log messages in ops guide use actual slog output format from main.go (not generic placeholders)
+- [32-01]: Cache TTL table in user guide shows both human-readable duration and env var with numeric default
 - [31-02]: Manual fetch + setQueryData (not invalidateQueries) ensures ?refresh=true is sent to backend for cache bypass
 - [31-02]: Refresh button disabled during isLoading (initial) but enabled during isFetching (refetch)
 - [31-02]: Asset browser refresh fetches namespaces and datasets in parallel with Promise.all
@@ -83,6 +86,10 @@ Recent decisions:
 - [v6.0 roadmap]: Phase 30 (degradation) depends only on Phase 28, not 29 -- could parallelize but sequential is simpler
 - [v6.0 roadmap]: Research phases 4-6 (hardening, pagination, compatibility) excluded -- not in v6.0 requirements scope
 
+### Roadmap Evolution
+
+- Phase 32 added (2026-02-12): Update documentation -- All repository documentation and READMEs updated to reflect Redis caching implementation
+
 ### Pending Todos
 
 1. Views not showing their column types (2026-01-31, area: ui)
@@ -95,6 +102,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-12
-Stopped at: v6.0 milestone complete -- ready for audit
+Last session: 2026-02-13
+Stopped at: Completed 32-01-PLAN.md
 Resume file: None
