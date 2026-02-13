@@ -1,7 +1,7 @@
 # Milestone v6.0: Redis Caching Layer
 
 **Status:** In progress
-**Phases:** 28-31
+**Phases:** 28-32
 **Total Plans:** TBD
 
 ## Overview
@@ -20,8 +20,9 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 
 - [x] **Phase 28: Redis Connection & Cache Decorator Foundation** - Wire Redis into the application with cache-aside decorator for lineage queries
 - [x] **Phase 29: Cache Keys, TTL & Full Coverage** - Deterministic key generation, configurable TTLs, and caching across all read endpoints
-- [ ] **Phase 30: Graceful Degradation** - Application starts and serves requests normally when Redis is unavailable
-- [ ] **Phase 31: Cache Control & Observability** - Cache status headers, bypass parameter, and UI refresh controls
+- [x] **Phase 30: Graceful Degradation** - Application starts and serves requests normally when Redis is unavailable
+- [x] **Phase 31: Cache Control & Observability** - Cache status headers, bypass parameter, and UI refresh controls
+- [ ] **Phase 32: Update Documentation** - All repository documentation and READMEs updated to reflect Redis caching implementation
 
 ## Phase Details
 
@@ -114,9 +115,31 @@ Plans:
 
 ---
 
+### Phase 32: Update Documentation
+
+**Goal**: All repository documentation and READMEs are updated to reflect the Redis caching layer implementation
+
+**Depends on**: Phase 31
+
+**Requirements**: None (documentation maintenance)
+
+**Success Criteria** (what must be TRUE):
+1. Documentation accurately describes the Redis caching implementation
+2. All READMEs reflect current system architecture
+3. Configuration examples include Redis settings
+4. Cache control features are documented for users and operators
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 32-01-PLAN.md -- Update user_guide.md and operations_guide.md with accurate cache TTLs, key formats, CACHE_TTL_* env vars, X-Cache headers, and refresh buttons
+- [ ] 32-02-PLAN.md -- Update developer_manual.md, lineage-api/README.md, CLAUDE.md, lineage-ui/README.md, and SECURITY.md with correct architecture, versions, and cache configuration
+
+---
+
 ## Progress
 
-**Execution Order:** Phase 28 -> Phase 29 -> Phase 30 -> Phase 31
+**Execution Order:** Phase 28 -> Phase 29 -> Phase 30 -> Phase 31 -> Phase 32
 
 Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could execute in parallel. However, sequential ordering is simpler and Phase 29 builds the key/TTL infrastructure that Phase 30 tests against.
 
@@ -126,6 +149,7 @@ Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could e
 | 29. Cache Keys, TTL & Full Coverage | 2/2 | Complete | 2026-02-12 |
 | 30. Graceful Degradation | 1/1 | Complete | 2026-02-12 |
 | 31. Cache Control & Observability | 2/2 | Complete | 2026-02-12 |
+| 32. Update Documentation | 0/2 | Planned | - |
 
 ---
 
