@@ -34,7 +34,7 @@ src/
 │       │   ├── TableNode/           # Table card nodes
 │       │   ├── ColumnNode.tsx       # Column-level nodes
 │       │   ├── LineageEdge.tsx      # Edge rendering
-│       │   ├── Toolbar.tsx          # Graph controls (depth, direction, export)
+│       │   ├── Toolbar.tsx          # Graph controls (depth, direction, export, refresh)
 │       │   ├── DetailPanel.tsx      # Slide-out metadata panel
 │       │   ├── DetailPanel/         # Panel sub-components
 │       │   │   ├── ColumnsTab.tsx   # Column list with click-to-navigate

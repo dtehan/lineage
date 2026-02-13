@@ -110,7 +110,13 @@ lineage-api/
 │   ├── application/             # DTOs and service layer (use cases)
 │   └── adapter/
 │       ├── inbound/http/        # Chi router, handlers, middleware
+│       │   └── cache_middleware.go  # Cache control/headers middleware
 │       └── outbound/            # Teradata and Redis implementations
+│           └── redis/
+│               ├── cache.go                    # CacheRepository, NoOpCache
+│               ├── cache_keys.go               # Deterministic key builders
+│               ├── cache_metadata.go           # Cache metadata context
+│               └── cached_openlineage_repo.go  # Cache-aside decorator
 ```
 
 ### Frontend Structure
@@ -246,6 +252,8 @@ This fallback uses `HELP COLUMN` commands for each view column, which is slower 
 - `GET /api/v2/openlineage/datasets/search?q=query` - Search datasets
 - `GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}` - Get lineage graph
 
+All v2 endpoints support `?refresh=true` to bypass Redis cache. Responses include `X-Cache: HIT|MISS` and `X-Cache-TTL` headers.
+
 ## Lineage Traversal
 
 Uses recursive CTEs in Teradata to traverse the lineage graph:
@@ -286,5 +294,10 @@ cp .env.example .env
 | `REDIS_ADDR` | Redis address | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis password | - |
 | `REDIS_DB` | Redis database number | `0` |
+| `CACHE_TTL_LINEAGE` | Lineage graph cache TTL (seconds) | `1800` |
+| `CACHE_TTL_ASSETS` | Asset listing cache TTL (seconds) | `900` |
+| `CACHE_TTL_STATISTICS` | Statistics cache TTL (seconds) | `900` |
+| `CACHE_TTL_DDL` | DDL cache TTL (seconds) | `1800` |
+| `CACHE_TTL_SEARCH` | Search cache TTL (seconds) | `300` |
 
 The frontend proxies `/api/*` requests to `http://localhost:8080` via Vite config.

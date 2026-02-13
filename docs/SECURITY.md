@@ -115,6 +115,7 @@ X-Powered-By: (remove)
 AllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173"}
 AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
 AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"}
+ExposedHeaders: []string{"X-Cache", "X-Cache-TTL"}
 ```
 
 **Production requirements:**
@@ -127,6 +128,7 @@ AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-I
 Access-Control-Allow-Origin: https://lineage.example.com
 Access-Control-Allow-Methods: GET, OPTIONS
 Access-Control-Allow-Headers: Accept, Authorization, Content-Type, X-Request-ID
+Access-Control-Expose-Headers: X-Cache, X-Cache-TTL
 Access-Control-Max-Age: 300
 ```
 
