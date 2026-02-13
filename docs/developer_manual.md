@@ -348,6 +348,7 @@ lineage-api/internal/
 │   │   ├── router.go           # Route definitions (v1 + v2 APIs)
 │   │   ├── handlers.go         # v1 API handlers
 │   │   ├── openlineage_handlers.go  # v2 API handlers
+│   │   ├── cache_middleware.go  # Cache control and headers middleware
 │   │   ├── response.go         # Response helpers
 │   │   └── validation.go       # Input validation
 │   └── outbound/
@@ -358,7 +359,13 @@ lineage-api/internal/
 │       │   ├── openlineage_repo.go  # OpenLineageRepository impl
 │       │   └── search_repo.go  # SearchRepository impl
 │       └── redis/
-│           └── cache.go        # CacheRepository impl (optional)
+│           ├── cache.go                    # CacheRepository interface, NoOpCache, CacheTTLConfig
+│           ├── cache_keys.go               # Deterministic cache key builder functions
+│           ├── cache_keys_test.go          # Cache key builder tests
+│           ├── cache_metadata.go           # CacheMetadata context type, bypass signal
+│           ├── cache_test.go               # CacheRepository unit tests
+│           ├── cached_openlineage_repo.go  # CachedOpenLineageRepository decorator
+│           └── cached_openlineage_repo_test.go  # Decorator unit tests
 │
 └── infrastructure/             # CROSS-CUTTING CONCERNS
     ├── config/                 # Viper configuration loading
@@ -371,7 +378,7 @@ lineage-api/internal/
 - **application/** -- Service layer implementing use cases. DTOs define the shapes of API requests and responses. Services orchestrate domain operations and enforce business rules.
 - **adapter/inbound/http/** -- Chi router, HTTP handlers for both v1 and v2 APIs, middleware, input validation, and response helpers. This is the only layer that knows about HTTP.
 - **adapter/outbound/teradata/** -- Teradata repository implementations. Contains SQL queries, connection management, and result mapping. This is the only layer that knows about Teradata.
-- **adapter/outbound/redis/** -- Optional Redis cache implementation. Implements `CacheRepository` for caching query results.
+- **adapter/outbound/redis/** -- Redis caching layer using the cache-aside (read-through) pattern. `CachedOpenLineageRepository` is a decorator that wraps the Teradata repository, checking Redis before querying Teradata and populating Redis after a cache miss. Includes deterministic cache key builders, per-data-type TTL configuration, context-based cache metadata propagation, and a `NoOpCache` fallback for when Redis is unavailable. Cache status is communicated to the HTTP layer via request context, where `CacheControl` middleware sets `X-Cache` and `X-Cache-TTL` response headers.
 - **infrastructure/** -- Cross-cutting concerns: Viper-based configuration loading and slog structured logging.
 
 ### 5.3 Key Interfaces
@@ -383,7 +390,7 @@ The domain layer defines five repository interfaces in `domain/repository.go`:
 | `AssetRepository` | Browse databases, tables, columns | `ListDatabases`, `GetTable`, `ListColumns` |
 | `LineageRepository` | Traverse lineage graph | `GetUpstreamLineage`, `GetDownstreamLineage` |
 | `SearchRepository` | Search across datasets | `Search` (with asset type filters) |
-| `CacheRepository` | Optional caching layer | `Get`, `Set`, `Delete`, `Exists` |
+| `CacheRepository` | Optional caching layer | `Get`, `Set`, `Delete`, `Exists`, `TTL` |
 | `OpenLineageRepository` | OpenLineage-aligned operations | `GetColumnLineageGraph`, `ListDatasets`, `ListFields` |
 
 Mock implementations in `domain/mocks/` enable testing services without a Teradata connection.
