@@ -7,8 +7,7 @@ require (
 	github.com/alexbrainman/odbc v0.0.0-20250601004241-49e6b2bc0cf0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
-	github.com/jmoiron/sqlx v1.3.5
-	github.com/redis/go-redis/v9 v9.4.0
+	github.com/redis/go-redis/v9 v9.7.3
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 )
