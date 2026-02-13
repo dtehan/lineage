@@ -5,15 +5,15 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** v6.0 Redis Caching Layer - Phase 31 complete, milestone complete
+**Current focus:** v6.0 Redis Caching Layer - All phases complete, ready for audit
 
 ## Current Position
 
 Milestone: v6.0 Redis Caching Layer (COMPLETE)
 Phase: 31 of 31 (Cache Control & Observability)
 Plan: 2 of 2 in current phase
-Status: Milestone complete
-Last activity: 2026-02-12 -- Completed 31-02-PLAN.md (UI refresh buttons for cache bypass)
+Status: Phase complete, milestone complete
+Last activity: 2026-02-12 -- Completed Phase 31 (cache control & observability), milestone ready for audit
 
 Progress: [██████████] 100%
 
@@ -96,5 +96,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 31-02-PLAN.md (UI refresh buttons for cache bypass)
+Stopped at: v6.0 milestone complete -- ready for audit
 Resume file: None

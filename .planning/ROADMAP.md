@@ -109,8 +109,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 31-01-PLAN.md -- Add TTL to CacheRepository, CacheMetadata context type, CacheControl middleware with X-Cache headers, ?refresh=true bypass, CORS update
-- [ ] 31-02-PLAN.md -- Add refresh param to API client, refresh buttons in lineage toolbar and asset browser with TanStack Query cache bypass
+- [x] 31-01-PLAN.md -- Add TTL to CacheRepository, CacheMetadata context type, CacheControl middleware with X-Cache headers, ?refresh=true bypass, CORS update
+- [x] 31-02-PLAN.md -- Add refresh param to API client, refresh buttons in lineage toolbar and asset browser with TanStack Query cache bypass
 
 ---
 
@@ -125,7 +125,7 @@ Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could e
 | 28. Redis Connection & Cache Decorator Foundation | 2/2 | Complete | 2026-02-12 |
 | 29. Cache Keys, TTL & Full Coverage | 2/2 | Complete | 2026-02-12 |
 | 30. Graceful Degradation | 1/1 | Complete | 2026-02-12 |
-| 31. Cache Control & Observability | 0/2 | Not started | - |
+| 31. Cache Control & Observability | 2/2 | Complete | 2026-02-12 |
 
 ---
 

@@ -33,11 +33,11 @@ Requirements for Redis caching integration. Each maps to roadmap phases.
 
 ### Cache Control
 
-- [ ] **CONTROL-01**: Users can force cache bypass via `?refresh=true` query parameter
-- [ ] **CONTROL-02**: API responses include `X-Cache: HIT` header on cache hits
-- [ ] **CONTROL-03**: API responses include `X-Cache: MISS` header on cache misses
-- [ ] **CONTROL-04**: API responses include `X-Cache-TTL: N` header showing seconds until expiration
-- [ ] **CONTROL-05**: UI refresh button sends `?refresh=true` to force fresh data
+- [x] **CONTROL-01**: Users can force cache bypass via `?refresh=true` query parameter
+- [x] **CONTROL-02**: API responses include `X-Cache: HIT` header on cache hits
+- [x] **CONTROL-03**: API responses include `X-Cache: MISS` header on cache misses
+- [x] **CONTROL-04**: API responses include `X-Cache-TTL: N` header showing seconds until expiration
+- [x] **CONTROL-05**: UI refresh button sends `?refresh=true` to force fresh data
 
 ### Integration
 
@@ -99,11 +99,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DEGRADE-03 | Phase 30 | Complete |
 | DEGRADE-04 | Phase 30 | Complete |
 | DEGRADE-05 | Phase 30 | Complete |
-| CONTROL-01 | Phase 31 | Pending |
-| CONTROL-02 | Phase 31 | Pending |
-| CONTROL-03 | Phase 31 | Pending |
-| CONTROL-04 | Phase 31 | Pending |
-| CONTROL-05 | Phase 31 | Pending |
+| CONTROL-01 | Phase 31 | Complete |
+| CONTROL-02 | Phase 31 | Complete |
+| CONTROL-03 | Phase 31 | Complete |
+| CONTROL-04 | Phase 31 | Complete |
+| CONTROL-05 | Phase 31 | Complete |
 | INT-01 | Phase 28 | Complete |
 | INT-02 | Phase 28 | Complete |
 | INT-03 | Phase 28 | Complete |
