@@ -49,7 +49,6 @@ func main() {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer cacheRepo.Close()
-	_ = cacheRepo // Used by CachedOpenLineageRepository in Plan 28-02
 
 	// Repositories
 	assetRepo := teradata.NewAssetRepository(db)
@@ -66,7 +65,8 @@ func main() {
 
 	// OpenLineage repository, service, and handler
 	olRepo := teradata.NewOpenLineageRepository(db)
-	olService := application.NewOpenLineageService(olRepo)
+	cachedOLRepo := redisAdapter.NewCachedOpenLineageRepository(olRepo, cacheRepo, 300) // 5-min TTL
+	olService := application.NewOpenLineageService(cachedOLRepo)
 	olHandler := httpAdapter.NewOpenLineageHandler(olService)
 
 	router := httpAdapter.NewRouter(handler, olHandler)
