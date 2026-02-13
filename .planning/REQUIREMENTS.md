@@ -9,11 +9,11 @@ Requirements for Redis caching integration. Each maps to roadmap phases.
 
 ### Cache Infrastructure
 
-- [ ] **CACHE-01**: API queries check Redis before querying Teradata (cache-aside pattern)
-- [ ] **CACHE-02**: Cache miss triggers Teradata query and populates Redis cache
-- [ ] **CACHE-03**: Cache hit returns data from Redis without Teradata query
-- [ ] **CACHE-04**: Repository decorators wrap Teradata repositories with caching logic
-- [ ] **CACHE-05**: Caching is transparent to service and domain layers (no code changes required)
+- [x] **CACHE-01**: API queries check Redis before querying Teradata (cache-aside pattern)
+- [x] **CACHE-02**: Cache miss triggers Teradata query and populates Redis cache
+- [x] **CACHE-03**: Cache hit returns data from Redis without Teradata query
+- [x] **CACHE-04**: Repository decorators wrap Teradata repositories with caching logic
+- [x] **CACHE-05**: Caching is transparent to service and domain layers (no code changes required)
 
 ### Cache Keys & TTL
 
@@ -41,11 +41,11 @@ Requirements for Redis caching integration. Each maps to roadmap phases.
 
 ### Integration
 
-- [ ] **INT-01**: go-redis client upgraded from v9.4.0 to v9.7.0 for connection pool fixes
-- [ ] **INT-02**: Redis configuration loaded from environment variables (REDIS_ADDR, REDIS_PASSWORD, REDIS_DB)
-- [ ] **INT-03**: CachedOpenLineageRepository decorator implements domain.OpenLineageRepository interface
-- [ ] **INT-04**: main.go wires Redis with NoOpCache fallback based on connection availability
-- [ ] **INT-05**: Cache stores domain entities (OpenLineageGraph, Dataset) serialized as JSON
+- [x] **INT-01**: go-redis client upgraded from v9.4.0 to v9.7.0 for connection pool fixes
+- [x] **INT-02**: Redis configuration loaded from environment variables (REDIS_ADDR, REDIS_PASSWORD, REDIS_DB)
+- [x] **INT-03**: CachedOpenLineageRepository decorator implements domain.OpenLineageRepository interface
+- [x] **INT-04**: main.go wires Redis with NoOpCache fallback based on connection availability
+- [x] **INT-05**: Cache stores domain entities (OpenLineageGraph, Dataset) serialized as JSON
 
 ## Future Requirements (v7.0+)
 
@@ -84,11 +84,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CACHE-01 | Phase 28 | Pending |
-| CACHE-02 | Phase 28 | Pending |
-| CACHE-03 | Phase 28 | Pending |
-| CACHE-04 | Phase 28 | Pending |
-| CACHE-05 | Phase 28 | Pending |
+| CACHE-01 | Phase 28 | Complete |
+| CACHE-02 | Phase 28 | Complete |
+| CACHE-03 | Phase 28 | Complete |
+| CACHE-04 | Phase 28 | Complete |
+| CACHE-05 | Phase 28 | Complete |
 | KEY-01 | Phase 29 | Pending |
 | KEY-02 | Phase 29 | Pending |
 | KEY-03 | Phase 29 | Pending |
@@ -104,11 +104,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONTROL-03 | Phase 31 | Pending |
 | CONTROL-04 | Phase 31 | Pending |
 | CONTROL-05 | Phase 31 | Pending |
-| INT-01 | Phase 28 | Pending |
-| INT-02 | Phase 28 | Pending |
-| INT-03 | Phase 28 | Pending |
-| INT-04 | Phase 28 | Pending |
-| INT-05 | Phase 28 | Pending |
+| INT-01 | Phase 28 | Complete |
+| INT-02 | Phase 28 | Complete |
+| INT-03 | Phase 28 | Complete |
+| INT-04 | Phase 28 | Complete |
+| INT-05 | Phase 28 | Complete |
 
 **Coverage:**
 - v6.0 requirements: 25 total
@@ -117,4 +117,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after roadmap creation*
+*Last updated: 2026-02-12 after Phase 28 completion*

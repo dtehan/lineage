@@ -18,7 +18,7 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 
 ## Phases
 
-- [ ] **Phase 28: Redis Connection & Cache Decorator Foundation** - Wire Redis into the application with cache-aside decorator for lineage queries
+- [x] **Phase 28: Redis Connection & Cache Decorator Foundation** - Wire Redis into the application with cache-aside decorator for lineage queries
 - [ ] **Phase 29: Cache Keys, TTL & Full Coverage** - Deterministic key generation, configurable TTLs, and caching across all read endpoints
 - [ ] **Phase 30: Graceful Degradation** - Application starts and serves requests normally when Redis is unavailable
 - [ ] **Phase 31: Cache Control & Observability** - Cache status headers, bypass parameter, and UI refresh controls
@@ -43,8 +43,8 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 **Plans:** 2 plans
 
 Plans:
-- [ ] 28-01-PLAN.md -- Upgrade go-redis to v9.7.3, wire Redis client with fail-fast in main.go
-- [ ] 28-02-PLAN.md -- Implement CachedOpenLineageRepository decorator with cache-aside pattern and unit tests
+- [x] 28-01-PLAN.md -- Upgrade go-redis to v9.7.3, wire Redis client with fail-fast in main.go
+- [x] 28-02-PLAN.md -- Implement CachedOpenLineageRepository decorator with cache-aside pattern and unit tests
 
 ---
 
@@ -122,7 +122,7 @@ Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could e
 
 | Phase | Plans Complete | Status | Completed |
 |-------|---------------|--------|-----------|
-| 28. Redis Connection & Cache Decorator Foundation | 0/2 | Not started | - |
+| 28. Redis Connection & Cache Decorator Foundation | 2/2 | Complete | 2026-02-12 |
 | 29. Cache Keys, TTL & Full Coverage | 0/2 | Not started | - |
 | 30. Graceful Degradation | 0/1 | Not started | - |
 | 31. Cache Control & Observability | 0/2 | Not started | - |
