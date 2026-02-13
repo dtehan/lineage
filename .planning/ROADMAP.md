@@ -19,7 +19,7 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 ## Phases
 
 - [x] **Phase 28: Redis Connection & Cache Decorator Foundation** - Wire Redis into the application with cache-aside decorator for lineage queries
-- [ ] **Phase 29: Cache Keys, TTL & Full Coverage** - Deterministic key generation, configurable TTLs, and caching across all read endpoints
+- [x] **Phase 29: Cache Keys, TTL & Full Coverage** - Deterministic key generation, configurable TTLs, and caching across all read endpoints
 - [ ] **Phase 30: Graceful Degradation** - Application starts and serves requests normally when Redis is unavailable
 - [ ] **Phase 31: Cache Control & Observability** - Cache status headers, bypass parameter, and UI refresh controls
 
@@ -84,10 +84,10 @@ Plans:
 3. Redis connection errors and operation failures are logged at WARNING level but never propagate as HTTP error responses
 4. NoOpCache is automatically used as the fallback implementation when Redis connection cannot be established
 
-**Plans**: TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 30-01: Implement and test graceful degradation for all failure modes (startup, mid-request, intermittent)
+- [ ] 30-01-PLAN.md -- Replace fail-fast with NoOpCache fallback in main.go, add Close() to NoOpCache, integration tests
 
 ---
 
