@@ -84,37 +84,37 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CACHE-01 | TBD | Pending |
-| CACHE-02 | TBD | Pending |
-| CACHE-03 | TBD | Pending |
-| CACHE-04 | TBD | Pending |
-| CACHE-05 | TBD | Pending |
-| KEY-01 | TBD | Pending |
-| KEY-02 | TBD | Pending |
-| KEY-03 | TBD | Pending |
-| KEY-04 | TBD | Pending |
-| KEY-05 | TBD | Pending |
-| DEGRADE-01 | TBD | Pending |
-| DEGRADE-02 | TBD | Pending |
-| DEGRADE-03 | TBD | Pending |
-| DEGRADE-04 | TBD | Pending |
-| DEGRADE-05 | TBD | Pending |
-| CONTROL-01 | TBD | Pending |
-| CONTROL-02 | TBD | Pending |
-| CONTROL-03 | TBD | Pending |
-| CONTROL-04 | TBD | Pending |
-| CONTROL-05 | TBD | Pending |
-| INT-01 | TBD | Pending |
-| INT-02 | TBD | Pending |
-| INT-03 | TBD | Pending |
-| INT-04 | TBD | Pending |
-| INT-05 | TBD | Pending |
+| CACHE-01 | Phase 28 | Pending |
+| CACHE-02 | Phase 28 | Pending |
+| CACHE-03 | Phase 28 | Pending |
+| CACHE-04 | Phase 28 | Pending |
+| CACHE-05 | Phase 28 | Pending |
+| KEY-01 | Phase 29 | Pending |
+| KEY-02 | Phase 29 | Pending |
+| KEY-03 | Phase 29 | Pending |
+| KEY-04 | Phase 29 | Pending |
+| KEY-05 | Phase 29 | Pending |
+| DEGRADE-01 | Phase 30 | Pending |
+| DEGRADE-02 | Phase 30 | Pending |
+| DEGRADE-03 | Phase 30 | Pending |
+| DEGRADE-04 | Phase 30 | Pending |
+| DEGRADE-05 | Phase 30 | Pending |
+| CONTROL-01 | Phase 31 | Pending |
+| CONTROL-02 | Phase 31 | Pending |
+| CONTROL-03 | Phase 31 | Pending |
+| CONTROL-04 | Phase 31 | Pending |
+| CONTROL-05 | Phase 31 | Pending |
+| INT-01 | Phase 28 | Pending |
+| INT-02 | Phase 28 | Pending |
+| INT-03 | Phase 28 | Pending |
+| INT-04 | Phase 28 | Pending |
+| INT-05 | Phase 28 | Pending |
 
 **Coverage:**
 - v6.0 requirements: 25 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 25 ⚠️
+- Mapped to phases: 25
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after initial definition*
+*Last updated: 2026-02-12 after roadmap creation*
