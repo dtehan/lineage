@@ -1,7 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers } from 'lucide-react';
+import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, RefreshCw } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
+import { openLineageApi } from '../../../api/client';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
 import { Tooltip } from '../../common/Tooltip';
 import type { OpenLineageDataset } from '../../../types/openlineage';
@@ -56,8 +58,9 @@ const parseTableFromDatasetName = (datasetName: string): string => {
 export function AssetBrowser() {
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient();
 
-  const { data: namespacesData, isLoading: isLoadingNamespaces } = useOpenLineageNamespaces();
+  const { data: namespacesData, isLoading: isLoadingNamespaces, isFetching: isFetchingNamespaces } = useOpenLineageNamespaces();
   const namespaces = namespacesData?.namespaces || [];
 
   // Select the namespace with the most datasets (prefer production over test namespaces)
@@ -72,7 +75,7 @@ export function AssetBrowser() {
     : null;
 
   // Fetch datasets from the default namespace
-  const { data: datasetsData, isLoading: isLoadingDatasets } = useOpenLineageDatasets(
+  const { data: datasetsData, isLoading: isLoadingDatasets, isFetching: isFetchingDatasets } = useOpenLineageDatasets(
     defaultNamespace?.id || '',
     { limit: 1000, offset: 0 }
   );
@@ -92,6 +95,21 @@ export function AssetBrowser() {
   }, [datasets]);
 
   const databaseNames = Object.keys(datasetsByDatabase).sort();
+
+  // Handle refresh - fetch fresh data bypassing backend cache
+  const handleRefresh = useCallback(async () => {
+    if (defaultNamespace) {
+      const [freshNamespaces, freshDatasets] = await Promise.all([
+        openLineageApi.getNamespaces({ refresh: true }),
+        openLineageApi.getDatasets(defaultNamespace.id, { limit: 1000, offset: 0 }, { refresh: true }),
+      ]);
+      queryClient.setQueryData(['openlineage', 'namespaces'], freshNamespaces);
+      queryClient.setQueryData(
+        ['openlineage', 'datasets', defaultNamespace.id, { limit: 1000, offset: 0 }],
+        freshDatasets
+      );
+    }
+  }, [defaultNamespace, queryClient]);
 
   const toggleDatabase = (dbName: string) => {
     setExpandedDatabases((prev) => {
@@ -136,7 +154,20 @@ export function AssetBrowser() {
   return (
     <div className="h-full overflow-auto">
       <div className="p-2">
-        <h2 className="px-2 py-1 text-sm font-semibold text-slate-700">Databases</h2>
+        <div className="flex items-center justify-between px-2 py-1">
+          <h2 className="text-sm font-semibold text-slate-700">Databases</h2>
+          <Tooltip content="Refresh data (bypass cache)" position="right">
+            <button
+              onClick={handleRefresh}
+              disabled={isLoadingNamespaces || isLoadingDatasets}
+              className="p-1 text-slate-500 hover:bg-slate-100 rounded transition-colors disabled:opacity-50"
+              aria-label="Refresh data"
+              data-testid="asset-browser-refresh-btn"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${(isFetchingNamespaces || isFetchingDatasets) && !(isLoadingNamespaces || isLoadingDatasets) ? 'animate-spin' : ''}`} />
+            </button>
+          </Tooltip>
+        </div>
         <ul className="space-y-1">
           {databaseNames.map((dbName) => (
             <DatabaseItem

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair } from 'lucide-react';
+import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair, RefreshCw } from 'lucide-react';
 import { Tooltip } from '../../common/Tooltip';
 
 export type ViewMode = 'graph' | 'table';
@@ -23,6 +23,8 @@ export interface ToolbarProps {
   onExport?: () => void;
   onFullscreen?: () => void;
   isLoading?: boolean;
+  onRefresh?: () => void;
+  isFetching?: boolean;
   assetTypeFilter?: AssetTypeFilter[];
   onAssetTypeFilterChange?: (types: AssetTypeFilter[]) => void;
 }
@@ -44,6 +46,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onExport,
   onFullscreen,
   isLoading = false,
+  onRefresh,
+  isFetching = false,
   assetTypeFilter = ['table', 'view', 'materialized_view'],
   onAssetTypeFilterChange,
 }) => {
@@ -245,6 +249,20 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1 ml-auto">
+        {onRefresh && (
+          <Tooltip content="Refresh data (bypass cache)" position="bottom">
+            <button
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50"
+              aria-label="Refresh data"
+              data-testid="refresh-btn"
+            >
+              <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+            </button>
+          </Tooltip>
+        )}
+
         <Tooltip content="Center and zoom to fit all nodes" position="bottom">
           <button
             onClick={onFitView}

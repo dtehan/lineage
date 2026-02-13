@@ -15,7 +15,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
+import { useQueryClient } from '@tanstack/react-query';
 import { useOpenLineageTableLineage } from '../../../api/hooks/useOpenLineage';
+import { openLineageApi } from '../../../api/client';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
@@ -65,6 +67,7 @@ interface LineageGraphInnerProps {
 function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const reactFlowInstance = useReactFlow();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
   const [isWarningDismissed, setIsWarningDismissed] = useState(false);
@@ -102,7 +105,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   } = useLineageStore();
 
   // Always use table lineage to show all columns
-  const { data, isLoading, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
+  const { data, isLoading, isFetching, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -320,6 +323,20 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     // Could show a dropdown menu for format selection
     exportJson();
   }, [exportJson]);
+
+  // Handle refresh - fetch fresh data bypassing backend cache
+  const handleRefresh = useCallback(async () => {
+    const freshData = await openLineageApi.getTableLineageGraph(datasetId, {
+      direction,
+      maxDepth,
+      refresh: true,
+    });
+    // Update TanStack Query cache with fresh data
+    queryClient.setQueryData(
+      ['openlineage', 'table-lineage', datasetId, direction, maxDepth],
+      freshData
+    );
+  }, [datasetId, direction, maxDepth, queryClient]);
 
   // Get column detail for panel
   const getColumnDetail = useCallback(
@@ -550,6 +567,8 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         onExport={handleExport}
         onFullscreen={toggleFullscreen}
         isLoading={isLoading}
+        onRefresh={handleRefresh}
+        isFetching={isFetching && !isLoading}
         assetTypeFilter={assetTypeFilter}
         onAssetTypeFilterChange={setAssetTypeFilter}
       />
