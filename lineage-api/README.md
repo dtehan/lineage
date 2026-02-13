@@ -25,11 +25,16 @@ lineage-api/
 │   │   │   ├── router.go           # Route definitions
 │   │   │   ├── handlers.go         # v1 API handlers
 │   │   │   ├── openlineage_handlers.go  # v2 API handlers
+│   │   │   ├── cache_middleware.go  # Cache control and headers middleware
 │   │   │   ├── response.go         # Response helpers
 │   │   │   └── validation.go       # Input validation
 │   │   └── outbound/
 │   │       ├── teradata/           # Teradata repository implementation
 │   │       └── redis/              # Redis cache implementation
+│   │           ├── cache.go               # CacheRepository, NoOpCache, CacheTTLConfig
+│   │           ├── cache_keys.go          # Deterministic cache key builders
+│   │           ├── cache_metadata.go      # Cache metadata context type
+│   │           └── cached_openlineage_repo.go  # Cache-aside decorator
 │   └── infrastructure/
 │       ├── config/                 # Configuration (Viper)
 │       └── logging/               # Structured logging (slog)
@@ -135,6 +140,11 @@ Configuration via environment variables or `.env` file. See [root README](../REA
 | `REDIS_ADDR` | Redis address | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis password | - |
 | `REDIS_DB` | Redis database number | `0` |
+| `CACHE_TTL_LINEAGE` | Lineage graph cache TTL (seconds) | `1800` |
+| `CACHE_TTL_ASSETS` | Asset listing cache TTL (seconds) | `900` |
+| `CACHE_TTL_STATISTICS` | Statistics cache TTL (seconds) | `900` |
+| `CACHE_TTL_DDL` | DDL cache TTL (seconds) | `1800` |
+| `CACHE_TTL_SEARCH` | Search cache TTL (seconds) | `300` |
 
 ## Technology Stack
 
@@ -143,7 +153,7 @@ Configuration via environment variables or `.env` file. See [root README](../REA
 | Go | 1.23 | Language |
 | Chi | v5.0.11 | HTTP router |
 | Viper | v1.21.0 | Configuration |
-| go-redis | v9.4.0 | Cache client |
+| go-redis | v9.7.3 | Cache client (cache-aside pattern) |
 | sqlx | v1.3.5 | SQL toolkit |
 | slog | stdlib | Structured logging |
 | Flask | 3.0+ | Alternative Python server |
