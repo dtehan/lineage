@@ -1,6 +1,6 @@
 # Milestone v6.0: Redis Caching Layer
 
-**Status:** In progress
+**Status:** Complete
 **Phases:** 28-32
 **Total Plans:** TBD
 
@@ -22,7 +22,7 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 - [x] **Phase 29: Cache Keys, TTL & Full Coverage** - Deterministic key generation, configurable TTLs, and caching across all read endpoints
 - [x] **Phase 30: Graceful Degradation** - Application starts and serves requests normally when Redis is unavailable
 - [x] **Phase 31: Cache Control & Observability** - Cache status headers, bypass parameter, and UI refresh controls
-- [ ] **Phase 32: Update Documentation** - All repository documentation and READMEs updated to reflect Redis caching implementation
+- [x] **Phase 32: Update Documentation** - All repository documentation and READMEs updated to reflect Redis caching implementation
 
 ## Phase Details
 
@@ -132,8 +132,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 32-01-PLAN.md -- Update user_guide.md and operations_guide.md with accurate cache TTLs, key formats, CACHE_TTL_* env vars, X-Cache headers, and refresh buttons
-- [ ] 32-02-PLAN.md -- Update developer_manual.md, lineage-api/README.md, CLAUDE.md, lineage-ui/README.md, and SECURITY.md with correct architecture, versions, and cache configuration
+- [x] 32-01-PLAN.md -- Update user_guide.md and operations_guide.md with accurate cache TTLs, key formats, CACHE_TTL_* env vars, X-Cache headers, and refresh buttons
+- [x] 32-02-PLAN.md -- Update developer_manual.md, lineage-api/README.md, CLAUDE.md, lineage-ui/README.md, and SECURITY.md with correct architecture, versions, and cache configuration
 
 ---
 
@@ -149,7 +149,7 @@ Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could e
 | 29. Cache Keys, TTL & Full Coverage | 2/2 | Complete | 2026-02-12 |
 | 30. Graceful Degradation | 1/1 | Complete | 2026-02-12 |
 | 31. Cache Control & Observability | 2/2 | Complete | 2026-02-12 |
-| 32. Update Documentation | 0/2 | Planned | - |
+| 32. Update Documentation | 2/2 | Complete | 2026-02-13 |
 
 ---
 
