@@ -17,7 +17,7 @@ func NewRouter(h *Handler, olHandler *OpenLineageHandler) *chi.Mux {
 		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:5173"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
-		ExposedHeaders:   []string{"Link"},
+		ExposedHeaders:   []string{"Link", "X-Cache", "X-Cache-TTL"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
@@ -49,6 +49,8 @@ func NewRouter(h *Handler, olHandler *OpenLineageHandler) *chi.Mux {
 	// API v2 routes - OpenLineage aligned
 	if olHandler != nil {
 		r.Route("/api/v2/openlineage", func(r chi.Router) {
+			r.Use(CacheControl)
+
 			// Namespace routes
 			r.Get("/namespaces", olHandler.ListNamespaces)
 			r.Get("/namespaces/{namespaceId}", olHandler.GetNamespace)
