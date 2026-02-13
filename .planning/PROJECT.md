@@ -8,6 +8,17 @@ A production-ready, fully documented Teradata column-level data lineage applicat
 
 Enable new teams to deploy and operate the lineage application using documentation alone.
 
+## Current Milestone: v6.0 Redis Caching Layer
+
+**Goal:** Improve query performance by caching expensive lineage traversals and asset listings in Redis with graceful fallback.
+
+**Target features:**
+- Cache lineage graph queries (recursive CTE results) with 1-4 hour TTL
+- Cache asset listings (databases, tables, columns) with pagination support
+- Graceful degradation when Redis unavailable (bypass cache, query Teradata directly)
+- UI refresh buttons to force cache bypass for fresh data
+- Configurable cache TTLs per data type
+
 ## Requirements
 
 ### Validated
@@ -251,10 +262,18 @@ Enable new teams to deploy and operate the lineage application using documentati
 
 ### Active
 
-<!-- Requirements for next milestone -->
+<!-- Requirements for v6.0 milestone -->
+
+**Redis Caching Implementation:**
+- Lineage query caching with configurable TTL (1-4 hours default)
+- Asset listing caching (databases, tables, columns) with pagination awareness
+- Cache key generation strategy (composite keys with depth, direction, pagination params)
+- Graceful fallback when Redis unavailable (bypass cache, log warning, continue with Teradata)
+- UI refresh controls (button in lineage graph toolbar and asset browser) to force cache bypass
+- Cache hit/miss metrics for monitoring performance improvement
+- Configuration for cache TTLs per data type (lineage, assets)
 
 **Deferred Concerns (Future Milestones):**
-- Redis integration or dead code removal
 - SQL parser improvements with confidence tracking
 - Database extraction hardening
 - E2E validation testing
@@ -379,4 +398,4 @@ Enable new teams to deploy and operate the lineage application using documentati
 | Comprehensive test patterns (v3.0) | Validate correctness with cycles, diamonds, fans, combined scenarios | ✓ Complete - 89 TEST_* records, 48 passing correctness tests |
 
 ---
-*Last updated: 2026-02-08 after v5.0 milestone completion*
+*Last updated: 2026-02-12 after v6.0 milestone start*
