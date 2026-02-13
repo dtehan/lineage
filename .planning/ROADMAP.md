@@ -27,7 +27,7 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 
 ### Phase 28: Redis Connection & Cache Decorator Foundation
 
-**Goal**: Lineage graph queries are cached in Redis using the repository decorator pattern, with the existing NoOpCache as fallback when Redis is unavailable
+**Goal**: Lineage graph queries are cached in Redis using the repository decorator pattern, with fail-fast behavior when Redis is unavailable at startup
 
 **Depends on**: Nothing (first phase of v6.0)
 
@@ -36,15 +36,15 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 **Success Criteria** (what must be TRUE):
 1. A lineage graph query for a given column returns data from Redis on the second request without hitting Teradata
 2. The CachedOpenLineageRepository wraps the Teradata repository transparently -- service and handler code is unchanged
-3. main.go creates a Redis client from environment variables and falls back to NoOpCache if the connection fails
-4. go-redis dependency is at v9.7.0 with connection pool fixes applied
+3. main.go creates a Redis client from environment variables and fails fast if the connection fails
+4. go-redis dependency is at v9.7.3 with CVE-2025-29923 fix applied
 5. Cache stores domain entities (OpenLineageGraph, Dataset) as JSON and deserializes them correctly on cache hit
 
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 28-01: Upgrade go-redis to v9.7.0, wire Redis client and NoOpCache fallback in main.go
-- [ ] 28-02: Implement CachedOpenLineageRepository decorator with cache-aside pattern for lineage graph endpoint
+- [ ] 28-01-PLAN.md -- Upgrade go-redis to v9.7.3, wire Redis client with fail-fast in main.go
+- [ ] 28-02-PLAN.md -- Implement CachedOpenLineageRepository decorator with cache-aside pattern and unit tests
 
 ---
 
