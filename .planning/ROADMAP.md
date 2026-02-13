@@ -62,11 +62,11 @@ Plans:
 3. Lineage cache entries expire after a configurable TTL (default 30 minutes) and asset listing entries expire after a separate configurable TTL (default 15 minutes)
 4. TTL values for lineage and asset data types are independently configurable via environment variables
 
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 29-01: Implement cache key generation module with deterministic composite keys and tests
-- [ ] 29-02: Add per-data-type TTL configuration via environment variables, extend cache decorator to all read endpoints
+- [ ] 29-01-PLAN.md -- Cache key builder functions with determinism tests and CacheTTLConfig with env var loading
+- [ ] 29-02-PLAN.md -- Refactor decorator to use key builders and CacheTTLConfig, add cache-aside for all read endpoints
 
 ---
 
