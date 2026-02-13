@@ -17,14 +17,8 @@ type ValidationConfig struct {
 	MinMaxDepth     int // Lower bound for maxDepth parameter (default: 1)
 }
 
-// CacheTTLConfig holds per-data-type cache TTL values in seconds.
-type CacheTTLConfig struct {
-	LineageTTL    int // Lineage graph queries (default: 1800s = 30 min)
-	AssetTTL      int // Asset listings: namespaces, datasets, fields (default: 900s = 15 min)
-	StatisticsTTL int // Dataset statistics (default: 900s = 15 min)
-	DDLTTL        int // Dataset DDL (default: 1800s = 30 min)
-	SearchTTL     int // Search results (default: 300s = 5 min)
-}
+// CacheTTLConfig is an alias for redis.CacheTTLConfig for convenient access.
+type CacheTTLConfig = redis.CacheTTLConfig
 
 // Config holds all configuration for the application.
 type Config struct {

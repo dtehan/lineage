@@ -17,6 +17,15 @@ type Config struct {
 	DB       int
 }
 
+// CacheTTLConfig holds per-data-type cache TTL values in seconds.
+type CacheTTLConfig struct {
+	LineageTTL    int // Lineage graph queries (default: 1800s = 30 min)
+	AssetTTL      int // Asset listings: namespaces, datasets, fields (default: 900s = 15 min)
+	StatisticsTTL int // Dataset statistics (default: 900s = 15 min)
+	DDLTTL        int // Dataset DDL (default: 1800s = 30 min)
+	SearchTTL     int // Search results (default: 300s = 5 min)
+}
+
 // CacheRepository implements domain.CacheRepository using Redis.
 type CacheRepository struct {
 	client *redis.Client
