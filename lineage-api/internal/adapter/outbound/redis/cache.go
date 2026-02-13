@@ -117,3 +117,8 @@ func (c *NoOpCache) Delete(ctx context.Context, key string) error {
 func (c *NoOpCache) Exists(ctx context.Context, key string) (bool, error) {
 	return false, nil
 }
+
+// Close is a no-op (satisfies io.Closer for uniform cleanup).
+func (c *NoOpCache) Close() error {
+	return nil
+}

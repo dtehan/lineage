@@ -14,6 +14,7 @@ import (
 	redisAdapter "github.com/lineage-api/internal/adapter/outbound/redis"
 	"github.com/lineage-api/internal/adapter/outbound/teradata"
 	"github.com/lineage-api/internal/application"
+	"github.com/lineage-api/internal/domain"
 	"github.com/lineage-api/internal/infrastructure/config"
 	"github.com/lineage-api/internal/infrastructure/logging"
 )
@@ -43,12 +44,17 @@ func main() {
 	}
 	defer db.Close()
 
-	// Redis cache -- fail fast if unavailable (Phase 30 adds graceful degradation)
-	cacheRepo, err := redisAdapter.NewCacheRepository(cfg.Redis)
+	// Redis cache -- graceful degradation when unavailable
+	var cache domain.CacheRepository
+	redisRepo, err := redisAdapter.NewCacheRepository(cfg.Redis)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		slog.Warn("Redis unavailable, running without cache", "error", err)
+		cache = redisAdapter.NewNoOpCache()
+	} else {
+		slog.Info("Redis cache connected", "addr", cfg.Redis.Addr)
+		cache = redisRepo
+		defer redisRepo.Close()
 	}
-	defer cacheRepo.Close()
 
 	// Repositories
 	assetRepo := teradata.NewAssetRepository(db)
@@ -65,7 +71,7 @@ func main() {
 
 	// OpenLineage repository, service, and handler
 	olRepo := teradata.NewOpenLineageRepository(db)
-	cachedOLRepo := redisAdapter.NewCachedOpenLineageRepository(olRepo, cacheRepo, cfg.CacheTTL)
+	cachedOLRepo := redisAdapter.NewCachedOpenLineageRepository(olRepo, cache, cfg.CacheTTL)
 	olService := application.NewOpenLineageService(cachedOLRepo)
 	olHandler := httpAdapter.NewOpenLineageHandler(olService)
 
