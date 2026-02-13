@@ -106,11 +106,11 @@ Plans:
 4. The lineage graph toolbar and asset browser each have a refresh button that triggers a cache bypass request
 5. After clicking refresh, the UI displays fresh data and subsequent requests (without refresh) return the newly cached data
 
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 31-01: Add cache status headers (X-Cache, X-Cache-TTL) to API responses via middleware or decorator
-- [ ] 31-02: Implement ?refresh=true cache bypass in backend and add UI refresh buttons to lineage toolbar and asset browser
+- [ ] 31-01-PLAN.md -- Add TTL to CacheRepository, CacheMetadata context type, CacheControl middleware with X-Cache headers, ?refresh=true bypass, CORS update
+- [ ] 31-02-PLAN.md -- Add refresh param to API client, refresh buttons in lineage toolbar and asset browser with TanStack Query cache bypass
 
 ---
 
