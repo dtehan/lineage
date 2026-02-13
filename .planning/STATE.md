@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** v6.0 Redis Caching Layer - Phase 28 complete, ready for Phase 29
+**Current focus:** v6.0 Redis Caching Layer - Phase 29 in progress (cache keys, TTL, full coverage)
 
 ## Current Position
 
 Milestone: v6.0 Redis Caching Layer (ACTIVE)
-Phase: 28 of 31 (Redis Connection & Cache Decorator Foundation)
-Plan: 2 of 2 in current phase
-Status: Phase complete - verified
-Last activity: 2026-02-12 -- Phase 28 complete and verified (Redis connection & cache decorator foundation)
+Phase: 29 of 31 (Cache Keys, TTL & Full Coverage)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-12 -- Completed 29-01-PLAN.md (cache key builders + CacheTTLConfig)
 
-Progress: [██░░░░░░░░] 29%
+Progress: [███░░░░░░░] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 66 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 2)
+- Total plans completed: 67 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 3)
 - Average plan duration: ~3.3 min
-- Total execution time: ~217 min
+- Total execution time: ~219 min
 
 **By Milestone:**
 
@@ -34,11 +34,12 @@ Progress: [██░░░░░░░░] 29%
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
 | v5.0 | 4 | 9 | ~30 min |
-| v6.0 | 4 | ~7 | ~6 min |
+| v6.0 | 4 | ~7 | ~8 min |
 
 **Recent Trend:**
 - v6.0 Plan 28-01: 2 min
 - v6.0 Plan 28-02: 4 min
+- v6.0 Plan 29-01: 2 min
 - Trend: Stable velocity
 
 *Updated after each plan completion*
@@ -50,6 +51,10 @@ Progress: [██░░░░░░░░] 29%
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [29-01]: CacheTTLConfig in config package (not redis) -- follows existing ValidationConfig pattern
+- [29-01]: DatasetSearchKey normalizes to uppercase + trims whitespace -- matches Teradata case-insensitive LIKE
+- [29-01]: Pipe delimiter for composite params -- colons for structure, pipes for values; no collision risk
+- [29-01]: No TTL validation -- zero/negative are intentional operator overrides
 - [28-02]: 5-min (300s) default TTL -- conservative; Phase 29 makes configurable
 - [28-02]: Depth excluded from cache key -- deeper queries produce supersets
 - [28-02]: Direction included in cache key -- different graphs per direction
@@ -74,5 +79,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Phase 28 complete and verified -- ready to plan Phase 29
+Stopped at: Completed 29-01-PLAN.md -- ready for 29-02
 Resume file: None
