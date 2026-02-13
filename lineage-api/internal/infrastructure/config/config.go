@@ -17,12 +17,22 @@ type ValidationConfig struct {
 	MinMaxDepth     int // Lower bound for maxDepth parameter (default: 1)
 }
 
+// CacheTTLConfig holds per-data-type cache TTL values in seconds.
+type CacheTTLConfig struct {
+	LineageTTL    int // Lineage graph queries (default: 1800s = 30 min)
+	AssetTTL      int // Asset listings: namespaces, datasets, fields (default: 900s = 15 min)
+	StatisticsTTL int // Dataset statistics (default: 900s = 15 min)
+	DDLTTL        int // Dataset DDL (default: 1800s = 30 min)
+	SearchTTL     int // Search results (default: 300s = 5 min)
+}
+
 // Config holds all configuration for the application.
 type Config struct {
 	Port       string
 	Teradata   teradata.Config
 	Redis      redis.Config
 	Validation ValidationConfig
+	CacheTTL   CacheTTLConfig
 }
 
 // Load loads configuration from .env file, environment variables, and config files.
@@ -46,6 +56,11 @@ func Load() (*Config, error) {
 	viper.SetDefault("VALIDATION_MAX_DEPTH_LIMIT", 20)
 	viper.SetDefault("VALIDATION_DEFAULT_MAX_DEPTH", 5)
 	viper.SetDefault("VALIDATION_MIN_MAX_DEPTH", 1)
+	viper.SetDefault("CACHE_TTL_LINEAGE", 1800)
+	viper.SetDefault("CACHE_TTL_ASSETS", 900)
+	viper.SetDefault("CACHE_TTL_STATISTICS", 900)
+	viper.SetDefault("CACHE_TTL_DDL", 1800)
+	viper.SetDefault("CACHE_TTL_SEARCH", 300)
 
 	// Try to read config file (not required)
 	_ = viper.ReadInConfig()
@@ -76,6 +91,13 @@ func Load() (*Config, error) {
 			MaxDepthLimit:   viper.GetInt("VALIDATION_MAX_DEPTH_LIMIT"),
 			DefaultMaxDepth: viper.GetInt("VALIDATION_DEFAULT_MAX_DEPTH"),
 			MinMaxDepth:     viper.GetInt("VALIDATION_MIN_MAX_DEPTH"),
+		},
+		CacheTTL: CacheTTLConfig{
+			LineageTTL:    viper.GetInt("CACHE_TTL_LINEAGE"),
+			AssetTTL:      viper.GetInt("CACHE_TTL_ASSETS"),
+			StatisticsTTL: viper.GetInt("CACHE_TTL_STATISTICS"),
+			DDLTTL:        viper.GetInt("CACHE_TTL_DDL"),
+			SearchTTL:     viper.GetInt("CACHE_TTL_SEARCH"),
 		},
 	}
 
