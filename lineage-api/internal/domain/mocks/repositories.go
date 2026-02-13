@@ -3,6 +3,7 @@ package mocks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -426,13 +427,12 @@ func (m *MockCacheRepository) Get(ctx context.Context, key string, dest any) err
 		return m.GetErr
 	}
 
-	if _, exists := m.Data[key]; !exists {
+	data, exists := m.Data[key]
+	if !exists {
 		return ErrCacheMiss
 	}
 
-	// For testing, we just return nil if the key exists
-	// In a real implementation, we'd unmarshal the data
-	return nil
+	return json.Unmarshal(data, dest)
 }
 
 // Set stores a value in the cache.
@@ -446,7 +446,11 @@ func (m *MockCacheRepository) Set(ctx context.Context, key string, value any, tt
 		return m.SetErr
 	}
 
-	m.Data[key] = []byte("cached")
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	m.Data[key] = data
 	return nil
 }
 
