@@ -11,6 +11,7 @@ import (
 	"time"
 
 	httpAdapter "github.com/lineage-api/internal/adapter/inbound/http"
+	redisAdapter "github.com/lineage-api/internal/adapter/outbound/redis"
 	"github.com/lineage-api/internal/adapter/outbound/teradata"
 	"github.com/lineage-api/internal/application"
 	"github.com/lineage-api/internal/infrastructure/config"
@@ -41,6 +42,14 @@ func main() {
 		log.Fatalf("Failed to connect to Teradata: %v", err)
 	}
 	defer db.Close()
+
+	// Redis cache -- fail fast if unavailable (Phase 30 adds graceful degradation)
+	cacheRepo, err := redisAdapter.NewCacheRepository(cfg.Redis)
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer cacheRepo.Close()
+	_ = cacheRepo // Used by CachedOpenLineageRepository in Plan 28-02
 
 	// Repositories
 	assetRepo := teradata.NewAssetRepository(db)
