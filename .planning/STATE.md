@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** v6.0 Redis Caching Layer - Phase 28 (Redis Connection & Cache Decorator Foundation)
+**Current focus:** v6.0 Redis Caching Layer - Phase 28 complete, ready for Phase 29
 
 ## Current Position
 
 Milestone: v6.0 Redis Caching Layer (ACTIVE)
 Phase: 28 of 31 (Redis Connection & Cache Decorator Foundation)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-13 -- Completed 28-01-PLAN.md (go-redis upgrade + Redis client wiring)
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-13 -- Completed 28-02-PLAN.md (cache decorator + wiring)
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [██░░░░░░░░] 29%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 65 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 1)
+- Total plans completed: 66 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 2)
 - Average plan duration: ~3.3 min
-- Total execution time: ~213 min
+- Total execution time: ~217 min
 
 **By Milestone:**
 
@@ -34,10 +34,11 @@ Progress: [█░░░░░░░░░] 14%
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
 | v5.0 | 4 | 9 | ~30 min |
-| v6.0 | 4 | ~7 | ~2 min |
+| v6.0 | 4 | ~7 | ~6 min |
 
 **Recent Trend:**
-- v5.0 average: ~3.3 min per plan
+- v6.0 Plan 28-01: 2 min
+- v6.0 Plan 28-02: 4 min
 - Trend: Stable velocity
 
 *Updated after each plan completion*
@@ -49,9 +50,13 @@ Progress: [█░░░░░░░░░] 14%
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [28-02]: 5-min (300s) default TTL -- conservative; Phase 29 makes configurable
+- [28-02]: Depth excluded from cache key -- deeper queries produce supersets
+- [28-02]: Direction included in cache key -- different graphs per direction
+- [28-02]: nil results NOT cached; empty (non-nil) graphs ARE cached
+- [28-02]: Cache errors logged and swallowed -- never propagated to API callers
 - [28-01]: Fail-fast (log.Fatalf) on Redis connection failure -- Phase 30 adds graceful degradation
 - [28-01]: go-redis v9.7.3 specifically (not v9.7.0 which contains CVE-2025-29923)
-- [28-01]: Blank identifier _ = cacheRepo until 28-02 wires decorator
 - [v6.0 roadmap]: 4 phases derived from 5 requirement categories (cache infra + integration merged into Phase 28)
 - [v6.0 roadmap]: Phase 30 (degradation) depends only on Phase 28, not 29 -- could parallelize but sequential is simpler
 - [v6.0 roadmap]: Research phases 4-6 (hardening, pagination, compatibility) excluded -- not in v6.0 requirements scope
@@ -69,5 +74,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 28-01-PLAN.md -- ready for 28-02-PLAN.md
+Stopped at: Completed 28-02-PLAN.md -- Phase 28 complete, ready for Phase 29
 Resume file: None
