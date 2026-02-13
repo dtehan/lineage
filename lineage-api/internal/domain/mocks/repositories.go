@@ -394,20 +394,27 @@ type MockCacheRepository struct {
 	SetErr    error
 	DeleteErr error
 	ExistsErr error
+	TTLErr    error
+
+	// Configurable TTL return value (default: 900 seconds)
+	TTLValue int
 
 	// Tracking
 	GetCalls    []string
 	SetCalls    []string
 	DeleteCalls []string
+	TTLCalls    []string
 }
 
 // NewMockCacheRepository creates a new MockCacheRepository.
 func NewMockCacheRepository() *MockCacheRepository {
 	return &MockCacheRepository{
 		Data:        make(map[string][]byte),
+		TTLValue:    900,
 		GetCalls:    []string{},
 		SetCalls:    []string{},
 		DeleteCalls: []string{},
+		TTLCalls:    []string{},
 	}
 }
 
@@ -480,6 +487,21 @@ func (m *MockCacheRepository) Exists(ctx context.Context, key string) (bool, err
 
 	_, exists := m.Data[key]
 	return exists, nil
+}
+
+// TTL returns the configured TTL value for a key.
+func (m *MockCacheRepository) TTL(ctx context.Context, key string) (int, error) {
+	m.mu.Lock()
+	m.TTLCalls = append(m.TTLCalls, key)
+	m.mu.Unlock()
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if m.TTLErr != nil {
+		return -1, m.TTLErr
+	}
+	return m.TTLValue, nil
 }
 
 // MockOpenLineageRepository is a mock implementation of domain.OpenLineageRepository.

@@ -82,6 +82,16 @@ func (r *CacheRepository) Exists(ctx context.Context, key string) (bool, error) 
 	return n > 0, nil
 }
 
+// TTL returns the remaining time-to-live in seconds for a cache key.
+// Returns -2 if the key does not exist, -1 if the key has no expiry.
+func (r *CacheRepository) TTL(ctx context.Context, key string) (int, error) {
+	duration, err := r.client.TTL(ctx, key).Result()
+	if err != nil {
+		return -1, err
+	}
+	return int(duration.Seconds()), nil
+}
+
 // Close closes the Redis client connection.
 func (r *CacheRepository) Close() error {
 	return r.client.Close()
@@ -116,6 +126,11 @@ func (c *NoOpCache) Delete(ctx context.Context, key string) error {
 // Exists always returns false.
 func (c *NoOpCache) Exists(ctx context.Context, key string) (bool, error) {
 	return false, nil
+}
+
+// TTL always returns -1 (no cache entries exist in NoOpCache).
+func (c *NoOpCache) TTL(ctx context.Context, key string) (int, error) {
+	return -1, nil
 }
 
 // Close is a no-op (satisfies io.Closer for uniform cleanup).

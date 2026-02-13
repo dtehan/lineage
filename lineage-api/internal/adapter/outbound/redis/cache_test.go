@@ -48,6 +48,14 @@ func TestNoOpCache(t *testing.T) {
 		assert.False(t, exists)
 	})
 
+	// Test TTL always returns -1
+	t.Run("TTL always returns -1 and nil error", func(t *testing.T) {
+		ttl, err := cache.TTL(ctx, "any-key")
+
+		assert.NoError(t, err)
+		assert.Equal(t, -1, ttl)
+	})
+
 	// Test Close does nothing and returns nil
 	t.Run("Close does nothing and returns nil", func(t *testing.T) {
 		// Access concrete type for Close() since domain.CacheRepository doesn't include it

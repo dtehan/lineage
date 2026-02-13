@@ -33,6 +33,7 @@ type CacheRepository interface {
 	Set(ctx context.Context, key string, value any, ttlSeconds int) error
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
+	TTL(ctx context.Context, key string) (int, error)
 }
 
 // OpenLineageRepository defines operations for OpenLineage-aligned data
