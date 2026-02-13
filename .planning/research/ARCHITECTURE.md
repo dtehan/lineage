@@ -1,419 +1,722 @@
-# Architecture Patterns: Interactive Graph Features
+# Architecture Patterns: Redis Caching Integration
 
-**Domain:** React Flow + Zustand integration for node selection, path highlighting, and detail panel
-**Researched:** 2026-02-01
+**Domain:** Response caching for Teradata column-level lineage API (Go backend)
+**Researched:** 2026-02-12
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Research confirms the existing architecture is **already well-positioned** for interactive graph features. The codebase has implemented most of the core infrastructure:
+The existing codebase is **excellently prepared** for Redis caching integration. The foundation already exists:
 
-- `useLineageStore` already contains `selectedAssetId`, `highlightedNodeIds`, `highlightedEdgeIds`, panel state
-- `useLineageHighlight` hook already implements DFS traversal with cycle detection
-- `DetailPanel` component exists with column and edge detail rendering
-- `TableNode` and `ColumnRow` components already respond to selection/highlight state
+- `domain.CacheRepository` interface is defined in `internal/domain/repository.go` (lines 31-36)
+- `redis.CacheRepository` implements this interface in `internal/adapter/outbound/redis/cache.go` (lines 21-79)
+- `redis.NoOpCache` provides graceful fallback when Redis is unavailable (lines 82-110)
+- `redis.Config` is loaded from environment variables via `infrastructure/config/config.go` (lines 70-74)
+- `MockCacheRepository` exists in `internal/domain/mocks/repositories.go` (lines 387-479) with call tracking
 
-**Recommendation:** Extend existing patterns rather than introduce new architecture. Focus on enhancing what exists.
+What is missing is the **cache decorator layer** that connects this infrastructure to the existing repository interfaces. The recommended approach is the **Repository Decorator pattern** implemented in the **outbound adapter layer**, keeping the domain and application layers completely unaware of caching.
 
 ---
 
 ## Current Architecture Analysis
 
-### State Management: Already Centralized in Zustand
+### Existing Request Flow (No Cache)
 
-The existing `useLineageStore` (lines 1-194) already manages:
-
-```typescript
-// Selection state (lines 33-34, 51-59)
-selectedAssetId: string | null;
-selectedEdgeId: string | null;
-highlightedNodeIds: Set<string>;
-highlightedEdgeIds: Set<string>;
-
-// Panel state (lines 63-67)
-isPanelOpen: boolean;
-panelContent: 'node' | 'edge' | null;
-openPanel: (content: 'node' | 'edge') => void;
-closePanel: () => void;
+```
+HTTP Request
+    |
+    v
+[HTTP Handler] ----validates----> [Application Service] ----calls----> [Teradata Repository]
+    |                                    |                                      |
+    | (Chi router, validation,           | (DTO transformation,                | (SQL execution,
+    |  error mapping)                    |  business logic)                    |  row scanning)
+    |                                    |                                      |
+    v                                    v                                      v
+HTTP Response <--- JSON serialize <--- DTO <--- domain entity <--- SQL result
 ```
 
-**Architecture Decision (Confirmed):** Selection and highlight state lives in Zustand, not React Flow's internal state. This is correct because:
-1. Panel visibility depends on selection state
-2. Multiple components (TableNode, ColumnRow, LineageEdge, DetailPanel) consume highlight state
-3. Zustand provides fine-grained subscriptions without re-rendering entire tree
+### Key Observation: Services Are Thin Pass-Throughs
 
-### Path Highlighting: Already Implemented
+Examining the application services reveals they are minimal orchestrators:
 
-The `useLineageHighlight` hook (lines 1-160) implements:
+- `AssetService.ListDatabases()` -- directly delegates to `assetRepo.ListDatabases()` (1 line)
+- `LineageService.GetLineageGraph()` -- delegates to `lineageRepo.GetLineageGraph()`, wraps result in DTO
+- `OpenLineageService.GetLineageGraph()` -- delegates to `repo.GetColumnLineageGraph()`, transforms to response DTO
+- `OpenLineageService.GetDataset()` -- delegates to `repo.GetDataset()` + `repo.ListFields()`, transforms
 
-```typescript
-// Adjacency maps built from edges (lines 30-54)
-const { upstreamMap, downstreamMap } = useMemo(() => {
-  // ... builds Map<columnId, Set<connectedColumnIds>>
-}, [edges]);
+This thin service layer means caching does NOT belong in the service layer. The services have no caching-specific logic to add. Placing cache logic there would bloat simple delegation methods with cache key generation, hit/miss branching, and error handling.
 
-// DFS traversal with cycle detection (lines 57-81, 84-108)
-const getUpstreamNodes = useCallback((nodeId: string): Set<string> => {
-  const visited = new Set<string>();
-  const stack = [nodeId];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    if (visited.has(current)) continue;  // Cycle detection
-    visited.add(current);
-    // ... traverse
-  }
-}, [upstreamMap]);
-```
+### Existing Domain Interface: CacheRepository
 
-**Architecture Decision (Confirmed):** DFS with visited set is correct for:
-- Handling cyclic graphs (common in real lineage data)
-- O(V+E) time complexity
-- Memory efficient (stack-based, not recursive)
-
-### Component Integration: Already Wired
-
-**LineageGraph.tsx** (lines 1-607):
-- Uses `useLineageHighlight` hook (line 109)
-- Triggers highlight on selection change (lines 249-255)
-- Passes highlight state to DetailPanel (lines 584-591)
-
-**TableNode.tsx** (lines 1-188):
-- Reads `highlightedNodeIds` from store (line 25)
-- Applies visual dimming for non-highlighted nodes (line 41, 96)
-- Delegates column click to `setSelectedAssetId` (lines 81-86)
-
-**ColumnRow.tsx** (lines 1-104):
-- Receives `isSelected`, `isHighlighted`, `isDimmed` props
-- Applies appropriate styling classes (lines 32-42)
-
-**LineageEdge.tsx** (lines 1-207):
-- Reads `highlightedEdgeIds` from store (line 85)
-- Applies opacity dimming for non-highlighted edges (line 108)
-- Shows animated dash effect for highlighted edges (line 111)
-
----
-
-## Recommended Architecture for Enhancement
-
-### 1. State Management Strategy
-
-**Keep using Zustand for:**
-- `selectedAssetId` / `selectedEdgeId` - global selection state
-- `highlightedNodeIds` / `highlightedEdgeIds` - computed highlight sets
-- `isPanelOpen` / `panelContent` - panel visibility
-
-**Do NOT use React Flow internal state for selection because:**
-- React Flow's `selected` property on nodes is designed for multi-select drag operations
-- Our selection model is single-select with path highlighting
-- Panel visibility logic requires external access to selection
-
-**Recommended addition to useLineageStore:**
-
-```typescript
-// For column click navigation (future feature)
-focusedColumnId: string | null;
-setFocusedColumnId: (id: string | null) => void;
-```
-
-### 2. Data Fetching Strategy for Detail Panel
-
-**Current implementation (lines 302-348 in LineageGraph.tsx):**
-```typescript
-const getColumnDetail = useCallback((columnId: string): ColumnDetail | null => {
-  const node = storeNodes.find((n) => n.id === columnId);
-  // ... builds detail from cached graph data
-}, [storeNodes, storeEdges]);
-```
-
-**Recommendation:** This is sufficient for basic metadata. For extended metadata (DDL, usage stats), add a TanStack Query hook:
-
-```typescript
-// New hook: useColumnMetadata
-export function useColumnMetadata(columnId: string | null) {
-  return useQuery({
-    queryKey: ['column-metadata', columnId],
-    queryFn: () => openLineageApi.getDataset(columnId!.split('.').slice(0, 2).join('.')),
-    enabled: !!columnId,
-    staleTime: 5 * 60 * 1000,  // Cache 5 minutes
-  });
+```go
+// domain/repository.go (lines 31-36)
+type CacheRepository interface {
+    Get(ctx context.Context, key string, dest any) error
+    Set(ctx context.Context, key string, value any, ttlSeconds int) error
+    Delete(ctx context.Context, key string) error
+    Exists(ctx context.Context, key string) (bool, error)
 }
 ```
 
-**API Strategy:**
-- Reuse existing `GET /api/v2/openlineage/datasets/{datasetId}` endpoint
-- No new backend endpoint needed
-- Data already includes fields with type, nullable, description
+This is a **generic key-value cache interface**. It handles serialization (JSON marshal/unmarshal) internally. This is the right abstraction -- it does not leak Redis specifics into the domain.
 
-### 3. Path Highlighting Algorithm
+### Existing Redis Implementation
 
-**Current algorithm is correct.** Key characteristics:
+```go
+// adapter/outbound/redis/cache.go
+type CacheRepository struct { client *redis.Client }  // Redis-backed
+type NoOpCache struct{}                                // No-op fallback
+```
 
-| Aspect | Current Implementation | Status |
-|--------|------------------------|--------|
-| Traversal | DFS with stack | Correct |
-| Cycle handling | Visited set check | Correct |
-| Direction | Bidirectional (upstream + downstream) | Correct |
-| Edge filtering | Filters edges where both endpoints are highlighted | Correct |
+The `NoOpCache` returns `ErrCacheMiss` on `Get`, returns `nil` on `Set`/`Delete`, and returns `false` on `Exists`. This means code using `CacheRepository` can treat it uniformly regardless of whether Redis is available -- a cache miss simply means "go to the database," which is exactly the fallback behavior.
 
-**Performance characteristics:**
-- Build adjacency maps: O(E) - runs once via useMemo
-- Traversal: O(V+E) per selection change
-- Edge filtering: O(E) per selection change
+### What Is NOT Wired Up
 
-**For graphs with 500+ nodes (virtualization threshold is 50):**
-- Current implementation handles this fine
-- useMemo dependency on `edges` prevents rebuild unless graph changes
-- useCallback memoizes traversal functions
+Looking at `cmd/server/main.go`, the Redis cache is **never instantiated**. The config loads `Redis.Addr`, `Redis.Password`, `Redis.DB` from environment variables, but `main.go` creates repositories and services without any cache involvement:
 
-### 4. Component Boundaries
+```go
+// main.go (lines 46-61) - NO cache in the dependency chain
+assetRepo := teradata.NewAssetRepository(db)
+lineageRepo := teradata.NewLineageRepository(db, assetRepo)
+searchRepo := teradata.NewSearchRepository(db)
+assetService := application.NewAssetService(assetRepo)
+lineageService := application.NewLineageService(lineageRepo)
+searchService := application.NewSearchService(searchRepo)
+```
+
+---
+
+## Recommended Architecture: Repository Decorator Pattern
+
+### Why Repository Decorator (Not Service-Level, Not Middleware)
+
+Three possible locations for caching logic were evaluated:
+
+| Location | Pros | Cons | Verdict |
+|----------|------|------|---------|
+| **HTTP Middleware** | Simple, applies broadly | Cannot cache at domain entity level; only caches serialized JSON; cannot differentiate endpoints; no type safety | REJECTED |
+| **Service Layer** | Service can add business-aware cache decisions | Bloats thin services; mixes caching concern with orchestration; every service method needs cache boilerplate | REJECTED |
+| **Repository Decorator** | Transparent to service; implements same interface; composable; testable; follows hexagonal principles | Requires one decorator per repository interface | RECOMMENDED |
+
+The repository decorator pattern is the canonical approach in hexagonal architecture because:
+
+1. **Domain layer stays clean** -- no cache imports, no cache awareness
+2. **Service layer stays clean** -- delegates to repository interface, unaware of caching
+3. **Substitutability** -- swap `CachedOpenLineageRepository` for `OpenLineageRepository` via dependency injection
+4. **Testability** -- test cache logic independently with mock repositories
+5. **Granularity** -- cache only the methods that benefit from caching
+
+### Cache Stores Domain Entities, Not DTOs
+
+The cache should store **domain entities** (what repositories return), not DTOs (what services return). Rationale:
+
+- Repositories return `domain.OpenLineageGraph`, `domain.OpenLineageDataset`, etc.
+- Services transform these to DTOs (`OpenLineageGraphResponse`, `OpenLineageDatasetResponse`)
+- If we cache DTOs, the cache is coupled to the presentation layer
+- If we cache domain entities, the cache is reusable across any service that consumes the repository
+- Domain entities already have `json` struct tags, so JSON serialization works naturally
+
+### Architectural Position
 
 ```
-                    ┌─────────────────────────────────┐
-                    │         useLineageStore         │
-                    │  (selection, highlight, panel)  │
-                    └───────────────┬─────────────────┘
+                    ┌──────────────────────────────────┐
+                    │         Domain Layer              │
+                    │  repository.go (interfaces)       │
+                    │  entities.go (types)              │
+                    │  CacheRepository interface        │
+                    └──────────────────┬───────────────┘
+                                       │ implements
+                    ┌──────────────────┴───────────────┐
+                    │      Application Layer            │
+                    │  OpenLineageService               │
+                    │  LineageService                    │
+                    │  AssetService                     │
+                    │  (all unaware of caching)         │
+                    └──────────────────┬───────────────┘
+                                       │ calls interface
+          ┌────────────────────────────┼────────────────────────────┐
+          │                            │                            │
+          ▼                            ▼                            ▼
+┌─────────────────────┐  ┌─────────────────────┐  ┌──────────────────────────┐
+│  Teradata Repos     │  │  Cached Repos       │  │  Redis CacheRepository   │
+│  (outbound adapter) │  │  (outbound adapter) │  │  (outbound adapter)      │
+│                     │  │                     │  │                          │
+│  OpenLineageRepo    │  │  CachedOLRepo       │  │  Get/Set/Delete/Exists   │
+│  AssetRepo          │  │  CachedAssetRepo    │  │  NoOpCache fallback      │
+│  LineageRepo        │  │  CachedLineageRepo  │  │                          │
+│  SearchRepo         │  │  CachedSearchRepo   │  │                          │
+└─────────────────────┘  └──────────┬──────────┘  └──────────────────────────┘
                                     │
-          ┌─────────────────────────┼─────────────────────────┐
-          │                         │                         │
-          ▼                         ▼                         ▼
-┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
-│   LineageGraph   │    │    DetailPanel   │    │     Toolbar      │
-│  (orchestrator)  │    │  (displays info) │    │  (controls)      │
-└────────┬─────────┘    └──────────────────┘    └──────────────────┘
-         │
-         │ useLineageHighlight
-         │
-    ┌────┴────┐
-    │         │
-    ▼         ▼
-┌────────┐  ┌────────────┐
-│TableNode│  │LineageEdge │
-│  │      │  │            │
-│  ▼      │  │            │
-│ColumnRow│  │            │
-└─────────┘  └────────────┘
+                                    │ wraps (composition)
+                                    ▼
+                          Teradata Repo + CacheRepository
 ```
 
-**Data flow for selection:**
-1. User clicks ColumnRow
-2. ColumnRow calls `onClick(column.id)` prop
-3. TableNode's `handleColumnClick` calls `setSelectedAssetId(columnId)`
-4. useLineageStore updates `selectedAssetId`
-5. LineageGraph's useEffect (lines 249-255) reacts:
-   - Calls `highlightPath(selectedAssetId)`
-   - Updates `highlightedNodeIds`, `highlightedEdgeIds`
-   - Calls `openPanel('node')`
-6. Components re-render with new highlight state
+### File Location
 
-### 5. Performance Considerations
+Cached repositories belong in a new package under the outbound adapter layer:
 
-**Current optimizations already in place:**
-
-| Optimization | Implementation | Impact |
-|--------------|----------------|--------|
-| Virtualization | `onlyRenderVisibleElements` when nodes > 50 | Major for large graphs |
-| Memoization | `useMemo` for adjacency maps, `useCallback` for traversals | Prevents recalc |
-| Component memos | `memo(TableNode)`, `memo(ColumnRow)`, `memo(LineageEdge)` | Prevents re-render |
-| Highlight as Sets | `Set<string>` instead of arrays | O(1) lookup |
-
-**Additional recommendations for v4.0:**
-
-1. **Debounce hover highlighting** (if implementing hover-based highlighting):
-```typescript
-const debouncedHighlight = useMemo(
-  () => debounce((nodeId: string) => {
-    const { highlightedNodes, highlightedEdges } = highlightPath(nodeId);
-    setHighlightedPath(highlightedNodes, highlightedEdges);
-  }, 100),
-  [highlightPath, setHighlightedPath]
-);
+```
+internal/adapter/outbound/cached/
+    openlineage_repo.go       // CachedOpenLineageRepository
+    openlineage_repo_test.go  // Tests with MockCacheRepository + MockOpenLineageRepository
+    asset_repo.go             // CachedAssetRepository
+    asset_repo_test.go
+    lineage_repo.go           // CachedLineageRepository
+    lineage_repo_test.go
+    search_repo.go            // CachedSearchRepository (if search is cacheable)
+    search_repo_test.go
+    keys.go                   // Cache key generation functions
+    keys_test.go
 ```
 
-2. **Lazy load extended metadata** in DetailPanel:
-```typescript
-// Only fetch when panel is open AND user has been viewing for 500ms
-useEffect(() => {
-  if (!isPanelOpen || !selectedAssetId) return;
-  const timer = setTimeout(() => setFetchExtendedMetadata(true), 500);
-  return () => clearTimeout(timer);
-}, [isPanelOpen, selectedAssetId]);
-```
+Rationale for a separate `cached/` package rather than placing decorators inside the `teradata/` package:
+- **Separation of concerns** -- caching is not Teradata-specific
+- **Testability** -- cached repos can be tested with any repository mock, not just Teradata
+- **Clarity** -- package name communicates the pattern
+- **Composability** -- could wrap other data source adapters in future
 
 ---
 
-## Integration Points Summary
+## Detailed Data Flow
 
-### New Components (None Required)
-All components already exist. Enhancements can be made to existing components.
+### Cache Hit Path
 
-### Modified Components
+```
+HTTP Request: GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}?direction=both&maxDepth=5
+    |
+    v
+[OpenLineageHandler.GetLineageGraph]
+    |
+    v
+[OpenLineageService.GetLineageGraph(ctx, datasetID, fieldName, "both", 5)]
+    |
+    v
+[CachedOpenLineageRepository.GetColumnLineageGraph(ctx, datasetID, fieldName, "both", 5)]
+    |
+    |-- 1. Generate cache key: "ol:lineage:graph:{datasetID}:{fieldName}:both:5"
+    |-- 2. cache.Get(ctx, key, &graph)  --> HIT (returns cached *domain.OpenLineageGraph)
+    |-- 3. Return cached graph immediately (skip Teradata)
+    |
+    v
+[OpenLineageService transforms to OpenLineageLineageResponse DTO]
+    |
+    v
+[Handler serializes to JSON response]
+```
 
-| Component | Enhancement | Complexity |
-|-----------|-------------|------------|
-| DetailPanel | Add tabs for extended metadata (DDL, stats) | Medium |
-| ColumnRow | Add double-click handler for column navigation | Low |
-| useLineageStore | Add `focusedColumnId` for navigation feature | Low |
+### Cache Miss Path
 
-### New Hooks (Optional)
+```
+[CachedOpenLineageRepository.GetColumnLineageGraph(ctx, datasetID, fieldName, "both", 5)]
+    |
+    |-- 1. Generate cache key: "ol:lineage:graph:{datasetID}:{fieldName}:both:5"
+    |-- 2. cache.Get(ctx, key, &graph)  --> MISS (ErrCacheMiss or redis error)
+    |-- 3. inner.GetColumnLineageGraph(ctx, datasetID, fieldName, "both", 5)  --> Teradata query
+    |-- 4. cache.Set(ctx, key, graph, ttlSeconds)  --> Store result (fire-and-forget on error)
+    |-- 5. Return graph from Teradata
+```
 
-| Hook | Purpose | Required for v4.0? |
-|------|---------|-------------------|
-| `useColumnMetadata` | Fetch extended column metadata | Optional |
-| `useTableDDL` | Fetch table DDL on demand | Optional |
+### Redis Unavailable Path (Graceful Degradation)
 
-### Backend Changes (None Required)
-Existing endpoints provide all necessary data:
-- `GET /api/v2/openlineage/datasets/{datasetId}` - Returns fields with metadata
-- `GET /api/v2/openlineage/lineage/table/{datasetId}` - Returns lineage graph
+```
+[main.go startup]
+    |
+    |-- 1. redis.NewCacheRepository(cfg.Redis) --> error (Redis unreachable)
+    |-- 2. Log warning: "Redis unavailable, using no-op cache"
+    |-- 3. cache = redis.NewNoOpCache()  --> NoOpCache instance
+    |-- 4. CachedOpenLineageRepository wraps inner repo + NoOpCache
+    |
+    v
+[All requests flow through decorator, NoOpCache always returns ErrCacheMiss]
+[Every request hits Teradata -- functionally identical to uncached behavior]
+[No errors, no panics, no degraded responses -- just no caching benefit]
+```
+
+### Force-Refresh Path
+
+```
+HTTP Request: GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}?refresh=true
+    |
+    v
+[Handler extracts "refresh" query param, passes via context or parameter]
+    |
+    v
+[CachedOpenLineageRepository.GetColumnLineageGraph]
+    |
+    |-- 1. Check for force-refresh signal
+    |-- 2. Skip cache.Get (or Delete existing key first)
+    |-- 3. inner.GetColumnLineageGraph --> Teradata query
+    |-- 4. cache.Set --> Store fresh result
+    |-- 5. Return fresh graph
+```
+
+**Implementation detail for force-refresh:** Use a context value rather than adding a parameter to the repository interface. This keeps the domain interface clean:
+
+```go
+// In the cached/ package:
+type contextKey string
+const forceRefreshKey contextKey = "cache_force_refresh"
+
+func WithForceRefresh(ctx context.Context) context.Context {
+    return context.WithValue(ctx, forceRefreshKey, true)
+}
+
+func isForceRefresh(ctx context.Context) bool {
+    v, _ := ctx.Value(forceRefreshKey).(bool)
+    return v
+}
+```
+
+The HTTP handler sets this context value when `?refresh=true` is present. The cached repository checks it. The domain interface remains unchanged.
 
 ---
 
-## Build Order Recommendation
+## Decorator Implementation Pattern
 
-Based on existing infrastructure and dependencies:
+### Structure for CachedOpenLineageRepository
 
-### Phase 1: Selection Enhancement (Low Risk)
-**Already functional.** Minor polish:
-- Visual feedback improvements (selection ring, focus indicator)
-- Keyboard navigation (arrow keys to move selection)
-- Selection persistence across view changes
+```go
+// internal/adapter/outbound/cached/openlineage_repo.go
+package cached
 
-### Phase 2: Path Highlighting Polish (Low Risk)
-**Already functional.** Minor polish:
-- Animation smoothing for highlight transitions
-- Consider hover-based preview highlighting
-- Clear highlight button/shortcut
+import (
+    "context"
+    "log/slog"
 
-### Phase 3: Detail Panel Enhancement (Medium Risk)
-**Partially functional.** Needs:
-- Tabbed interface for different data types
-- Extended metadata fetching hook
-- Error states for failed metadata fetch
-- Loading states for extended data
+    "github.com/lineage-api/internal/domain"
+)
 
-### Phase 4: Column Navigation (Medium Risk)
-**Not implemented.** Needs:
-- Double-click handler on ColumnRow
-- Navigation action that changes graph focus
-- View transitions / animation
+// CachedOpenLineageRepository wraps an OpenLineageRepository with caching.
+// It implements domain.OpenLineageRepository.
+type CachedOpenLineageRepository struct {
+    inner domain.OpenLineageRepository  // The real repository (Teradata)
+    cache domain.CacheRepository        // The cache (Redis or NoOp)
+    ttl   TTLConfig                     // TTL settings per data type
+}
+
+// TTLConfig holds TTL values (in seconds) for different data categories.
+type TTLConfig struct {
+    Namespace  int  // Namespaces rarely change (long TTL)
+    Dataset    int  // Datasets change moderately
+    Field      int  // Fields change with schema changes
+    Lineage    int  // Lineage graph data (most expensive query, benefits most from cache)
+    Statistics int  // Statistics change frequently (shorter TTL)
+    DDL        int  // DDL changes with schema changes
+    Search     int  // Search results (short TTL, user expectations of freshness)
+}
+
+// Compile-time interface check
+var _ domain.OpenLineageRepository = (*CachedOpenLineageRepository)(nil)
+```
+
+### Method Implementation Pattern
+
+Each method follows the same cache-aside pattern:
+
+```go
+func (r *CachedOpenLineageRepository) GetColumnLineageGraph(
+    ctx context.Context,
+    datasetID, fieldName, direction string,
+    maxDepth int,
+) (*domain.OpenLineageGraph, error) {
+    // 1. Skip cache on force-refresh
+    if !isForceRefresh(ctx) {
+        // 2. Try cache
+        key := LineageGraphKey(datasetID, fieldName, direction, maxDepth)
+        var cached domain.OpenLineageGraph
+        if err := r.cache.Get(ctx, key, &cached); err == nil {
+            return &cached, nil
+        }
+        // Cache miss or error -- fall through to database
+    }
+
+    // 3. Query database
+    graph, err := r.inner.GetColumnLineageGraph(ctx, datasetID, fieldName, direction, maxDepth)
+    if err != nil {
+        return nil, err
+    }
+
+    // 4. Populate cache (best-effort, do not fail on cache write error)
+    key := LineageGraphKey(datasetID, fieldName, direction, maxDepth)
+    if err := r.cache.Set(ctx, key, graph, r.ttl.Lineage); err != nil {
+        slog.WarnContext(ctx, "failed to cache lineage graph",
+            "key", key, "error", err)
+    }
+
+    return graph, nil
+}
+```
+
+### Critical Design Decisions
+
+**1. Cache errors are non-fatal.** A `cache.Get` failure triggers a database query. A `cache.Set` failure is logged but does not propagate to the caller. The user never sees a cache error.
+
+**2. Nil results are NOT cached.** If the inner repository returns `nil` (entity not found), we do NOT cache that. Caching nil/not-found responses (negative caching) is a separate optimization that requires careful TTL management to avoid stale "not found" entries blocking real data.
+
+**3. Only cache methods that benefit.** Not every repository method needs caching:
+
+| Method | Cache? | Rationale |
+|--------|--------|-----------|
+| `GetColumnLineageGraph` | YES | Most expensive query (recursive CTE), highest latency |
+| `GetColumnLineage` | YES | Same recursive CTE, different return format |
+| `GetDataset` | YES | Frequently accessed, stable data |
+| `ListDatasets` | YES | Paginated list, moderate query cost |
+| `ListFields` | YES | Called for every dataset detail view |
+| `ListNamespaces` | YES | Small result set, rarely changes |
+| `GetNamespace` | YES | Stable data |
+| `GetDatasetStatistics` | MAYBE | Queries DBC system views (slow), but data changes with DML |
+| `GetDatasetDDL` | MAYBE | Queries DBC + SHOW TABLE (slow), but changes with DDL |
+| `SearchDatasets` | NO | Search results should feel fresh; low query cost with LIKE |
+| `GetJob`, `ListJobs` | YES | Stable reference data |
+| `GetRun`, `ListRuns` | NO | Runs represent recent activity, freshness matters |
+
+**4. Paginated methods need pagination parameters in cache key.** `ListDatasets(namespaceID, limit, offset)` must include all three in the cache key to avoid returning wrong pages.
+
+---
+
+## Cache Key Design
+
+### Key Namespace Convention
+
+```
+ol:{entity}:{operation}:{params}
+```
+
+### Key Generation Functions
+
+```go
+// internal/adapter/outbound/cached/keys.go
+package cached
+
+import "fmt"
+
+func NamespaceKey(namespaceID string) string {
+    return fmt.Sprintf("ol:ns:%s", namespaceID)
+}
+
+func NamespaceListKey() string {
+    return "ol:ns:list"
+}
+
+func DatasetKey(datasetID string) string {
+    return fmt.Sprintf("ol:ds:%s", datasetID)
+}
+
+func DatasetListKey(namespaceID string, limit, offset int) string {
+    return fmt.Sprintf("ol:ds:list:%s:%d:%d", namespaceID, limit, offset)
+}
+
+func FieldListKey(datasetID string) string {
+    return fmt.Sprintf("ol:fields:%s", datasetID)
+}
+
+func LineageGraphKey(datasetID, fieldName, direction string, maxDepth int) string {
+    return fmt.Sprintf("ol:lineage:graph:%s:%s:%s:%d", datasetID, fieldName, direction, maxDepth)
+}
+
+func LineageKey(datasetID, fieldName, direction string, maxDepth int) string {
+    return fmt.Sprintf("ol:lineage:%s:%s:%s:%d", datasetID, fieldName, direction, maxDepth)
+}
+
+func StatisticsKey(datasetID string) string {
+    return fmt.Sprintf("ol:stats:%s", datasetID)
+}
+
+func DDLKey(datasetID string) string {
+    return fmt.Sprintf("ol:ddl:%s", datasetID)
+}
+```
+
+### TTL Recommendations
+
+| Data Category | TTL | Rationale |
+|---------------|-----|-----------|
+| Namespaces | 1 hour (3600s) | Infrastructure-level, almost never changes |
+| Datasets (list) | 15 minutes (900s) | New tables can be added, moderate staleness acceptable |
+| Dataset (single) | 30 minutes (1800s) | Metadata is relatively stable |
+| Fields | 30 minutes (1800s) | Schema changes are infrequent |
+| Lineage graph | 30 minutes (1800s) | Lineage mappings change only when ETL processes are re-analyzed |
+| Statistics | 5 minutes (300s) | Row counts and sizes change with DML activity |
+| DDL | 30 minutes (1800s) | DDL changes are infrequent |
+
+---
+
+## Dependency Wiring in main.go
+
+### Updated Startup Flow
+
+```go
+// cmd/server/main.go
+
+// 1. Initialize cache (Redis or NoOp fallback)
+var cache domain.CacheRepository
+redisCacheRepo, err := redis.NewCacheRepository(cfg.Redis)
+if err != nil {
+    log.Printf("Redis unavailable, running without cache: %v", err)
+    cache = redis.NewNoOpCache()
+} else {
+    log.Printf("Redis connected at %s", cfg.Redis.Addr)
+    cache = redisCacheRepo
+    defer redisCacheRepo.Close()
+}
+
+// 2. Create base repositories (unchanged)
+assetRepo := teradata.NewAssetRepository(db)
+lineageRepo := teradata.NewLineageRepository(db, assetRepo)
+searchRepo := teradata.NewSearchRepository(db)
+olRepo := teradata.NewOpenLineageRepository(db)
+
+// 3. Wrap with cache decorators
+ttlConfig := cached.TTLConfig{
+    Namespace: 3600, Dataset: 1800, Field: 1800,
+    Lineage: 1800, Statistics: 300, DDL: 1800, Search: 0,
+}
+cachedOLRepo := cached.NewCachedOpenLineageRepository(olRepo, cache, ttlConfig)
+// Similarly for other repos if desired
+
+// 4. Create services (they receive the cached decorator, same interface)
+olService := application.NewOpenLineageService(cachedOLRepo)
+```
+
+### Key Insight: No Service or Handler Changes
+
+Because the cached repository implements the same `domain.OpenLineageRepository` interface, the service and handler layers require **zero changes**. The cache is invisible to everything above the adapter layer.
+
+---
+
+## Error Handling Strategy
+
+### Principle: Cache Errors Are Never User-Visible
+
+| Scenario | Behavior |
+|----------|----------|
+| Redis connection refused at startup | Log warning, use `NoOpCache`, application runs uncached |
+| Redis goes down mid-operation (Get fails) | Treat as cache miss, query Teradata, log warning |
+| Redis goes down mid-operation (Set fails) | Log warning, return Teradata result as normal |
+| Redis returns corrupted data (unmarshal fails) | Treat as cache miss, query Teradata, log error |
+| Teradata fails (regardless of cache) | Return error to caller (this is the real failure) |
+| Cache hit with stale data | Return cached data (TTL handles staleness) |
+
+### Sentinel Error Usage
+
+The existing `redis.ErrCacheMiss` and the standard `redis.Nil` from the `go-redis` library serve as sentinel errors for cache misses. The decorator should handle both:
+
+```go
+if err := r.cache.Get(ctx, key, &result); err == nil {
+    return &result, nil  // Cache hit
+}
+// Any error (ErrCacheMiss, redis.Nil, network error) = fall through to database
+```
+
+There is no need to distinguish cache miss from cache error in the decorator. Both result in a database query. The distinction only matters for logging/metrics.
+
+---
+
+## Testing Strategy
+
+### Unit Testing the Decorator
+
+Tests use the existing `MockCacheRepository` and `MockOpenLineageRepository`:
+
+```go
+func TestCachedRepo_CacheHit(t *testing.T) {
+    mockCache := mocks.NewMockCacheRepository()
+    mockRepo := mocks.NewMockOpenLineageRepository()
+
+    // Pre-populate cache
+    mockCache.Data["ol:ns:list"] = []byte(`[...]`)
+
+    cachedRepo := cached.NewCachedOpenLineageRepository(mockRepo, mockCache, defaultTTL)
+
+    result, err := cachedRepo.ListNamespaces(ctx)
+
+    assert.NoError(t, err)
+    // Verify mockRepo was NOT called (cache hit)
+    // Verify mockCache.GetCalls contains the expected key
+}
+
+func TestCachedRepo_CacheMiss_PopulatesCache(t *testing.T) {
+    mockCache := mocks.NewMockCacheRepository()
+    mockRepo := mocks.NewMockOpenLineageRepository()
+    mockRepo.Namespaces = []domain.OpenLineageNamespace{...}
+
+    cachedRepo := cached.NewCachedOpenLineageRepository(mockRepo, mockCache, defaultTTL)
+
+    result, err := cachedRepo.ListNamespaces(ctx)
+
+    assert.NoError(t, err)
+    assert.NotEmpty(t, result)
+    // Verify mockCache.SetCalls contains the expected key (cache was populated)
+}
+
+func TestCachedRepo_CacheError_FallsThrough(t *testing.T) {
+    mockCache := mocks.NewMockCacheRepository()
+    mockCache.GetErr = errors.New("redis connection refused")
+    mockRepo := mocks.NewMockOpenLineageRepository()
+    mockRepo.Namespaces = []domain.OpenLineageNamespace{...}
+
+    cachedRepo := cached.NewCachedOpenLineageRepository(mockRepo, mockCache, defaultTTL)
+
+    result, err := cachedRepo.ListNamespaces(ctx)
+
+    assert.NoError(t, err)  // Cache error is invisible to caller
+    assert.NotEmpty(t, result)  // Data came from Teradata
+}
+```
+
+### Note on MockCacheRepository Limitation
+
+The current `MockCacheRepository.Get()` method (lines 417-436 in mocks) does not actually deserialize data into `dest`. It just returns nil if the key exists. For full decorator testing, the mock will need enhancement to store and return actual JSON-serialized data. This is a minor enhancement to the existing mock.
 
 ---
 
 ## Patterns to Follow
 
-### Pattern 1: Zustand Selector with useShallow
+### Pattern 1: Cache-Aside with Composition
 
-**What:** Prevent re-renders when selecting multiple values from store
-**When:** Component needs multiple store values
-**Example:**
+**What:** Decorator struct embeds the inner repository interface and a cache interface
+**When:** Adding caching to any repository
+**Why:** Transparent to consumers, testable, composable
 
-```typescript
-import { useShallow } from 'zustand/react/shallow';
+### Pattern 2: Non-Fatal Cache Operations
 
-const { selectedAssetId, highlightedNodeIds } = useLineageStore(
-  useShallow((state) => ({
-    selectedAssetId: state.selectedAssetId,
-    highlightedNodeIds: state.highlightedNodeIds,
-  }))
-);
-```
+**What:** All cache errors are logged, never returned
+**When:** Any cache Get/Set operation
+**Why:** Cache is an optimization, not a requirement
 
-### Pattern 2: Effect-Based State Derivation
+### Pattern 3: Context-Based Cache Control
 
-**What:** Compute derived state (highlight sets) in useEffect, not during render
-**When:** Expensive computation based on selection change
-**Current implementation (correct):**
+**What:** Use `context.Value` for cache bypass signals
+**When:** Force-refresh, admin operations
+**Why:** Avoids changing domain interfaces for cross-cutting concerns
 
-```typescript
-// LineageGraph.tsx lines 249-255
-useEffect(() => {
-  if (selectedAssetId) {
-    const { highlightedNodes, highlightedEdges } = highlightPath(selectedAssetId);
-    setHighlightedPath(highlightedNodes, highlightedEdges);
-    openPanel('node');
-  }
-}, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
-```
+### Pattern 4: Typed Cache Keys with Dedicated Functions
 
-### Pattern 3: Lazy Data Fetching for Panel
-
-**What:** Only fetch extended data when needed
-**When:** User opens panel and stays on it
-**Example:**
-
-```typescript
-const [shouldFetch, setShouldFetch] = useState(false);
-
-useEffect(() => {
-  if (!isPanelOpen) {
-    setShouldFetch(false);
-    return;
-  }
-  const timer = setTimeout(() => setShouldFetch(true), 300);
-  return () => clearTimeout(timer);
-}, [isPanelOpen, selectedAssetId]);
-
-const { data: metadata } = useColumnMetadata(shouldFetch ? selectedAssetId : null);
-```
+**What:** Key generation in a separate file with strongly-typed functions
+**When:** Any cache key construction
+**Why:** Prevents typo-based key collisions, makes key format discoverable
 
 ---
 
 ## Anti-Patterns to Avoid
 
-### Anti-Pattern 1: React Flow Selection for Application Selection
+### Anti-Pattern 1: Caching in the Service Layer
 
-**Problem:** Using React Flow's `selected` node property for single-select with panel
-**Why bad:** React Flow selection is designed for multi-select drag operations, not application-level selection
-**Do this instead:** Use Zustand store for application selection state
+**What:** Adding `if cache.Get(key); hit { return cached } ... cache.Set(key, result)` to every service method
+**Why bad:** Violates single responsibility. Services become a mix of orchestration and caching logic. Every service method grows by 10-15 lines of boilerplate. Tests become complex (mock both repo AND cache).
+**Instead:** Use repository decorator. Services stay thin.
 
-### Anti-Pattern 2: Recursive Graph Traversal
+### Anti-Pattern 2: HTTP Response Middleware Caching
 
-**Problem:** Recursive functions for graph traversal in graphs with cycles
-**Why bad:** Stack overflow on cyclic graphs
-**Do this instead:** Iterative DFS with visited set (already implemented correctly)
+**What:** Caching serialized JSON responses at the HTTP layer
+**Why bad:** Loses type safety. Cannot selectively cache by endpoint without complex URL pattern matching. Cannot reuse cached data across different services. Cache invalidation requires URL knowledge.
+**Instead:** Cache domain entities in the repository decorator.
 
-### Anti-Pattern 3: Storing Highlight State in Components
+### Anti-Pattern 3: Modifying Domain Interfaces for Cache
 
-**Problem:** Each TableNode/ColumnRow maintaining own highlight state
-**Why bad:** State synchronization nightmare, unnecessary re-renders
-**Do this instead:** Single source of truth in Zustand, components read via selectors
+**What:** Adding `GetCached()`, `RefreshCache()`, or cache-specific parameters to repository interfaces
+**Why bad:** Pollutes the domain layer with infrastructure concerns. Every repository implementation must handle cache parameters. Violates hexagonal architecture principles.
+**Instead:** Use context values for cache hints. Decorator handles cache logic transparently.
 
-### Anti-Pattern 4: Fetching Data on Every Selection
+### Anti-Pattern 4: Caching Nil/Not-Found Results
 
-**Problem:** Calling API on every column click
-**Why bad:** Unnecessary network requests, poor UX with loading spinners
-**Do this instead:** Use cached graph data for basic info, lazy-load extended metadata
+**What:** Storing "not found" in cache to prevent repeated empty queries
+**Why bad:** If an entity is created after the negative cache entry, users see stale "not found" until TTL expires. For lineage data where new tables/columns can be added, this creates confusing user experiences.
+**Instead:** Only cache positive results. Let "not found" always hit the database. Consider negative caching as a separate future optimization with very short TTLs if needed.
+
+### Anti-Pattern 5: Single Global TTL
+
+**What:** Using one TTL value for all cached data
+**Why bad:** Namespaces (rarely change) and statistics (change frequently) have very different staleness tolerances. A TTL appropriate for statistics would cause excessive cache misses for namespaces, and vice versa.
+**Instead:** Use `TTLConfig` with per-category TTL values.
 
 ---
 
 ## Scalability Considerations
 
-| Graph Size | Current Behavior | Recommendation |
-|------------|------------------|----------------|
-| < 50 nodes | Full render, fast selection | No changes needed |
-| 50-200 nodes | Virtualization enabled, smooth | No changes needed |
-| 200-500 nodes | May see slight delay on highlight | Consider limiting traversal depth |
-| > 500 nodes | Large graph warning shown | Suggest reducing depth, filtering by database |
+| Concern | Current (No Cache) | With Redis Cache | At Scale |
+|---------|-------------------|------------------|----------|
+| Lineage query latency | 200-2000ms (recursive CTE) | <5ms cache hit | Cache hit ratio improves with repeated queries |
+| Teradata connection load | Every request = DB query | Cache hits bypass DB | Significant DB load reduction |
+| Redis memory usage | N/A | ~1-10MB for typical lineage dataset | Monitor with Redis INFO memory |
+| Cache coherence | N/A | TTL-based expiration | Acceptable for read-heavy lineage data |
+| Multi-instance consistency | N/A | Redis is shared across instances | Natural benefit of centralized cache |
 
-**For very large graphs (500+ nodes):**
-1. Current `LargeGraphWarning` component already prompts user to reduce depth
-2. Consider adding option to highlight only direct connections (not full path)
-3. Consider server-side path computation for extremely large graphs
+---
+
+## Build Order Recommendation
+
+Based on dependency analysis and existing infrastructure:
+
+### Step 1: Cache Key Module (Low Risk, No Dependencies)
+- Create `internal/adapter/outbound/cached/keys.go`
+- Create `internal/adapter/outbound/cached/keys_test.go`
+- Pure functions, fully testable in isolation
+
+### Step 2: TTL Configuration
+- Add `TTLConfig` struct to the cached package
+- Wire TTL defaults into `infrastructure/config/config.go`
+- Add `CACHE_TTL_*` environment variables
+
+### Step 3: CachedOpenLineageRepository (Highest Value)
+- Start with `GetColumnLineageGraph` (most expensive query, biggest win)
+- Add `GetDataset`, `ListDatasets`, `ListFields`, `ListNamespaces`
+- Comprehensive tests using existing mocks
+
+### Step 4: Wire into main.go
+- Add Redis initialization with NoOpCache fallback
+- Replace `olRepo` with `cachedOLRepo` in service construction
+- Zero changes to services or handlers
+
+### Step 5: CachedAssetRepository and CachedLineageRepository
+- Apply same pattern to v1 API repositories
+- Lower priority since v2 (OpenLineage) is the primary API
+
+### Step 6: Force-Refresh Support
+- Add context helper functions
+- Add `?refresh=true` query parameter handling in handlers
+- Decorator checks context for refresh signal
+
+### Step 7: Observability
+- Add cache hit/miss counters (structured logging initially, metrics later)
+- Add `X-Cache: HIT` / `X-Cache: MISS` response header for debugging
+- Monitor cache hit ratio in logs
+
+---
+
+## Component Boundaries Summary
+
+| Component | Responsibility | Changes Needed |
+|-----------|---------------|----------------|
+| `domain/repository.go` | Define interfaces | NONE -- CacheRepository already exists |
+| `domain/entities.go` | Define types | NONE -- entities already have json tags |
+| `application/*_service.go` | Orchestration | NONE -- receives same interface |
+| `adapter/inbound/http/*` | HTTP handling | MINOR -- add refresh param parsing |
+| `adapter/outbound/redis/` | Redis client | NONE -- already implemented |
+| `adapter/outbound/cached/` | Cache decorators | NEW -- this is the core work |
+| `adapter/outbound/teradata/` | SQL execution | NONE -- unchanged |
+| `cmd/server/main.go` | Wiring | MINOR -- add cache init + decorator wiring |
+| `infrastructure/config/` | Configuration | MINOR -- add TTL config |
+| `domain/mocks/` | Test mocks | MINOR -- enhance MockCacheRepository |
 
 ---
 
 ## Sources
 
-- [Using a State Management Library - React Flow](https://reactflow.dev/learn/advanced-use/state-management) - Official Zustand integration guide
-- [Computing Flows - React Flow](https://reactflow.dev/learn/advanced-use/computing-flows) - Graph traversal utilities (getIncomers, getOutgoers)
-- [Highlight path of selected node - GitHub Issue #984](https://github.com/wbkd/react-flow/issues/984) - Community patterns for path highlighting
-- [Performance - React Flow](https://reactflow.dev/learn/advanced-use/performance) - Virtualization and optimization
-- [State Management Trends in React 2025](https://makersden.io/blog/react-state-management-in-2025) - Zustand best practices
-- Existing codebase: `lineage-ui/src/components/domain/LineageGraph/hooks/useLineageHighlight.ts`
-- Existing codebase: `lineage-ui/src/stores/useLineageStore.ts`
-- Existing tests: `lineage-ui/src/components/domain/LineageGraph/hooks/useLineageHighlight.test.ts`
+- Existing codebase: `internal/domain/repository.go` -- CacheRepository interface (HIGH confidence)
+- Existing codebase: `internal/adapter/outbound/redis/cache.go` -- Redis + NoOpCache implementation (HIGH confidence)
+- Existing codebase: `internal/domain/mocks/repositories.go` -- MockCacheRepository (HIGH confidence)
+- Existing codebase: `cmd/server/main.go` -- Current dependency wiring (HIGH confidence)
+- Existing codebase: `internal/application/openlineage_service.go` -- Service layer pattern (HIGH confidence)
+- [Cache-Aside using Decorator Design Pattern in Go](http://stdout.alesr.me/posts/cache-aside-using-decorator-design-pattern-in-go/) -- Decorator pattern reference (MEDIUM confidence)
+- [Repository Pattern in Golang: Redis and External API as providers](https://jorzel.github.io/repository-pattern-in-golang-redis-and-external-api-as-providers/) -- Redis repository composition (MEDIUM confidence)
+- [Go Project Structure: Clean Architecture Patterns](https://dasroot.net/posts/2026/01/go-project-structure-clean-architecture/) -- 2026 Go architecture patterns (MEDIUM confidence)
+- [Hexagonal Architecture in Go](https://skoredin.pro/blog/golang/hexagonal-architecture-go) -- Adapter layer organization (MEDIUM confidence)
+- [Redis Go Client Error Handling](https://redis.io/docs/latest/develop/clients/go/error-handling/) -- go-redis error handling (HIGH confidence)
+- Existing `go.mod`: go-redis/v9 v9.4.0 confirmed as dependency (HIGH confidence)
 
 ---
 
-*Architecture research for: Interactive Graph Features (v4.0)*
-*Researched: 2026-02-01*
+*Architecture research for: Redis Caching Integration (v6.0 milestone)*
+*Researched: 2026-02-12*
