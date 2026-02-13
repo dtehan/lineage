@@ -1,1 +1,2 @@
-server
+# Server binary (built by `make build`)
+/bin/server

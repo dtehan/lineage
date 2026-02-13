@@ -65,7 +65,7 @@ func main() {
 
 	// OpenLineage repository, service, and handler
 	olRepo := teradata.NewOpenLineageRepository(db)
-	cachedOLRepo := redisAdapter.NewCachedOpenLineageRepository(olRepo, cacheRepo, 300) // 5-min TTL
+	cachedOLRepo := redisAdapter.NewCachedOpenLineageRepository(olRepo, cacheRepo, cfg.CacheTTL)
 	olService := application.NewOpenLineageService(cachedOLRepo)
 	olHandler := httpAdapter.NewOpenLineageHandler(olService)
 
