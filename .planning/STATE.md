@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Enable new teams to deploy and operate the lineage application using documentation alone.
-**Current focus:** v6.0 Redis Caching Layer - Phase 30 complete, ready for Phase 31
+**Current focus:** v6.0 Redis Caching Layer - Phase 31 complete, milestone complete
 
 ## Current Position
 
-Milestone: v6.0 Redis Caching Layer (ACTIVE)
-Phase: 30 of 31 (Graceful Degradation)
+Milestone: v6.0 Redis Caching Layer (COMPLETE)
+Phase: 31 of 31 (Cache Control & Observability)
 Plan: 1 of 1 in current phase
-Status: Phase complete
-Last activity: 2026-02-12 -- Completed 30-01-PLAN.md (graceful degradation)
+Status: Milestone complete
+Last activity: 2026-02-12 -- Completed 31-01-PLAN.md (cache control & observability)
 
-Progress: [█████████░] 90%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 69 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 5)
+- Total plans completed: 70 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 6)
 - Average plan duration: ~3.3 min
-- Total execution time: ~227 min
+- Total execution time: ~232 min
 
 **By Milestone:**
 
@@ -34,7 +34,7 @@ Progress: [█████████░] 90%
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
 | v5.0 | 4 | 9 | ~30 min |
-| v6.0 | 4 | ~7 | ~16 min |
+| v6.0 | 4 | 6 | ~21 min |
 
 **Recent Trend:**
 - v6.0 Plan 28-01: 2 min
@@ -42,6 +42,7 @@ Progress: [█████████░] 90%
 - v6.0 Plan 29-01: 2 min
 - v6.0 Plan 29-02: 6 min
 - v6.0 Plan 30-01: 2 min
+- v6.0 Plan 31-01: 5 min
 - Trend: Stable velocity
 
 *Updated after each plan completion*
@@ -53,6 +54,11 @@ Progress: [█████████░] 90%
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [31-01]: CacheMetadata uses pointer in context -- repository writes visible to middleware without re-injecting
+- [31-01]: contextKey type unexported; only exported helper functions cross package boundaries
+- [31-01]: CacheControl middleware mounted only on v2 route group -- v1/health/jobs/runs get no X-Cache headers
+- [31-01]: X-Cache-TTL only on HIT with TTL >= 0; MISS responses omit TTL header
+- [31-01]: Bypass signal stored as separate context key (not on CacheMetadata) for separation of concerns
 - [30-01]: defer redisRepo.Close() inside else block only -- no cleanup needed for NoOpCache path
 - [30-01]: slog.Warn (not slog.Error) for Redis unavailability -- cache is optional infrastructure
 - [30-01]: slog.Info on Redis success so operators can confirm cache is active
@@ -85,5 +91,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Phase 30 complete -- ready for Phase 31 (cache control & observability)
+Stopped at: v6.0 Redis Caching Layer milestone complete
 Resume file: None
