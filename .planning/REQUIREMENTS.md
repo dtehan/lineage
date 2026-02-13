@@ -25,11 +25,11 @@ Requirements for Redis caching integration. Each maps to roadmap phases.
 
 ### Graceful Degradation
 
-- [ ] **DEGRADE-01**: Application starts successfully when Redis is unavailable
-- [ ] **DEGRADE-02**: API requests complete successfully when Redis is down (bypass cache, query Teradata)
-- [ ] **DEGRADE-03**: Redis connection errors never cause API error responses
-- [ ] **DEGRADE-04**: Redis errors are logged with WARNING level but don't propagate to clients
-- [ ] **DEGRADE-05**: NoOpCache fallback is used when Redis connection fails
+- [x] **DEGRADE-01**: Application starts successfully when Redis is unavailable
+- [x] **DEGRADE-02**: API requests complete successfully when Redis is down (bypass cache, query Teradata)
+- [x] **DEGRADE-03**: Redis connection errors never cause API error responses
+- [x] **DEGRADE-04**: Redis errors are logged with WARNING level but don't propagate to clients
+- [x] **DEGRADE-05**: NoOpCache fallback is used when Redis connection fails
 
 ### Cache Control
 
@@ -94,11 +94,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | KEY-03 | Phase 29 | Complete |
 | KEY-04 | Phase 29 | Complete |
 | KEY-05 | Phase 29 | Complete |
-| DEGRADE-01 | Phase 30 | Pending |
-| DEGRADE-02 | Phase 30 | Pending |
-| DEGRADE-03 | Phase 30 | Pending |
-| DEGRADE-04 | Phase 30 | Pending |
-| DEGRADE-05 | Phase 30 | Pending |
+| DEGRADE-01 | Phase 30 | Complete |
+| DEGRADE-02 | Phase 30 | Complete |
+| DEGRADE-03 | Phase 30 | Complete |
+| DEGRADE-04 | Phase 30 | Complete |
+| DEGRADE-05 | Phase 30 | Complete |
 | CONTROL-01 | Phase 31 | Pending |
 | CONTROL-02 | Phase 31 | Pending |
 | CONTROL-03 | Phase 31 | Pending |
