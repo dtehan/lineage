@@ -842,3 +842,111 @@ func TestCachedGetDataset_JSONRoundTrip(t *testing.T) {
 	assert.Len(t, mockCache.SetCalls, 1)
 	assert.Len(t, mockCache.GetCalls, 2)
 }
+
+// --- Graceful degradation integration test ---
+
+// TestCachedRepoWithNoOpCache_AllMethodsReturnData proves the complete graceful
+// degradation path: when the application starts without Redis, NoOpCache always
+// returns cache miss, and every cached method falls through to the inner repository
+// and returns correct data. This is the core guarantee of Phase 30.
+func TestCachedRepoWithNoOpCache_AllMethodsReturnData(t *testing.T) {
+	mockInner := mocks.NewMockOpenLineageRepository()
+	noopCache := NewNoOpCache()
+	ttls := CacheTTLConfig{LineageTTL: 300, AssetTTL: 300, StatisticsTTL: 300, DDLTTL: 300, SearchTTL: 300}
+
+	repo := NewCachedOpenLineageRepository(mockInner, noopCache, ttls)
+	ctx := context.Background()
+
+	// Seed inner repo with representative data for all cached methods
+	mockInner.Namespaces = []domain.OpenLineageNamespace{
+		{ID: "1", URI: "teradata://host:1025"},
+	}
+	mockInner.Datasets = []domain.OpenLineageDataset{
+		{ID: "42", NamespaceID: "1", Name: "demo_user.customers", SourceType: "TABLE", IsActive: true},
+	}
+	mockInner.Fields = []domain.OpenLineageField{
+		{ID: "f1", DatasetID: "42", Name: "customer_id", Type: "INTEGER"},
+	}
+	mockInner.GraphData["42/customer_id"] = testGraph()
+	rowCount := int64(1000)
+	mockInner.Statistics["42"] = &domain.DatasetStatistics{
+		DatasetID: "42", DatabaseName: "demo_user", TableName: "customers",
+		SourceType: "TABLE", RowCount: &rowCount,
+	}
+	mockInner.DDLData["42"] = &domain.DatasetDDL{
+		DatasetID: "42", DatabaseName: "demo_user", TableName: "customers",
+		SourceType: "TABLE", TableDDL: "CREATE TABLE customers (id INTEGER)",
+	}
+
+	// 1. ListNamespaces
+	t.Run("ListNamespaces", func(t *testing.T) {
+		result, err := repo.ListNamespaces(ctx)
+		require.NoError(t, err)
+		assert.Len(t, result, 1)
+		assert.Equal(t, "teradata://host:1025", result[0].URI)
+	})
+
+	// 2. GetNamespace
+	t.Run("GetNamespace", func(t *testing.T) {
+		result, err := repo.GetNamespace(ctx, "1")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "1", result.ID)
+	})
+
+	// 3. ListDatasets
+	t.Run("ListDatasets", func(t *testing.T) {
+		datasets, total, err := repo.ListDatasets(ctx, "1", 10, 0)
+		require.NoError(t, err)
+		assert.Len(t, datasets, 1)
+		assert.Equal(t, 1, total)
+	})
+
+	// 4. GetDataset
+	t.Run("GetDataset", func(t *testing.T) {
+		result, err := repo.GetDataset(ctx, "42")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, "demo_user.customers", result.Name)
+	})
+
+	// 5. SearchDatasets
+	t.Run("SearchDatasets", func(t *testing.T) {
+		results, err := repo.SearchDatasets(ctx, "customers", 10)
+		require.NoError(t, err)
+		assert.Len(t, results, 1)
+	})
+
+	// 6. ListFields
+	t.Run("ListFields", func(t *testing.T) {
+		result, err := repo.ListFields(ctx, "42")
+		require.NoError(t, err)
+		assert.Len(t, result, 1)
+		assert.Equal(t, "customer_id", result[0].Name)
+	})
+
+	// 7. GetColumnLineageGraph
+	t.Run("GetColumnLineageGraph", func(t *testing.T) {
+		result, err := repo.GetColumnLineageGraph(ctx, "42", "customer_id", "both", 5)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Len(t, result.Nodes, 2)
+		assert.Len(t, result.Edges, 1)
+	})
+
+	// 8. GetDatasetStatistics
+	t.Run("GetDatasetStatistics", func(t *testing.T) {
+		result, err := repo.GetDatasetStatistics(ctx, "42")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, int64(1000), *result.RowCount)
+	})
+
+	// 9. GetDatasetDDL
+	t.Run("GetDatasetDDL", func(t *testing.T) {
+		result, err := repo.GetDatasetDDL(ctx, "42")
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Contains(t, result.TableDDL, "CREATE TABLE")
+	})
+}

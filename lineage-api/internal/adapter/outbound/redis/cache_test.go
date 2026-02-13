@@ -47,6 +47,14 @@ func TestNoOpCache(t *testing.T) {
 		assert.NoError(t, err)
 		assert.False(t, exists)
 	})
+
+	// Test Close does nothing and returns nil
+	t.Run("Close does nothing and returns nil", func(t *testing.T) {
+		// Access concrete type for Close() since domain.CacheRepository doesn't include it
+		noopConcrete := &NoOpCache{}
+		err := noopConcrete.Close()
+		assert.NoError(t, err)
+	})
 }
 
 // Test NoOpCache implements CacheRepository interface
