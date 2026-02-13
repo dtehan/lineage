@@ -42,12 +42,22 @@ func NewCachedOpenLineageRepository(
 // produce supersets of shallower ones).
 func (r *CachedOpenLineageRepository) GetColumnLineageGraph(ctx context.Context, datasetID, fieldName string, direction string, maxDepth int) (*domain.OpenLineageGraph, error) {
 	key := LineageGraphKey(datasetID, fieldName, direction)
+	md := GetCacheMetadata(ctx)
 
-	// Try cache first
-	var cached domain.OpenLineageGraph
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return &cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached domain.OpenLineageGraph
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return &cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -66,6 +76,11 @@ func (r *CachedOpenLineageRepository) GetColumnLineageGraph(ctx context.Context,
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.LineageTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.LineageTTL
+	}
 
 	return graph, nil
 }
@@ -76,12 +91,22 @@ func (r *CachedOpenLineageRepository) GetColumnLineageGraph(ctx context.Context,
 // Key: ol:dataset:get:{datasetID}
 func (r *CachedOpenLineageRepository) GetDataset(ctx context.Context, datasetID string) (*domain.OpenLineageDataset, error) {
 	key := DatasetKey(datasetID)
+	md := GetCacheMetadata(ctx)
 
-	// Try cache first
-	var cached domain.OpenLineageDataset
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return &cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached domain.OpenLineageDataset
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return &cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -100,6 +125,11 @@ func (r *CachedOpenLineageRepository) GetDataset(ctx context.Context, datasetID 
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.AssetTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.AssetTTL
+	}
 
 	return dataset, nil
 }
@@ -109,11 +139,22 @@ func (r *CachedOpenLineageRepository) GetDataset(ctx context.Context, datasetID 
 // Key: ol:namespace:list
 func (r *CachedOpenLineageRepository) ListNamespaces(ctx context.Context) ([]domain.OpenLineageNamespace, error) {
 	key := NamespacesKey()
+	md := GetCacheMetadata(ctx)
 
-	var cached []domain.OpenLineageNamespace
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached []domain.OpenLineageNamespace
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -130,6 +171,11 @@ func (r *CachedOpenLineageRepository) ListNamespaces(ctx context.Context) ([]dom
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.AssetTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.AssetTTL
+	}
 
 	return result, nil
 }
@@ -139,11 +185,22 @@ func (r *CachedOpenLineageRepository) ListNamespaces(ctx context.Context) ([]dom
 // Key: ol:namespace:get:{namespaceID}
 func (r *CachedOpenLineageRepository) GetNamespace(ctx context.Context, namespaceID string) (*domain.OpenLineageNamespace, error) {
 	key := NamespaceKey(namespaceID)
+	md := GetCacheMetadata(ctx)
 
-	var cached domain.OpenLineageNamespace
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return &cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached domain.OpenLineageNamespace
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return &cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -159,6 +216,11 @@ func (r *CachedOpenLineageRepository) GetNamespace(ctx context.Context, namespac
 		slog.WarnContext(ctx, "cache set failed", "key", key, "error", setErr)
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.AssetTTL)
+	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.AssetTTL
 	}
 
 	return result, nil
@@ -177,11 +239,22 @@ type listDatasetsResult struct {
 // Key: ol:dataset:list:{namespaceID}|{limit}|{offset}
 func (r *CachedOpenLineageRepository) ListDatasets(ctx context.Context, namespaceID string, limit, offset int) ([]domain.OpenLineageDataset, int, error) {
 	key := DatasetsKey(namespaceID, limit, offset)
+	md := GetCacheMetadata(ctx)
 
-	var cached listDatasetsResult
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return cached.Datasets, cached.Total, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached listDatasetsResult
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return cached.Datasets, cached.Total, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -199,6 +272,11 @@ func (r *CachedOpenLineageRepository) ListDatasets(ctx context.Context, namespac
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.AssetTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.AssetTTL
+	}
 
 	return datasets, total, nil
 }
@@ -210,11 +288,22 @@ func (r *CachedOpenLineageRepository) ListDatasets(ctx context.Context, namespac
 // Key: ol:dataset:search:{QUERY}|{limit}
 func (r *CachedOpenLineageRepository) SearchDatasets(ctx context.Context, query string, limit int) ([]domain.OpenLineageDataset, error) {
 	key := DatasetSearchKey(query, limit)
+	md := GetCacheMetadata(ctx)
 
-	var cached []domain.OpenLineageDataset
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached []domain.OpenLineageDataset
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -231,6 +320,11 @@ func (r *CachedOpenLineageRepository) SearchDatasets(ctx context.Context, query 
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.SearchTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.SearchTTL
+	}
 
 	return result, nil
 }
@@ -240,11 +334,22 @@ func (r *CachedOpenLineageRepository) SearchDatasets(ctx context.Context, query 
 // Key: ol:field:list:{datasetID}
 func (r *CachedOpenLineageRepository) ListFields(ctx context.Context, datasetID string) ([]domain.OpenLineageField, error) {
 	key := FieldsKey(datasetID)
+	md := GetCacheMetadata(ctx)
 
-	var cached []domain.OpenLineageField
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached []domain.OpenLineageField
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -261,6 +366,11 @@ func (r *CachedOpenLineageRepository) ListFields(ctx context.Context, datasetID 
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.AssetTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.AssetTTL
+	}
 
 	return result, nil
 }
@@ -270,11 +380,22 @@ func (r *CachedOpenLineageRepository) ListFields(ctx context.Context, datasetID 
 // Key: ol:dataset:statistics:{datasetID}
 func (r *CachedOpenLineageRepository) GetDatasetStatistics(ctx context.Context, datasetID string) (*domain.DatasetStatistics, error) {
 	key := DatasetStatisticsKey(datasetID)
+	md := GetCacheMetadata(ctx)
 
-	var cached domain.DatasetStatistics
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return &cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached domain.DatasetStatistics
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return &cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -291,6 +412,11 @@ func (r *CachedOpenLineageRepository) GetDatasetStatistics(ctx context.Context, 
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.StatisticsTTL)
 	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.StatisticsTTL
+	}
 
 	return result, nil
 }
@@ -300,11 +426,22 @@ func (r *CachedOpenLineageRepository) GetDatasetStatistics(ctx context.Context, 
 // Key: ol:dataset:ddl:{datasetID}
 func (r *CachedOpenLineageRepository) GetDatasetDDL(ctx context.Context, datasetID string) (*domain.DatasetDDL, error) {
 	key := DatasetDDLKey(datasetID)
+	md := GetCacheMetadata(ctx)
 
-	var cached domain.DatasetDDL
-	if err := r.cache.Get(ctx, key, &cached); err == nil {
-		slog.DebugContext(ctx, "cache hit", "key", key)
-		return &cached, nil
+	// Try cache first (skip on bypass)
+	if !IsCacheBypass(ctx) {
+		var cached domain.DatasetDDL
+		if err := r.cache.Get(ctx, key, &cached); err == nil {
+			slog.DebugContext(ctx, "cache hit", "key", key)
+			if md != nil {
+				md.Hit = true
+				md.Touched = true
+				if ttl, err := r.cache.TTL(ctx, key); err == nil {
+					md.TTL = ttl
+				}
+			}
+			return &cached, nil
+		}
 	}
 	slog.DebugContext(ctx, "cache miss", "key", key)
 
@@ -320,6 +457,11 @@ func (r *CachedOpenLineageRepository) GetDatasetDDL(ctx context.Context, dataset
 		slog.WarnContext(ctx, "cache set failed", "key", key, "error", setErr)
 	} else {
 		slog.DebugContext(ctx, "cache populated", "key", key, "ttl", r.ttls.DDLTTL)
+	}
+	if md != nil {
+		md.Hit = false
+		md.Touched = true
+		md.TTL = r.ttls.DDLTTL
 	}
 
 	return result, nil

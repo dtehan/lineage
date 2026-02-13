@@ -843,6 +843,203 @@ func TestCachedGetDataset_JSONRoundTrip(t *testing.T) {
 	assert.Len(t, mockCache.GetCalls, 2)
 }
 
+// --- Cache metadata and bypass tests ---
+
+func TestCachedGetColumnLineageGraph_BypassSkipsCacheRead(t *testing.T) {
+	repo, mockInner, mockCache := newTestCachedRepo()
+
+	// Pre-populate cache -- would be a hit under normal conditions
+	graph := testGraph()
+	data, err := json.Marshal(graph)
+	require.NoError(t, err)
+	mockCache.Data["ol:lineage:graph:42|customer_id|both"] = data
+	mockInner.GraphData["42/customer_id"] = graph
+
+	// Request with bypass
+	ctx := NewCacheMetadataContext(context.Background())
+	ctx = WithCacheBypass(ctx)
+
+	result, err := repo.GetColumnLineageGraph(ctx, "42", "customer_id", "both", 5)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Cache.Get was NOT called (bypass skipped it)
+	assert.Empty(t, mockCache.GetCalls)
+	// Cache.Set WAS called (fresh data stored)
+	assert.Len(t, mockCache.SetCalls, 1)
+
+	// Metadata reflects miss
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.False(t, md.Hit)
+	assert.True(t, md.Touched)
+	assert.Equal(t, 300, md.TTL) // LineageTTL from test config
+}
+
+func TestCachedGetColumnLineageGraph_CacheHitSetsMetadata(t *testing.T) {
+	repo, _, mockCache := newTestCachedRepo()
+
+	graph := testGraph()
+	data, err := json.Marshal(graph)
+	require.NoError(t, err)
+	mockCache.Data["ol:lineage:graph:42|customer_id|upstream"] = data
+	mockCache.TTLValue = 850
+
+	ctx := NewCacheMetadataContext(context.Background())
+
+	result, err := repo.GetColumnLineageGraph(ctx, "42", "customer_id", "upstream", 5)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.True(t, md.Hit)
+	assert.True(t, md.Touched)
+	assert.Equal(t, 850, md.TTL)
+}
+
+func TestCachedGetColumnLineageGraph_CacheMissSetsMetadata(t *testing.T) {
+	repo, mockInner, _ := newTestCachedRepo()
+
+	mockInner.GraphData["42/customer_id"] = testGraph()
+
+	ctx := NewCacheMetadataContext(context.Background())
+
+	result, err := repo.GetColumnLineageGraph(ctx, "42", "customer_id", "both", 5)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.False(t, md.Hit)
+	assert.True(t, md.Touched)
+	assert.Equal(t, 300, md.TTL) // LineageTTL from test config
+}
+
+func TestCachedGetColumnLineageGraph_NilMetadataDoesNotPanic(t *testing.T) {
+	repo, mockInner, _ := newTestCachedRepo()
+	mockInner.GraphData["42/customer_id"] = testGraph()
+
+	// Plain context with no metadata -- should not panic
+	ctx := context.Background()
+
+	result, err := repo.GetColumnLineageGraph(ctx, "42", "customer_id", "both", 5)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
+func TestCachedGetDataset_BypassSkipsCacheRead(t *testing.T) {
+	repo, mockInner, mockCache := newTestCachedRepo()
+
+	ds := testDataset()
+	data, err := json.Marshal(ds)
+	require.NoError(t, err)
+	mockCache.Data["ol:dataset:get:42"] = data
+	mockInner.Datasets = []domain.OpenLineageDataset{*ds}
+
+	ctx := NewCacheMetadataContext(context.Background())
+	ctx = WithCacheBypass(ctx)
+
+	result, err := repo.GetDataset(ctx, "42")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Empty(t, mockCache.GetCalls)
+	assert.Len(t, mockCache.SetCalls, 1)
+
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.False(t, md.Hit)
+	assert.True(t, md.Touched)
+	assert.Equal(t, 300, md.TTL) // AssetTTL
+}
+
+func TestCachedListNamespaces_BypassAndMetadata(t *testing.T) {
+	repo, mockInner, mockCache := newTestCachedRepo()
+
+	mockInner.Namespaces = []domain.OpenLineageNamespace{
+		{ID: "1", URI: "teradata://host:1025"},
+	}
+
+	// Pre-populate cache
+	data, err := json.Marshal(mockInner.Namespaces)
+	require.NoError(t, err)
+	mockCache.Data["ol:namespace:list"] = data
+
+	ctx := NewCacheMetadataContext(context.Background())
+	ctx = WithCacheBypass(ctx)
+
+	result, err := repo.ListNamespaces(ctx)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+
+	// Bypass: no Get calls, one Set call
+	assert.Empty(t, mockCache.GetCalls)
+	assert.Len(t, mockCache.SetCalls, 1)
+
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.False(t, md.Hit)
+	assert.True(t, md.Touched)
+}
+
+func TestCachedSearchDatasets_CacheHitSetsMetadata(t *testing.T) {
+	repo, _, mockCache := newTestCachedRepo()
+
+	datasets := []domain.OpenLineageDataset{
+		{ID: "10", NamespaceID: "1", Name: "db.table1"},
+	}
+	data, err := json.Marshal(datasets)
+	require.NoError(t, err)
+	mockCache.Data["ol:dataset:search:TABLE1|10"] = data
+	mockCache.TTLValue = 200
+
+	ctx := NewCacheMetadataContext(context.Background())
+
+	result, err := repo.SearchDatasets(ctx, "table1", 10)
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.True(t, md.Hit)
+	assert.True(t, md.Touched)
+	assert.Equal(t, 200, md.TTL)
+}
+
+func TestCachedGetDatasetDDL_BypassPopulatesCache(t *testing.T) {
+	repo, mockInner, mockCache := newTestCachedRepo()
+
+	mockInner.DDLData["42"] = &domain.DatasetDDL{
+		DatasetID: "42", DatabaseName: "demo_user", TableName: "customers",
+		SourceType: "TABLE", TableDDL: "CREATE TABLE customers (id INTEGER)",
+	}
+
+	// Pre-populate cache to prove bypass skips it
+	data, err := json.Marshal(mockInner.DDLData["42"])
+	require.NoError(t, err)
+	mockCache.Data["ol:dataset:ddl:42"] = data
+
+	ctx := NewCacheMetadataContext(context.Background())
+	ctx = WithCacheBypass(ctx)
+
+	result, err := repo.GetDatasetDDL(ctx, "42")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Empty(t, mockCache.GetCalls)
+	assert.Len(t, mockCache.SetCalls, 1)
+
+	md := GetCacheMetadata(ctx)
+	require.NotNil(t, md)
+	assert.False(t, md.Hit)
+	assert.True(t, md.Touched)
+	assert.Equal(t, 300, md.TTL) // DDLTTL
+}
+
 // --- Graceful degradation integration test ---
 
 // TestCachedRepoWithNoOpCache_AllMethodsReturnData proves the complete graceful
