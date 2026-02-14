@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 1 of 3 (Foundation Refactoring & Impact Analysis Core)
-Plan: 1 of 6 in current phase
+Plan: 2 of 6 in current phase
 Status: Executing
-Last activity: 2026-02-14 — Completed plan 01-01 (Repository Layer Extraction)
+Last activity: 2026-02-14 — Completed plan 01-02 (Service Layer Extraction)
 
-Progress: [██░░░░░░░░] 17%
+Progress: [████░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 3 min
-- Total execution time: 0.05 hours
+- Total plans completed: 2
+- Average duration: 2.5 min
+- Total execution time: 0.08 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01    | 1     | 3 min | 3 min    |
+| 01    | 2     | 5 min | 2.5 min  |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (3 min)
-- Trend: Initial baseline
+- Last 5 plans: 01-01 (3 min), 01-02 (2 min)
+- Trend: Consistent velocity
 
 *Updated after each plan completion*
 
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - Defer security to v2.0 (allows focus on Impact Analysis and observability)
 - [Phase 01-01]: Added TRIM() to CTE join conditions to prevent silent failures on Teradata CHAR columns
 - [Phase 01-01]: Include depth column in lineage CTE output for Impact Analysis (Plan 04) BFS traversal
+- [Phase 01-02]: Service layer returns dict shapes matching current API responses for backward compatibility
+- [Phase 01-02]: ImpactService default max_depth of 5 (conservative, matching column lineage)
+- [Phase 01-02]: Binary impact classification: direct (depth=1) vs indirect (depth>1)
 
 ### Pending Todos
 
@@ -82,8 +85,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-14 (plan 01-01 execution)
-Stopped at: Completed 01-01-PLAN.md (Repository Layer Extraction)
+Last session: 2026-02-14 (plan 01-02 execution)
+Stopped at: Completed 01-02-PLAN.md (Service Layer Extraction)
 Resume file: None
 
 ---
