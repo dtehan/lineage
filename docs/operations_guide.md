@@ -32,24 +32,6 @@ This guide enables an operations team to deploy the Lineage application from scr
 
 **Teradata QVCI:** The Teradata instance must have QVCI (Queryable View Column Index) enabled. This is a system-level configuration that requires DBA coordination and a database restart. If QVCI is not already enabled on your Teradata system, plan for a maintenance window before beginning deployment. See [Database Setup > Verify QVCI Status](#41-verify-qvci-status) for verification and enablement instructions.
 
-### Optional
-
-| Software | Minimum Version | Purpose |
-|----------|----------------|---------|
-| Go | 1.23+ | Only needed if running the Go backend instead of the Python backend |
-| Redis | 6+ | Optional caching layer; the application falls back gracefully without Redis |
-
-**Redis** is only beneficial for high-traffic production deployments. Most deployments do not need Redis. If Redis is unavailable, the application continues to operate normally without caching.
-
-### Backend Choice
-
-Both a Go backend and a Python (Flask) backend are provided. They serve the same API endpoints and are interchangeable.
-
-| Backend | Advantages | When to Use |
-|---------|-----------|-------------|
-| Python (Flask) | No compilation, simpler deployment, fewer prerequisites | Most deployments |
-| Go | Better performance, built-in Redis caching, structured JSON logging | High-concurrency production environments |
-
 ---
 
 ## Installation
@@ -71,7 +53,7 @@ source .venv/bin/activate        # Linux / macOS
 pip install -r requirements.txt
 ```
 
-The Python environment is required regardless of backend choice. It is used by the database setup scripts and the Python backend.
+The Python environment is required for both the backend server and the database setup scripts.
 
 **Python dependencies installed:** `teradatasql`, `flask`, `flask-cors`, `requests`, `python-dotenv`, `sqlglot`.
 
@@ -91,15 +73,6 @@ npm install
 npm run build        # Creates dist/ directory with production-ready static files
 ```
 
-### Step 5 (Optional): Build the Go Backend
-
-Only needed if you intend to run the Go backend instead of the Python backend.
-
-```bash
-cd lineage-api
-make build           # Creates bin/server binary
-```
-
 ---
 
 ## Configuration
@@ -110,66 +83,32 @@ Configuration values are resolved in the following order (highest precedence fir
 
 1. **Environment variables** -- Always take precedence
 2. **`.env` file** -- In the project root directory
-3. **`config.yaml`** -- Go backend only; in the `lineage-api/` directory
-4. **Default values** -- Built into the application
+3. **Default values** -- Built into the application
 
 ### Environment Variable Reference
 
-| Variable | Description | Default | Required | Used By |
-|----------|-------------|---------|----------|---------|
-| `TERADATA_HOST` | Teradata hostname or IP address | -- | Yes | All |
-| `TERADATA_USER` | Teradata username | `demo_user` | No | All |
-| `TERADATA_PASSWORD` | Teradata password | -- | Yes | All |
-| `TERADATA_DATABASE` | Default database name | `demo_user` | No | All |
-| `TERADATA_PORT` | Teradata port number | `1025` | No | All |
-| `API_PORT` | HTTP server port | `8080` | No | Backend |
-| `REDIS_ADDR` | Redis server address | `localhost:6379` | No | Go backend |
-| `REDIS_PASSWORD` | Redis password | (empty) | No | Go backend |
-| `REDIS_DB` | Redis database number | `0` | No | Go backend |
-| `VALIDATION_MAX_DEPTH_LIMIT` | Maximum traversal depth upper bound | `20` | No | Go backend |
-| `VALIDATION_DEFAULT_MAX_DEPTH` | Default lineage traversal depth | `5` | No | Go backend |
-| `VALIDATION_MIN_MAX_DEPTH` | Minimum traversal depth lower bound | `1` | No | Go backend |
-| `CACHE_TTL_LINEAGE` | Cache TTL for lineage graphs (seconds) | `1800` | No | Go backend |
-| `CACHE_TTL_ASSETS` | Cache TTL for asset listings (seconds) | `900` | No | Go backend |
-| `CACHE_TTL_STATISTICS` | Cache TTL for table statistics (seconds) | `900` | No | Go backend |
-| `CACHE_TTL_DDL` | Cache TTL for DDL definitions (seconds) | `1800` | No | Go backend |
-| `CACHE_TTL_SEARCH` | Cache TTL for search results (seconds) | `300` | No | Go backend |
-
-**"Used By" key:**
-- **All** = Python backend, Go backend, and database scripts
-- **Backend** = Both Python and Go backends
-- **Go backend** = Go backend only
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `TERADATA_HOST` | Teradata hostname or IP address | -- | Yes |
+| `TERADATA_USER` | Teradata username | `demo_user` | No |
+| `TERADATA_PASSWORD` | Teradata password | -- | Yes |
+| `TERADATA_DATABASE` | Default database name | `demo_user` | No |
+| `TERADATA_PORT` | Teradata port number | `1025` | No |
+| `API_PORT` | HTTP server port | `8080` | No |
 
 ### Legacy Variables (Fallbacks)
 
 The following legacy variable names are still supported as fallbacks. Use the primary names listed in the reference table above.
 
-| Legacy Variable | Replaced By | Notes |
-|----------------|-------------|-------|
-| `TD_HOST` | `TERADATA_HOST` | |
-| `TD_USER` | `TERADATA_USER` | |
-| `TD_PASSWORD` | `TERADATA_PASSWORD` | |
-| `TD_DATABASE` | `TERADATA_DATABASE` | |
-| `PORT` | `API_PORT` | |
+| Legacy Variable | Replaced By |
+|----------------|-------------|
+| `TD_HOST` | `TERADATA_HOST` |
+| `TD_USER` | `TERADATA_USER` |
+| `TD_PASSWORD` | `TERADATA_PASSWORD` |
+| `TD_DATABASE` | `TERADATA_DATABASE` |
+| `PORT` | `API_PORT` |
 
 If both the legacy and primary variable are set, the primary variable takes precedence.
-
-### Go Server Configuration File
-
-The Go backend optionally reads a `config.yaml` file from the `lineage-api/` directory. This file is not required. Any values set in environment variables or `.env` take precedence over `config.yaml`.
-
-### Server Timeouts (Go Backend)
-
-The Go backend has the following built-in timeouts:
-
-| Timeout | Value | Description |
-|---------|-------|-------------|
-| Read timeout | 15 seconds | Maximum time to read the full request |
-| Write timeout | 60 seconds | Maximum time to write the full response |
-| Idle timeout | 60 seconds | Maximum time to keep idle connections open |
-| Graceful shutdown | 30 seconds | Time allowed for in-flight requests to complete on shutdown |
-
-These timeouts are compiled into the binary and are not configurable via environment variables.
 
 ---
 
@@ -272,23 +211,12 @@ This populates `OL_NAMESPACE`, `OL_DATASET`, and `OL_DATASET_FIELD` records for 
 
 ### 5.1 Start the Backend
 
-#### Python Backend (recommended for most deployments)
-
 ```bash
 cd lineage-api
 python python_server.py        # Starts on port 8080 (or API_PORT)
 ```
 
-#### Go Backend
-
-```bash
-cd lineage-api
-make build && ./bin/server     # Build and run
-# Or run without building:
-go run cmd/server/main.go
-```
-
-Both backends serve the same API endpoints and are interchangeable. The Python backend is simpler to deploy (no compilation step). The Go backend offers better performance and includes built-in Redis caching support.
+No compilation or additional drivers required.
 
 ### 5.2 Start the Frontend
 
@@ -333,9 +261,8 @@ A successful health check returns HTTP 200. The namespaces endpoint returns a JS
 Start components in the following order:
 
 1. **Teradata database** -- must already be running and accessible
-2. **Redis** (optional) -- start before the backend if using caching
-3. **Backend server** -- Python or Go
-4. **Frontend** -- development server or web server serving static files
+2. **Backend server** -- Python Flask
+3. **Frontend** -- development server or web server serving static files
 
 ---
 
@@ -439,12 +366,11 @@ graph TD
 
     subgraph "Application Layer"
         Frontend["Frontend Static Files<br/>(React Build Output)"]
-        Backend["Backend API Server<br/>(Go or Python Flask · Port 8080)"]
+        Backend["Backend API Server<br/>(Python Flask - Port 8080)"]
     end
 
     subgraph "Data Layer"
         TD[("Teradata<br/>(Port 1025)")]
-        Redis[("Redis Cache<br/>(Port 6379 · Optional)")]
     end
 
     Browser -->|HTTPS| LB
@@ -452,15 +378,14 @@ graph TD
     LB -->|"Static Files (/, /index.html)"| Frontend
     LB -->|"/api/*"| Backend
     Backend --> TD
-    Backend -.->|Optional| Redis
 ```
 
 **Layer descriptions:**
 
 - **Client Layer:** Web browsers access the application over HTTPS. All HTTP requests are redirected to HTTPS by the reverse proxy.
 - **Proxy Layer:** The reverse proxy terminates TLS, enforces authentication via ForwardAuth to an OAuth2-Proxy, applies rate limiting, and injects security headers. See [Security Documentation](SECURITY.md) for complete proxy configuration examples.
-- **Application Layer:** The frontend is a set of static files built from React (`npm run build`). The backend is a Go or Python Flask server providing REST API endpoints. The frontend proxies API requests through the reverse proxy.
-- **Data Layer:** Teradata stores lineage metadata in OL_* tables (see [Database Setup](#database-setup)). Redis provides optional caching for the Go backend. The Python backend does not use Redis. The application operates normally without Redis.
+- **Application Layer:** The frontend is a set of static files built from React (`npm run build`). The backend is a Python Flask server providing REST API endpoints. The frontend proxies API requests through the reverse proxy.
+- **Data Layer:** Teradata stores lineage metadata in OL_* tables (see [Database Setup](#database-setup)).
 
 ### Component Communication
 
@@ -471,13 +396,28 @@ graph TD
 | Reverse Proxy | Frontend Files | File system | -- |
 | Reverse Proxy | Backend API | HTTP | 8080 |
 | Backend API | Teradata | TCP (Teradata) | 1025 |
-| Backend API | Redis (optional) | TCP (Redis) | 6379 |
 
 ---
 
 ## Troubleshooting
 
-### Cannot Connect to Teradata
+### Cannot Connect to Teradata: "Missing settings: {[Password] [Username]}"
+
+**Symptoms:** Backend fails with `Missing settings: {[Password] [Username]}` despite having credentials in `.env`.
+
+**Cause:** The application cannot read the `.env` file.
+
+**Solution:**
+
+Verify your `.env` file is in the project root (parent directory of `lineage-api/`), not inside `lineage-api/`. The Python server reads `.env` from the project root automatically via `python-dotenv`.
+
+If `python-dotenv` is not installed, export variables manually:
+
+```bash
+export $(cat ../.env | grep -v '^#' | xargs) && python python_server.py
+```
+
+### Cannot Connect to Teradata: Network/Credential Errors
 
 **Symptoms:** `Connection refused` or `Login failure` errors on backend startup.
 
@@ -531,54 +471,6 @@ graph TD
    lsof -i :8080
    ```
 
-### Redis Connection Failed
-
-**Symptoms:** Warning in Go backend logs about Redis connection failure.
-
-**Cause:** Redis is not running or not reachable at the configured `REDIS_ADDR`.
-
-**Solution:** This is **non-fatal** -- the application falls back to operating without caching. No action is required unless you want caching enabled.
-
-To enable Redis:
-1. Start a Redis server
-2. Verify `REDIS_ADDR` in `.env` points to the correct host and port
-
-**Note:** Redis is only used by the Go backend. The Python backend does not use Redis, so this warning will not appear when using the Python backend.
-
-**Verifying cache is active:**
-
-When the Go backend starts with Redis available, the logs will show:
-```
-level=INFO msg="Redis cache connected" addr=localhost:6379
-```
-
-If Redis is unavailable, the logs will show:
-```
-level=WARN msg="Redis unavailable, running without cache" error="..."
-```
-
-**Monitoring cache effectiveness:**
-
-API responses include cache status headers on all v2 endpoints:
-- `X-Cache: HIT` -- response served from Redis cache
-- `X-Cache: MISS` -- response fetched from Teradata
-- `X-Cache-TTL: N` -- seconds until expiration (only on HIT)
-
-Use these headers to monitor cache hit rates. A high proportion of MISS responses may indicate TTLs are too short for the access pattern.
-
-**Forcing fresh data:**
-
-Add `?refresh=true` to any v2 API request to bypass the cache. This is useful when data has been updated in Teradata and the cached response is stale. The UI also provides refresh buttons in the lineage toolbar and asset browser.
-
-**Clearing all cached data:**
-
-To clear all cached data, flush the Redis database:
-```bash
-redis-cli -h <host> -p <port> FLUSHDB
-```
-
-Or restart Redis. The application will automatically repopulate the cache on subsequent requests.
-
 ### Frontend Build Fails
 
 **Symptoms:** `npm run build` fails with compilation errors.
@@ -612,9 +504,7 @@ Or restart Redis. The application will automatically repopulate the cache on sub
 **Solution:**
 
 1. Reduce the traversal depth in the UI toolbar (default is 5; try 3)
-2. For the Go backend, set `VALIDATION_DEFAULT_MAX_DEPTH` to a lower value in `.env`
-3. Enable Redis caching (Go backend only) to cache frequently accessed lineage graphs
-4. Check if the Teradata instance has the recommended indexes on `OL_COLUMN_LINEAGE` (created by `setup_lineage_schema.py`)
+2. Check if the Teradata instance has the recommended indexes on `OL_COLUMN_LINEAGE` (created by `setup_lineage_schema.py`)
 
 ### Frontend Cannot Reach Backend API
 

@@ -110,13 +110,9 @@ X-Powered-By: (remove)
 
 ### 5. CORS Configuration
 
-**Development (already configured in router.go):**
-```go
-AllowedOrigins: []string{"http://localhost:3000", "http://localhost:5173"}
-AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"}
-AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"}
-ExposedHeaders: []string{"X-Cache", "X-Cache-TTL"}
-```
+**Development (already configured in python_server.py):**
+
+The Flask backend allows CORS from `http://localhost:3000` and `http://localhost:5173` during development.
 
 **Production requirements:**
 - NEVER use wildcard (`*`) for `Access-Control-Allow-Origin`
@@ -128,7 +124,6 @@ ExposedHeaders: []string{"X-Cache", "X-Cache-TTL"}
 Access-Control-Allow-Origin: https://lineage.example.com
 Access-Control-Allow-Methods: GET, OPTIONS
 Access-Control-Allow-Headers: Accept, Authorization, Content-Type, X-Request-ID
-Access-Control-Expose-Headers: X-Cache, X-Cache-TTL
 Access-Control-Max-Age: 300
 ```
 
@@ -142,10 +137,7 @@ For local development, authentication is NOT required.
 ```bash
 # Start API directly (no auth proxy)
 cd lineage-api
-go run cmd/server/main.go  # Runs on port 8080
-
-# Or use Python server
-python python_server.py
+python python_server.py  # Runs on port 8080
 ```
 
 **Frontend development:**

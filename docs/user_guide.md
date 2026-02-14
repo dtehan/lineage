@@ -228,7 +228,7 @@ The lineage graph includes an advanced toolbar with the following controls:
 | **Fit to Selection** | Center the viewport on the highlighted lineage path (Crosshair icon). Only active when a column is selected and its lineage path is highlighted |
 | **Export Button** | Export the current lineage graph as PNG, SVG, or JSON |
 | **Fullscreen Button** | Toggle fullscreen mode for the graph view |
-| **Refresh Button** | Force a cache bypass to fetch fresh data from Teradata (sends `?refresh=true` to the API). The button spins while fetching |
+| **Refresh Button** | Force a fresh data fetch from Teradata. The button spins while fetching |
 
 **Search Autocomplete:**
 
@@ -844,8 +844,7 @@ Searches for assets by name.
 
 **Solutions:**
 1. Reduce traversal depth (use 3-5 instead of 10)
-2. Enable Redis caching
-3. Check database indexes exist on lineage tables
+2. Check database indexes exist on lineage tables
 
 ### Graph Rendering Issues
 
@@ -932,8 +931,7 @@ cp .env.example .env
 **Configuration precedence (highest to lowest):**
 1. Environment variables
 2. `.env` file
-3. `config.yaml` (Go server only)
-4. Default values
+3. Default values
 
 ### Environment Variables
 
@@ -954,23 +952,10 @@ cp .env.example .env
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `API_PORT` | HTTP server port | `8080` |
-| `REDIS_ADDR` | Redis server address | `localhost:6379` |
-| `REDIS_PASSWORD` | Redis password | (empty) |
-| `REDIS_DB` | Redis database number | `0` |
 
 *Legacy alias `PORT` is supported as a fallback for `API_PORT`.*
 
-**Cache TTL Configuration (Go backend only):**
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CACHE_TTL_LINEAGE` | Lineage graph cache TTL (seconds) | `1800` |
-| `CACHE_TTL_ASSETS` | Asset listing cache TTL (seconds) | `900` |
-| `CACHE_TTL_STATISTICS` | Table statistics cache TTL (seconds) | `900` |
-| `CACHE_TTL_DDL` | DDL definition cache TTL (seconds) | `1800` |
-| `CACHE_TTL_SEARCH` | Search results cache TTL (seconds) | `300` |
-
-**Note:** All Python scripts and both Go/Python servers use the same `TERADATA_*` environment variables. Legacy `TD_*` variables are checked as fallbacks if `TERADATA_*` are not set.
+**Note:** All Python scripts and the backend server use the same `TERADATA_*` environment variables. Legacy `TD_*` variables are checked as fallbacks if `TERADATA_*` are not set.
 
 **Frontend (Vite):**
 
@@ -990,42 +975,6 @@ server: {
 
 No environment variables needed - API calls to `/api/*` are automatically proxied to the backend.
 
-### Backend Configuration (config.yaml)
-
-```yaml
-port: 8080
-
-teradata:
-  host: ${TERADATA_HOST}
-  port: 1025
-  user: ${TERADATA_USER}
-  password: ${TERADATA_PASSWORD}
-  database: ${TERADATA_DATABASE:demo_user}
-
-redis:
-  addr: ${REDIS_ADDR:localhost:6379}
-  password: ${REDIS_PASSWORD:}
-  db: 0
-
-logging:
-  level: info
-  format: json
-```
-
-### Backend Server Settings
-
-The Go backend has the following built-in settings:
-
-| Setting | Value |
-|---------|-------|
-| HTTP Read Timeout | 15 seconds |
-| HTTP Write Timeout | 60 seconds |
-| HTTP Idle Timeout | 60 seconds |
-| Request Timeout (middleware) | 60 seconds |
-| Graceful Shutdown Timeout | 30 seconds |
-| Teradata Max Open Connections | 25 |
-| Teradata Max Idle Connections | 5 |
-
 ### CORS Configuration
 
 The backend allows cross-origin requests from:
@@ -1036,65 +985,9 @@ Allowed methods: GET, POST, PUT, DELETE, OPTIONS
 
 **Note:** The frontend is configured to use port 3000 in `vite.config.ts`.
 
-### Caching
-
-The Go backend caches API responses in Redis using the cache-aside pattern. Each data type has its own configurable TTL:
-
-| Data Type | Default TTL | Environment Variable |
-|-----------|-------------|---------------------|
-| Lineage graphs | 30 minutes | `CACHE_TTL_LINEAGE` (1800) |
-| Asset listings | 15 minutes | `CACHE_TTL_ASSETS` (900) |
-| Table statistics | 15 minutes | `CACHE_TTL_STATISTICS` (900) |
-| DDL definitions | 30 minutes | `CACHE_TTL_DDL` (1800) |
-| Search results | 5 minutes | `CACHE_TTL_SEARCH` (300) |
-
-Cache keys follow the format `ol:{entity}:{operation}:{params}`, for example:
-- `ol:lineage:graph:{datasetID}|{fieldName}|{direction}`
-- `ol:dataset:get:{datasetID}`
-- `ol:namespace:list`
-
-**Cache bypass:** Add `?refresh=true` to any API request to skip the cache and fetch fresh data from Teradata. The fresh result is still written to the cache for subsequent requests.
-
-**Cache response headers:** All v2 API responses include cache status headers:
-- `X-Cache: HIT` -- response served from Redis cache
-- `X-Cache: MISS` -- response fetched from Teradata
-- `X-Cache-TTL: N` -- seconds until cache entry expires (only present on cache hits)
-
-If Redis is unavailable, the application falls back to a no-op cache and continues working without caching. No configuration change is required.
-
 ---
 
 ## Build Commands
-
-### Backend (Makefile)
-
-```bash
-cd lineage-api/
-
-# Build the server binary
-make build            # Output: bin/server
-
-# Run directly without building
-make run
-
-# Run tests with race detection and coverage
-make test
-
-# Generate HTML coverage report
-make test-coverage
-
-# Run linter (golangci-lint)
-make lint
-
-# Format code
-make fmt
-
-# Download and tidy dependencies
-make deps
-
-# Verify dependencies
-make verify
-```
 
 ### Frontend (npm)
 
@@ -1121,10 +1014,7 @@ npm run lint
 
 ## Running Tests
 
-The application includes comprehensive test suites for all components. Test plans are documented in the `specs/` directory:
-- `specs/test_plan_database.md` - 73 database test cases
-- `specs/test_plan_backend.md` - 79 backend test cases
-- `specs/test_plan_frontend.md` - 68 frontend test cases
+The application includes comprehensive test suites for all components.
 
 **Test Summary:**
 

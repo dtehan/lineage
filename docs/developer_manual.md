@@ -78,10 +78,8 @@ See [Operations Guide > Prerequisites](operations_guide.md#prerequisites) for fu
 
 | Software | Minimum Version | Notes |
 |----------|----------------|-------|
-| Python | 3.9+ | Required for database scripts and Python backend |
+| Python | 3.9+ | Required for database scripts and backend |
 | Node.js | 18+ | Required for frontend build and development |
-| Go | 1.23+ | Optional -- only needed for the Go backend |
-| Redis | 6+ | Optional -- skip for local development; the application falls back gracefully |
 
 ### Python Setup
 
@@ -93,7 +91,7 @@ pip install -r requirements.txt
 
 This installs six packages: `teradatasql` (Teradata driver), `flask` and `flask-cors` (Python backend), `requests` (HTTP client for testing), `python-dotenv` (environment variable loading), and `sqlglot` (SQL parsing for DBQL lineage extraction).
 
-The Python environment is required regardless of which backend you run. The database setup scripts and population tools all use Python.
+The Python environment is required for both the backend server and the database setup scripts.
 
 ### Node.js Setup
 
@@ -111,9 +109,7 @@ See [Operations Guide > Configuration](operations_guide.md#configuration) for th
 Developer-specific notes:
 
 - **Vite proxy:** The Vite dev server proxies all `/api/*` requests to `http://localhost:8080` (configured in `lineage-ui/vite.config.ts`). No CORS configuration is needed during local development.
-- **Redis is optional:** Skip Redis for local development. Both the Go and Python backends fall back gracefully when Redis is unavailable. Redis is only beneficial for high-traffic production deployments.
 - **Frontend ports:** `npm run dev` runs the frontend on `:3000` with hot module replacement -- changes to React components appear instantly without a full page reload. Playwright E2E tests use a separate instance on `:5173` (auto-started by Playwright's `webServer` config).
-- **Backend choice:** Both the Python (Flask) and Go backends serve the same API endpoints and are interchangeable. The Python backend (`python python_server.py`) is recommended for local development because it requires no compilation. See [Operations Guide > Prerequisites](operations_guide.md#prerequisites) for a comparison.
 
 ### Database Setup
 
@@ -238,19 +234,6 @@ npx playwright test --ui
 npx playwright install
 ```
 
-### 3.5 Go Backend Tests (optional)
-
-**Command:**
-
-```bash
-cd lineage-api
-make test
-```
-
-**What it validates:** Go unit tests with race detection and coverage. Tests are colocated with source files (`*_test.go`) across the domain, application, and adapter layers.
-
-**Note:** These test the Go backend independently from the Python API tests. Most local development uses the Python backend, so these are optional unless you are modifying Go code.
-
 ### Testing Guidance
 
 For day-to-day development, frontend unit tests (`npm test` in watch mode) provide the fastest feedback. Run the full suite across all four test types before committing changes.
@@ -259,7 +242,7 @@ For day-to-day development, frontend unit tests (`npm test` in watch mode) provi
 
 ## Architecture Overview
 
-The application follows a three-tier architecture: React frontend, Go/Python backend, and Teradata database with optional Redis caching.
+The application follows a three-tier architecture: React frontend, Python Flask backend, and Teradata database.
 
 ```mermaid
 graph LR
@@ -270,136 +253,54 @@ graph LR
         Hooks --> Client["Axios Client"]
     end
 
-    subgraph Backend["Go/Python Backend (:8080)"]
-        Router["Chi Router"] --> Handlers["HTTP Handlers"]
-        Handlers --> Services["Application Services"]
-        Services --> Repos["Repository Interfaces"]
+    subgraph Backend["Python Flask Backend (:8080)"]
+        FlaskApp["Flask Routes"] --> Handlers["Route Handlers"]
+        Handlers --> TD_Queries["Teradata Queries"]
     end
 
     subgraph Data["Data Layer"]
         TD[(Teradata)]
-        Redis[(Redis Cache)]
     end
 
-    Client -->|REST API| Router
-    Repos --> TD
-    Repos -.->|Optional| Redis
+    Client -->|REST API| FlaskApp
+    TD_Queries --> TD
 ```
 
 **How the tiers connect:**
 
 - **Frontend to backend:** The React frontend communicates with the backend exclusively through REST API calls. During local development, Vite proxies all `/api/*` requests to `localhost:8080`, so no CORS configuration is needed.
-- **Two backend implementations:** The Go backend (Chi router, hexagonal architecture) is the production implementation. The Python Flask backend (`python_server.py`) serves identical API endpoints with a simpler architecture. Both are interchangeable -- the frontend does not know which backend is running.
-- **Data layer:** Teradata stores all lineage metadata in `OL_*` tables. Redis provides an optional caching layer; the application falls back gracefully without it and Redis is only beneficial for high-traffic deployments.
+- **Backend:** The Python Flask backend (`python_server.py`) serves all API endpoints as a single-file application. It queries Teradata directly using the `teradatasql` driver and returns JSON responses.
+- **Data layer:** Teradata stores all lineage metadata in `OL_*` tables.
 
 ---
 
 ## Backend Architecture
 
-### 5.1 Hexagonal Architecture Pattern
+### 5.1 Python Flask Backend
 
-The Go backend uses hexagonal (ports and adapters) architecture. The core idea: the domain layer defines interfaces (ports) with no external dependencies, and adapters implement those interfaces for specific technologies. This means the core business logic can be tested without a Teradata connection or Redis instance.
-
-```mermaid
-graph TD
-    subgraph Inbound["Inbound Adapters"]
-        HTTP["HTTP Handlers<br/>(Chi Router)"]
-    end
-
-    subgraph Core["Core"]
-        Services["Application Services<br/>(Use Cases)"]
-        Domain["Domain Entities<br/>(Interfaces)"]
-    end
-
-    subgraph Outbound["Outbound Adapters"]
-        TeradataRepo["Teradata Repository"]
-        RedisCache["Redis Cache"]
-    end
-
-    HTTP --> Services
-    Services --> Domain
-    TeradataRepo -.->|implements| Domain
-    RedisCache -.->|implements| Domain
-```
-
-**Why hexagonal?** Dependency inversion keeps the domain pure. Services depend on interfaces, not concrete database code. When testing, mock implementations replace real adapters. When switching databases or caches, only the adapter layer changes.
-
-### 5.2 Directory Structure
+The backend is a single-file Flask application (`lineage-api/python_server.py`) that implements all API endpoints. It queries Teradata directly using the `teradatasql` driver.
 
 ```
-lineage-api/internal/
-├── domain/                     # CORE LAYER - No external dependencies
-│   ├── entities.go             # Database, Table, Column, ColumnLineage,
-│   │                           # LineageGraph, OpenLineage* types
-│   ├── repository.go           # Repository interfaces (AssetRepository,
-│   │                           # LineageRepository, SearchRepository,
-│   │                           # CacheRepository, OpenLineageRepository)
-│   └── mocks/                  # Mock implementations for testing
-│
-├── application/                # USE CASE LAYER - Orchestrates domain
-│   ├── dto.go                  # Data transfer objects (request/response)
-│   ├── asset_service.go        # Asset browsing logic
-│   ├── lineage_service.go      # Lineage traversal logic
-│   ├── openlineage_service.go  # OpenLineage-aligned operations
-│   └── search_service.go       # Search logic
-│
-├── adapter/                    # ADAPTER LAYER - External integrations
-│   ├── inbound/http/           # Chi router, handlers, middleware
-│   │   ├── router.go           # Route definitions (v1 + v2 APIs)
-│   │   ├── handlers.go         # v1 API handlers
-│   │   ├── openlineage_handlers.go  # v2 API handlers
-│   │   ├── cache_middleware.go  # Cache control and headers middleware
-│   │   ├── response.go         # Response helpers
-│   │   └── validation.go       # Input validation
-│   └── outbound/
-│       ├── teradata/           # Teradata repository implementations
-│       │   ├── connection.go   # Connection management
-│       │   ├── asset_repo.go   # AssetRepository impl
-│       │   ├── lineage_repo.go # LineageRepository impl
-│       │   ├── openlineage_repo.go  # OpenLineageRepository impl
-│       │   └── search_repo.go  # SearchRepository impl
-│       └── redis/
-│           ├── cache.go                    # CacheRepository interface, NoOpCache, CacheTTLConfig
-│           ├── cache_keys.go               # Deterministic cache key builder functions
-│           ├── cache_keys_test.go          # Cache key builder tests
-│           ├── cache_metadata.go           # CacheMetadata context type, bypass signal
-│           ├── cache_test.go               # CacheRepository unit tests
-│           ├── cached_openlineage_repo.go  # CachedOpenLineageRepository decorator
-│           └── cached_openlineage_repo_test.go  # Decorator unit tests
-│
-└── infrastructure/             # CROSS-CUTTING CONCERNS
-    ├── config/                 # Viper configuration loading
-    └── logging/                # slog structured logging
+lineage-api/
+├── python_server.py               # Flask server with all API endpoints
+├── README.md                      # Backend documentation
+└── tests/
+    └── run_api_tests.py           # 20 API integration tests
 ```
 
-**Layer responsibilities:**
+**Key characteristics:**
 
-- **domain/** -- Core entities (`Database`, `Table`, `Column`, `ColumnLineage`, `LineageGraph`, and all `OpenLineage*` types) and repository interfaces. This layer has zero external imports beyond the Go standard library.
-- **application/** -- Service layer implementing use cases. DTOs define the shapes of API requests and responses. Services orchestrate domain operations and enforce business rules.
-- **adapter/inbound/http/** -- Chi router, HTTP handlers for both v1 and v2 APIs, middleware, input validation, and response helpers. This is the only layer that knows about HTTP.
-- **adapter/outbound/teradata/** -- Teradata repository implementations. Contains SQL queries, connection management, and result mapping. This is the only layer that knows about Teradata.
-- **adapter/outbound/redis/** -- Redis caching layer using the cache-aside (read-through) pattern. `CachedOpenLineageRepository` is a decorator that wraps the Teradata repository, checking Redis before querying Teradata and populating Redis after a cache miss. Includes deterministic cache key builders, per-data-type TTL configuration, context-based cache metadata propagation, and a `NoOpCache` fallback for when Redis is unavailable. Cache status is communicated to the HTTP layer via request context, where `CacheControl` middleware sets `X-Cache` and `X-Cache-TTL` response headers.
-- **infrastructure/** -- Cross-cutting concerns: Viper-based configuration loading and slog structured logging.
+- Single-file architecture -- all routes, queries, and response formatting in one file
+- Direct Teradata queries using `teradatasql` driver
+- CORS configured for localhost development (ports 3000 and 5173)
+- Environment variables loaded from `../.env` via `python-dotenv`
+- Implements both v1 and v2 API endpoints
 
-### 5.3 Key Interfaces
+### 5.2 Key Patterns
 
-The domain layer defines five repository interfaces in `domain/repository.go`:
-
-| Interface | Purpose | Key Methods |
-|-----------|---------|-------------|
-| `AssetRepository` | Browse databases, tables, columns | `ListDatabases`, `GetTable`, `ListColumns` |
-| `LineageRepository` | Traverse lineage graph | `GetUpstreamLineage`, `GetDownstreamLineage` |
-| `SearchRepository` | Search across datasets | `Search` (with asset type filters) |
-| `CacheRepository` | Optional caching layer | `Get`, `Set`, `Delete`, `Exists`, `TTL` |
-| `OpenLineageRepository` | OpenLineage-aligned operations | `GetColumnLineageGraph`, `ListDatasets`, `ListFields` |
-
-Mock implementations in `domain/mocks/` enable testing services without a Teradata connection.
-
-### 5.4 Python Backend
-
-The Python Flask backend (`lineage-api/python_server.py`) serves the same API endpoints without the hexagonal architecture. It queries Teradata directly using `teradatasql` and returns JSON responses via Flask. This simpler implementation is recommended for local development because it requires no Go compilation and starts instantly.
-
-Both backends are interchangeable. The frontend works identically with either one.
+- **Connection per request:** Each API call creates a fresh Teradata connection and closes it after the response is sent
+- **Recursive CTEs:** Lineage traversal uses recursive common table expressions in Teradata SQL
+- **OpenLineage alignment:** v2 API endpoints follow the OpenLineage spec for namespaces, datasets, and fields
 
 ---
 
@@ -573,22 +474,9 @@ See [lineage-api/README.md](../lineage-api/README.md) for complete endpoint docu
 
 ## Code Standards
 
-The project maintains coding standards for all three languages. Full standards are documented in the `specs/` directory; this section summarizes key conventions.
+The project maintains coding standards for TypeScript/React and SQL.
 
-### 9.1 Go Standards
-
-| Convention | Rule |
-|-----------|------|
-| Formatting | `gofmt`/`goimports` on save |
-| Line length | 100 characters |
-| Imports | Three groups: stdlib, third-party, internal |
-| Errors | Wrap with `fmt.Errorf("context: %w", err)` |
-| Test files | Colocated with source (`*_test.go`) |
-| Naming | Exported = `PascalCase`, unexported = `camelCase` |
-
-Full standards: [specs/coding_standards_go.md](../specs/coding_standards_go.md)
-
-### 9.2 TypeScript/React Standards
+### 9.1 TypeScript/React Standards
 
 | Convention | Rule |
 |-----------|------|
@@ -599,9 +487,7 @@ Full standards: [specs/coding_standards_go.md](../specs/coding_standards_go.md)
 | Imports | 7 groups (React, external, internal, components, hooks, stores, types) |
 | State | TanStack Query for server state, Zustand for client state |
 
-Full standards: [specs/coding_standards_typescript.md](../specs/coding_standards_typescript.md)
-
-### 9.3 SQL Standards
+### 9.2 SQL Standards
 
 | Convention | Rule |
 |-----------|------|
@@ -610,8 +496,6 @@ Full standards: [specs/coding_standards_typescript.md](../specs/coding_standards
 | Tables | `MULTISET` tables, `OL_` prefix for lineage system tables |
 | Formatting | One clause per line, consistent indentation |
 | Performance | Use `MULTISET` over `SET` tables, qualify all column references |
-
-Full standards: [specs/coding_standards_sql.md](../specs/coding_standards_sql.md)
 
 ---
 
@@ -695,12 +579,10 @@ When making changes, use this table to find the relevant code:
 
 | What You're Changing | Where to Look |
 |---------------------|---------------|
-| API endpoint | `lineage-api/internal/adapter/inbound/http/` (Go) or `lineage-api/python_server.py` (Python) |
-| Database query | `lineage-api/internal/adapter/outbound/teradata/` |
+| API endpoint | `lineage-api/python_server.py` |
 | UI component | `lineage-ui/src/components/domain/` |
 | Graph behavior | `lineage-ui/src/components/domain/LineageGraph/` |
 | State management | `lineage-ui/src/stores/` |
 | API hook | `lineage-ui/src/api/hooks/` |
 | Database schema | `database/scripts/setup/setup_lineage_schema.py` |
 | Lineage data | `database/scripts/populate/populate_lineage.py` |
-| Coding standards | `specs/coding_standards_*.md` |
