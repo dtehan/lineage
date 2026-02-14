@@ -196,3 +196,27 @@ def get_database_lineage(database_name):
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+
+@openlineage_bp.route("/impact/<path:dataset_id>/<field_name>", methods=["GET"])
+def get_impact_analysis(dataset_id, field_name):
+    """Get downstream impact analysis for a dataset field."""
+    # Parse and validate maxDepth parameter
+    max_depth = int(request.args.get("maxDepth", "5"))
+
+    # Clamp maxDepth to valid range (1-10)
+    if max_depth < 1:
+        max_depth = 1
+    elif max_depth > 10:
+        max_depth = 10
+
+    try:
+        result = impact_service.analyze_downstream_impact(
+            dataset_id, field_name, max_depth
+        )
+        return jsonify(result), 200
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": str(e)}), 500
