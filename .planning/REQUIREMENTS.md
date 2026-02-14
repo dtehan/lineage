@@ -89,13 +89,36 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be populated by roadmapper) |  |  |
+| IMPACT-01 | Phase 1 | Pending |
+| IMPACT-02 | Phase 1 | Pending |
+| IMPACT-03 | Phase 1 | Pending |
+| IMPACT-04 | Phase 1 | Pending |
+| IMPACT-05 | Phase 1 | Pending |
+| IMPACT-06 | Phase 1 | Pending |
+| IMPACT-07 | Phase 1 | Pending |
+| ARCH-01 | Phase 1 | Pending |
+| ARCH-02 | Phase 1 | Pending |
+| ARCH-03 | Phase 1 | Pending |
+| ARCH-04 | Phase 1 | Pending |
+| ARCH-05 | Phase 1 | Pending |
+| ARCH-06 | Phase 1 | Pending |
+| EXCEPT-01 | Phase 2 | Pending |
+| EXCEPT-02 | Phase 2 | Pending |
+| EXCEPT-03 | Phase 2 | Pending |
+| EXCEPT-04 | Phase 2 | Pending |
+| EXCEPT-05 | Phase 2 | Pending |
+| EXCEPT-06 | Phase 2 | Pending |
+| CLEANUP-01 | Phase 3 | Pending |
+| CLEANUP-02 | Phase 3 | Pending |
+| CLEANUP-03 | Phase 3 | Pending |
+| CLEANUP-04 | Phase 3 | Pending |
+| CLEANUP-05 | Phase 3 | Pending |
 
 **Coverage:**
-- v1 requirements: 21 total
-- Mapped to phases: 0
-- Unmapped: 21 ⚠️
+- v1 requirements: 24 total
+- Mapped to phases: 24
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-13 after initial definition*
+*Last updated: 2026-02-14 after roadmap creation*
