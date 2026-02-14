@@ -6,17 +6,8 @@ All database queries are encapsulated in repository classes.
 """
 
 from repositories.base import BaseRepository
-
-# Import repository classes if they exist
-try:
-    from repositories.lineage_repository import LineageRepository
-except ImportError:
-    LineageRepository = None
-
-try:
-    from repositories.dataset_repository import DatasetRepository
-except ImportError:
-    DatasetRepository = None
+from repositories.lineage_repository import LineageRepository
+from repositories.dataset_repository import DatasetRepository
 
 __all__ = [
     "BaseRepository",
