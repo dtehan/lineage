@@ -11,18 +11,18 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 
 Milestone: v6.0 Redis Caching Layer (IN PROGRESS)
 Phase: 33 of 33 (Remove Go Backend)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-13 -- Completed 33-01-PLAN.md
+Last activity: 2026-02-13 -- Completed 33-02-PLAN.md
 
-Progress: [█████████░] 97% (32/33 phases complete, plan 1/3 in phase 33)
+Progress: [█████████░] 97% (32/33 phases complete, plan 2/3 in phase 33)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 74 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 10)
+- Total plans completed: 75 (v1.0: 13, v2.0: 11, v2.1: 5, v3.0: 11, v4.0: 15, v5.0: 9, v6.0: 11)
 - Average plan duration: ~3.3 min
-- Total execution time: ~244 min
+- Total execution time: ~246 min
 
 **By Milestone:**
 
@@ -34,7 +34,7 @@ Progress: [█████████░] 97% (32/33 phases complete, plan 1/3 
 | v3.0 | 6 | 11 | ~2.5 hours |
 | v4.0 | 5 | 15 | 2 days |
 | v5.0 | 4 | 9 | ~30 min |
-| v6.0 | 6 | 10 | ~33 min |
+| v6.0 | 6 | 11 | ~35 min |
 
 **Recent Trend:**
 - v6.0 Plan 28-01: 2 min
@@ -47,6 +47,7 @@ Progress: [█████████░] 97% (32/33 phases complete, plan 1/3 
 - v6.0 Plan 32-01: 2 min
 - v6.0 Plan 32-02: 3 min
 - v6.0 Plan 33-01: 3 min
+- v6.0 Plan 33-02: 2 min
 - Trend: Stable velocity
 
 *Updated after each plan completion*
@@ -58,6 +59,9 @@ Progress: [█████████░] 97% (32/33 phases complete, plan 1/3 
 All decisions logged in PROJECT.md Key Decisions table.
 
 Recent decisions:
+- [33-02]: Updated API endpoints to list all 11 v2 routes verified against python_server.py
+- [33-02]: Removed references to deleted spec files (coding_standards_go.md, lineage_plan_backend.md, test_plan_backend.md)
+- [33-02]: Fixed test command paths from run_api_tests.py to tests/run_api_tests.py
 - [33-01]: Only stage Go-specific spec deletions (4 files), not all spec deletions already in working tree from prior work
 - [33-01]: Debug files were untracked so only physical rm needed, no git rm
 - [32-02]: Documentation-only changes -- no code modifications needed
@@ -109,5 +113,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed 33-01-PLAN.md -- Go source code and artifacts removed
+Stopped at: Completed 33-02-PLAN.md -- CLAUDE.md and .env.example updated for Python-only backend
 Resume file: None
