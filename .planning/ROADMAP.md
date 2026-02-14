@@ -12,7 +12,7 @@ This roadmap transforms a functional but monolithic column-level lineage applica
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation Refactoring & Impact Analysis Core** - Extract repository layer, implement service pattern, deliver Impact Analysis feature
+- [x] **Phase 1: Foundation Refactoring & Impact Analysis Core** - Extract repository layer, implement service pattern, deliver Impact Analysis feature
 - [ ] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
 - [ ] **Phase 3: SQL Parser Consolidation & DBQL Validation** - Consolidate duplicate parsers, validate DBQL extraction, display truncation warnings
 
@@ -31,12 +31,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 6 plans
 
 Plans:
-- [ ] 01-01-PLAN.md -- Extract repository layer (config, base repo, LineageRepository, DatasetRepository)
-- [ ] 01-02-PLAN.md -- Create service layer (LineageService, DatasetService, ImpactService)
-- [ ] 01-03-PLAN.md -- Create Flask Blueprints and refactor python_server.py to Application Factory
-- [ ] 01-04-PLAN.md -- Add Impact Analysis API endpoint and update backend API tests
-- [ ] 01-05-PLAN.md -- Implement Impact Analysis frontend UI with TanStack Table
-- [ ] 01-06-PLAN.md -- Add frontend unit tests and end-to-end verification
+- [x] 01-01-PLAN.md -- Extract repository layer (config, base repo, LineageRepository, DatasetRepository)
+- [x] 01-02-PLAN.md -- Create service layer (LineageService, DatasetService, ImpactService)
+- [x] 01-03-PLAN.md -- Create Flask Blueprints and refactor python_server.py to Application Factory
+- [x] 01-04-PLAN.md -- Add Impact Analysis API endpoint and update backend API tests
+- [x] 01-05-PLAN.md -- Implement Impact Analysis frontend UI with TanStack Table
+- [x] 01-06-PLAN.md -- Add frontend unit tests and end-to-end verification
 
 ### Phase 2: Exception Handling & Observability
 **Goal**: All API errors produce structured logs with correlation IDs and preserve frontend error response contract
@@ -74,10 +74,10 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Refactoring & Impact Analysis Core | 0/6 | Planning complete | - |
+| 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
 | 2. Exception Handling & Observability | 0/TBD | Not started | - |
 | 3. SQL Parser Consolidation & DBQL Validation | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-14 (Phase 1 complete)*
