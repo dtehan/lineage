@@ -48,10 +48,12 @@ Plans:
   3. All traceback.print_exc() calls replaced with logger.exception() calls that capture full context
   4. Frontend receives errors in exact same format as before ({"error": string} schema) for all API endpoints
   5. Every API request has a correlation ID that appears in logs and error responses for tracing
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
-(To be defined during planning)
+- [ ] 02-01-PLAN.md -- Create exception hierarchy, loguru config, and sanitization utility
+- [ ] 02-02-PLAN.md -- Wire correlation ID middleware, global error handlers, and domain exceptions into Flask app
+- [ ] 02-03-PLAN.md -- Strip try/except from routes and update API tests for error contract verification
 
 ### Phase 3: SQL Parser Consolidation & DBQL Validation
 **Goal**: Single SQL parser module validates DBQL extraction and UI displays view truncation warnings
@@ -75,9 +77,9 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
-| 2. Exception Handling & Observability | 0/TBD | Not started | - |
+| 2. Exception Handling & Observability | 0/3 | Not started | - |
 | 3. SQL Parser Consolidation & DBQL Validation | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 1 complete)*
+*Last updated: 2026-02-14 (Phase 2 planned)*
