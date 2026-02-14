@@ -61,20 +61,6 @@ The Python backend is a single-file Flask application (`python_server.py`) that 
 
 ## API Endpoints
 
-### v1 API (Legacy)
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Health check |
-| GET | `/api/v1/assets/databases` | List databases |
-| GET | `/api/v1/assets/databases/{db}/tables` | List tables |
-| GET | `/api/v1/assets/databases/{db}/tables/{table}/columns` | List columns |
-| GET | `/api/v1/lineage/{assetId}` | Get lineage (both directions) |
-| GET | `/api/v1/lineage/{assetId}/upstream` | Get upstream lineage |
-| GET | `/api/v1/lineage/{assetId}/downstream` | Get downstream lineage |
-| GET | `/api/v1/lineage/{assetId}/impact` | Impact analysis |
-| GET | `/api/v1/search` | Search assets |
-
 ### v2 API (OpenLineage-aligned)
 
 | Method | Path | Description |

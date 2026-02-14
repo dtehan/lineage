@@ -6,20 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a column-level data lineage application for Teradata databases. The application visualizes data flow between database columns, enabling impact analysis for change management.
 
-**Status:** Implemented and functional. See `docs/user_guide.md` for comprehensive usage documentation.
 
-**Specification Files (in `specs/`):**
-- `lineage_plan_database.md` - Teradata schema and SQL
-- `lineage_plan_frontend.md` - React frontend implementation
-- `lineage_visualization_spec.md` - Lineage graph and UI/UX design
-
-**Test Plans (in `specs/`):**
-- `test_plan_database.md` - 73 test cases for schema, CTEs, edge cases
-- `test_plan_frontend.md` - 68 test cases for components, E2E, accessibility
-
-**Coding Standards (in `specs/`):**
-- `coding_standards_typescript.md` - TypeScript/React patterns
-- `coding_standards_sql.md` - Teradata SQL standards
 
 ## Technology Stack
 
@@ -41,7 +28,7 @@ cp .env.example .env
 # Edit .env with your Teradata credentials
 
 # 3. Setup database (creates OL_* tables)
-cd database && python scripts/setup/setup_lineage_schema.py && python scripts/setup/setup_test_data.py
+cd database && python scripts/setup/setup_lineage_schema.py 
 
 # 4. Populate OpenLineage tables
 python scripts/populate/populate_lineage.py              # DBQL extraction (production) by default
