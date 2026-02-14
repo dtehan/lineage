@@ -10,27 +10,23 @@ This is a column-level data lineage application for Teradata databases. The appl
 
 **Specification Files (in `specs/`):**
 - `lineage_plan_database.md` - Teradata schema and SQL
-- `lineage_plan_backend.md` - Go backend implementation
 - `lineage_plan_frontend.md` - React frontend implementation
 - `lineage_visualization_spec.md` - Lineage graph and UI/UX design
 
 **Test Plans (in `specs/`):**
 - `test_plan_database.md` - 73 test cases for schema, CTEs, edge cases
-- `test_plan_backend.md` - 79 test cases for API, caching, performance
 - `test_plan_frontend.md` - 68 test cases for components, E2E, accessibility
 
 **Coding Standards (in `specs/`):**
-- `coding_standards_go.md` - Go formatting, error handling, testing
 - `coding_standards_typescript.md` - TypeScript/React patterns
 - `coding_standards_sql.md` - Teradata SQL standards
 
 ## Technology Stack
 
-- **Backend:** Go with Chi router (or Python Flask for testing)
+- **Backend:** Python Flask
 - **Frontend:** React 18 with TypeScript, Vite, TanStack Query, Zustand
 - **Graph Visualization:** React Flow (@xyflow/react) + ELKjs
 - **Database:** Teradata (lineage metadata in `demo_user` database)
-- **Caching:** Redis (optional, falls back gracefully)
 - **Testing:** Vitest + React Testing Library (unit), Playwright (E2E)
 
 ## Quick Start
@@ -50,8 +46,8 @@ cd database && python scripts/setup/setup_lineage_schema.py && python scripts/se
 # 4. Populate OpenLineage tables
 python scripts/populate/populate_lineage.py              # DBQL extraction (production) by default
 
-# 5. Start backend (Python Flask - recommended for testing)
-cd lineage-api && python python_server.py  # Runs on :8080
+# 5. Start backend
+cd lineage-api && python python_server.py
 
 # 6. Start frontend
 cd lineage-ui && npm install && npm run dev  # Runs on :3000
@@ -62,9 +58,7 @@ cd lineage-ui && npm install && npm run dev  # Runs on :3000
 ```bash
 # Backend
 cd lineage-api
-python python_server.py          # Start Python server
-go run cmd/server/main.go        # Start Go server
-make build && ./bin/server       # Build and run Go binary
+python python_server.py          # Python server
 
 # Frontend
 cd lineage-ui
@@ -94,29 +88,9 @@ React Frontend (Asset Browser, Lineage Graph, Impact Analysis, Search)
     │
     │ REST API
     ▼
-Go Backend (Chi Router, Handlers, Services, Teradata Repository)
+Python Backend (Flask, REST API)
     │
-    ├──► Teradata (lineage database)
-    └──► Redis (cache)
-```
-
-### Backend Structure (Hexagonal/Clean Architecture)
-
-```
-lineage-api/
-├── cmd/server/main.go           # Entry point
-├── internal/
-│   ├── domain/                  # Core entities and repository interfaces
-│   ├── application/             # DTOs and service layer (use cases)
-│   └── adapter/
-│       ├── inbound/http/        # Chi router, handlers, middleware
-│       │   └── cache_middleware.go  # Cache control/headers middleware
-│       └── outbound/            # Teradata and Redis implementations
-│           └── redis/
-│               ├── cache.go                    # CacheRepository, NoOpCache
-│               ├── cache_keys.go               # Deterministic key builders
-│               ├── cache_metadata.go           # Cache metadata context
-│               └── cached_openlineage_repo.go  # Cache-aside decorator
+    └──► Teradata (lineage database)
 ```
 
 ### Frontend Structure
@@ -249,24 +223,27 @@ This fallback uses `HELP COLUMN` commands for each view column, which is slower 
 - `GET /api/v2/openlineage/namespaces/{namespaceId}` - Get namespace
 - `GET /api/v2/openlineage/namespaces/{namespaceId}/datasets` - List datasets
 - `GET /api/v2/openlineage/datasets/{datasetId}` - Get dataset with fields
+- `GET /api/v2/openlineage/datasets/{datasetId}/statistics` - Get dataset statistics
+- `GET /api/v2/openlineage/datasets/{datasetId}/ddl` - Get dataset DDL
 - `GET /api/v2/openlineage/datasets/search?q=query` - Search datasets
-- `GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}` - Get lineage graph
-
-All v2 endpoints support `?refresh=true` to bypass Redis cache. Responses include `X-Cache: HIT|MISS` and `X-Cache-TTL` headers.
+- `GET /api/v2/openlineage/search?q=query` - Search (alias)
+- `GET /api/v2/openlineage/lineage/{datasetId}/{fieldName}` - Get column lineage graph
+- `GET /api/v2/openlineage/lineage/table/{datasetId}` - Get table lineage graph
+- `GET /api/v2/openlineage/lineage/database/{databaseName}` - Get database lineage graph
 
 ## Lineage Traversal
 
 Uses recursive CTEs in Teradata to traverse the lineage graph:
-- Upstream: follows `target_column_id → source_column_id` relationships
-- Downstream: follows `source_column_id → target_column_id` relationships
+- Upstream: follows `target_column_id -> source_column_id` relationships
+- Downstream: follows `source_column_id -> target_column_id` relationships
 - Cycle detection via path tracking in the CTE
 
 ## Testing
 
 | Suite | Count | Command |
 |-------|-------|---------|
-| Database (Python) | 73 | `cd database && python run_tests.py` |
-| Backend API (Python) | 20 | `cd lineage-api && python run_api_tests.py` |
+| Database (Python) | 73 | `cd database && python tests/run_tests.py` |
+| Backend API (Python) | 20 | `cd lineage-api && python tests/run_api_tests.py` |
 | Frontend Unit (Vitest) | 260+ | `cd lineage-ui && npm test` |
 | Frontend E2E (Playwright) | 21 | `cd lineage-ui && npx playwright test` |
 
@@ -291,13 +268,5 @@ cp .env.example .env
 | `TERADATA_DATABASE` | Default database | `demo_user` |
 | `TERADATA_PORT` | Teradata port | `1025` |
 | `API_PORT` | HTTP server port | `8080` |
-| `REDIS_ADDR` | Redis address | `localhost:6379` |
-| `REDIS_PASSWORD` | Redis password | - |
-| `REDIS_DB` | Redis database number | `0` |
-| `CACHE_TTL_LINEAGE` | Lineage graph cache TTL (seconds) | `1800` |
-| `CACHE_TTL_ASSETS` | Asset listing cache TTL (seconds) | `900` |
-| `CACHE_TTL_STATISTICS` | Statistics cache TTL (seconds) | `900` |
-| `CACHE_TTL_DDL` | DDL cache TTL (seconds) | `1800` |
-| `CACHE_TTL_SEARCH` | Search cache TTL (seconds) | `300` |
 
 The frontend proxies `/api/*` requests to `http://localhost:8080` via Vite config.
