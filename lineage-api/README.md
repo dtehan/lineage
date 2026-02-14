@@ -1,68 +1,41 @@
-# Lineage API
+# Lineage API - Python Flask Backend
 
-Go backend for the Teradata column lineage application, following hexagonal (clean) architecture. Also includes an alternative Python Flask server for development and testing.
+Python Flask backend for the Teradata column lineage application.
 
 Part of [Teradata Column Lineage](../README.md)
 
-## Architecture (Hexagonal/Clean)
-
-```
-lineage-api/
-├── cmd/server/main.go              # Application entry point
-├── internal/
-│   ├── domain/                     # Core business entities and repository interfaces
-│   │   ├── entities.go             # Asset, LineageNode, Column types
-│   │   ├── repository.go           # Repository interface definitions
-│   │   └── mocks/                  # Mock implementations for testing
-│   ├── application/                # Use cases and DTOs
-│   │   ├── dto.go                  # Data transfer objects
-│   │   ├── asset_service.go        # Asset browsing logic
-│   │   ├── lineage_service.go      # Lineage traversal logic
-│   │   ├── openlineage_service.go  # OpenLineage-aligned operations
-│   │   └── search_service.go       # Search logic
-│   ├── adapter/
-│   │   ├── inbound/http/           # HTTP handlers (Chi router)
-│   │   │   ├── router.go           # Route definitions
-│   │   │   ├── handlers.go         # v1 API handlers
-│   │   │   ├── openlineage_handlers.go  # v2 API handlers
-│   │   │   ├── cache_middleware.go  # Cache control and headers middleware
-│   │   │   ├── response.go         # Response helpers
-│   │   │   └── validation.go       # Input validation
-│   │   └── outbound/
-│   │       ├── teradata/           # Teradata repository implementation
-│   │       └── redis/              # Redis cache implementation
-│   │           ├── cache.go               # CacheRepository, NoOpCache, CacheTTLConfig
-│   │           ├── cache_keys.go          # Deterministic cache key builders
-│   │           ├── cache_metadata.go      # Cache metadata context type
-│   │           └── cached_openlineage_repo.go  # Cache-aside decorator
-│   └── infrastructure/
-│       ├── config/                 # Configuration (Viper)
-│       └── logging/               # Structured logging (slog)
-├── python_server.py                # Alternative Python Flask backend
-├── Makefile                        # Build, test, lint commands
-└── tests/                          # Integration tests
-```
-
-The architecture follows three layers:
-
-- **Domain** (`internal/domain/`): Core business entities (Asset, LineageNode, Column) and repository interfaces. No external dependencies.
-- **Application** (`internal/application/`): Use cases and DTOs. Orchestrates domain objects through services: asset, lineage, openlineage, and search.
-- **Adapters** (`internal/adapter/`): External integrations. Inbound: HTTP handlers with Chi router. Outbound: Teradata repository, Redis cache.
-- **Infrastructure** (`internal/infrastructure/`): Cross-cutting concerns. Configuration via Viper, structured logging via slog.
-
 ## Getting Started
 
-### Go Server
+### Prerequisites
+
+- Python 3.9+
+- `teradatasql`, `flask`, `flask-cors`, `python-dotenv` (installed via `pip install -r ../requirements.txt`)
+- Network access to a Teradata instance
+
+### Configuration
+
+Create a `.env` file in the project root (one directory up from `lineage-api/`) with your Teradata credentials:
 
 ```bash
-# Build and run
-make build && ./bin/server  # Runs on :8080
-
-# Or run directly
-go run cmd/server/main.go
+# From project root
+cp .env.example .env
+# Edit .env with your credentials
 ```
 
-### Python Server (development/testing)
+See [root README](../README.md) for the full variable list.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TERADATA_HOST` | Teradata host | - |
+| `TERADATA_USER` | Teradata username | `demo_user` |
+| `TERADATA_PASSWORD` | Teradata password (required) | - |
+| `TERADATA_DATABASE` | Default database | `demo_user` |
+| `TERADATA_PORT` | Teradata port | `1025` |
+| `API_PORT` | HTTP server port | `8080` |
+
+Legacy aliases (`TD_HOST`, `TD_USER`, `TD_PASSWORD`, `TD_DATABASE`, `PORT`) are supported as fallbacks.
+
+### Running
 
 ```bash
 # Activate virtual environment (from project root)
@@ -72,20 +45,19 @@ source ../.venv/bin/activate
 python python_server.py  # Runs on :8080
 ```
 
-**Prerequisites:** Requires either Go 1.23+ or Python 3.x with Flask. See [root README](../README.md) for full setup instructions.
+The server reads environment variables from `../.env` (project root) automatically via `python-dotenv`.
 
-## Available Commands
+## Architecture
 
-| Command | Description |
-|---------|-------------|
-| `make build` | Build Go binary to `./bin/server` |
-| `make run` | Run the application via `go run` |
-| `make test` | Run Go tests with race detection and coverage |
-| `make test-coverage` | Run tests with HTML coverage report |
-| `make lint` | Run golangci-lint |
-| `make fmt` | Format Go code |
-| `make deps` | Download and tidy dependencies |
-| `make clean` | Remove build artifacts |
+```
+lineage-api/
+├── python_server.py               # Flask server with all API endpoints
+├── README.md                      # This file
+└── tests/
+    └── run_api_tests.py           # 20 API integration tests
+```
+
+The Python backend is a single-file Flask application (`python_server.py`) that queries Teradata directly using the `teradatasql` driver and returns JSON responses. It implements both the v1 and v2 API endpoints.
 
 ## API Endpoints
 
@@ -119,41 +91,18 @@ python python_server.py  # Runs on :8080
 ## Testing
 
 ```bash
-# Go tests
-make test
+# Start the server first
+python python_server.py
 
-# Python API tests (20 tests)
+# In another terminal, run API tests (20 tests)
 python tests/run_api_tests.py
 ```
 
-## Configuration
-
-Configuration via environment variables or `.env` file. See [root README](../README.md) for the full variable list.
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TERADATA_HOST` | Teradata host | - |
-| `TERADATA_USER` | Teradata username | - |
-| `TERADATA_PASSWORD` | Teradata password | - |
-| `TERADATA_DATABASE` | Default database | `demo_user` |
-| `API_PORT` | HTTP server port | `8080` |
-| `REDIS_ADDR` | Redis address | `localhost:6379` |
-| `REDIS_PASSWORD` | Redis password | - |
-| `REDIS_DB` | Redis database number | `0` |
-| `CACHE_TTL_LINEAGE` | Lineage graph cache TTL (seconds) | `1800` |
-| `CACHE_TTL_ASSETS` | Asset listing cache TTL (seconds) | `900` |
-| `CACHE_TTL_STATISTICS` | Statistics cache TTL (seconds) | `900` |
-| `CACHE_TTL_DDL` | DDL cache TTL (seconds) | `1800` |
-| `CACHE_TTL_SEARCH` | Search cache TTL (seconds) | `300` |
-
 ## Technology Stack
 
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Go | 1.23 | Language |
-| Chi | v5.0.11 | HTTP router |
-| Viper | v1.21.0 | Configuration |
-| go-redis | v9.7.3 | Cache client (cache-aside pattern) |
-| sqlx | v1.3.5 | SQL toolkit |
-| slog | stdlib | Structured logging |
-| Flask | 3.0+ | Alternative Python server |
+| Technology | Purpose |
+|------------|---------|
+| Flask | HTTP framework |
+| teradatasql | Teradata database driver |
+| flask-cors | Cross-origin request support |
+| python-dotenv | Environment variable loading from .env |
