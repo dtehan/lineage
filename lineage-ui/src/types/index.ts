@@ -63,7 +63,10 @@ export interface ImpactSummary {
   totalImpacted: number;
   byDatabase: Record<string, number>;
   byDepth: Record<number, number>;
-  criticalCount: number;
+  criticalCount?: number; // Legacy field, optional
+  tableCount?: number; // New field from v2 API
+  columnCount?: number; // New field from v2 API
+  databaseCount?: number; // New field from v2 API
 }
 
 export interface ImpactAnalysisResponse {

@@ -1,25 +1,25 @@
-import type { ImpactSummary as ImpactSummaryType } from '../../../types';
+import type { ImpactSummaryData } from '../../../types/openlineage';
 
 interface ImpactSummaryProps {
-  summary: ImpactSummaryType;
+  summary: ImpactSummaryData;
 }
 
 export function ImpactSummary({ summary }: ImpactSummaryProps) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
       <SummaryCard
-        title="Total Impacted"
-        value={summary.totalImpacted}
+        title="Tables Affected"
+        value={summary.tableCount}
         color="blue"
       />
       <SummaryCard
-        title="Critical"
-        value={summary.criticalCount}
+        title="Columns Affected"
+        value={summary.columnCount}
         color="red"
       />
       <SummaryCard
         title="Databases"
-        value={Object.keys(summary.byDatabase).length}
+        value={summary.databaseCount}
         color="green"
       />
       <SummaryCard

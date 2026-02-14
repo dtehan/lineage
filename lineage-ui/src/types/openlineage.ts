@@ -165,3 +165,33 @@ export interface OpenLineagePaginationParams {
   limit?: number;
   offset?: number;
 }
+
+// Impact Analysis types (aligned with /api/v2/openlineage/impact endpoint)
+export interface ImpactAsset {
+  databaseName: string;
+  tableName: string;
+  columnName: string;
+  depth: number;
+  impactType: 'direct' | 'indirect';
+}
+
+export interface ImpactSummaryData {
+  totalImpacted: number;
+  tableCount: number;
+  columnCount: number;
+  databaseCount: number;
+  byDatabase: Record<string, number>;
+  byDepth: Record<string, number>;
+}
+
+export interface ImpactSourceAsset {
+  datasetId: string;
+  datasetName: string;
+  fieldName: string;
+}
+
+export interface ImpactAnalysisApiResponse {
+  sourceAsset: ImpactSourceAsset;
+  impactedAssets: ImpactAsset[];
+  summary: ImpactSummaryData;
+}

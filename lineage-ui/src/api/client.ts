@@ -12,6 +12,7 @@ import type {
   UnifiedSearchResponse,
   OpenLineagePaginationParams,
   LineageQueryParams,
+  ImpactAnalysisApiResponse,
 } from '../types/openlineage';
 
 export const apiClient = axios.create({
@@ -139,6 +140,19 @@ export const openLineageApi = {
     const response = await apiClientV2.get<DatabaseLineageResponse>(
       `/api/v2/openlineage/lineage/database/${encodeURIComponent(databaseName)}`,
       { params: { ...queryParams, ...(refresh ? { refresh: 'true' } : {}) } }
+    );
+    return response.data;
+  },
+
+  // Impact Analysis
+  async getImpactAnalysis(
+    datasetId: string,
+    fieldName: string,
+    params?: { maxDepth?: number }
+  ): Promise<ImpactAnalysisApiResponse> {
+    const response = await apiClientV2.get<ImpactAnalysisApiResponse>(
+      `/api/v2/openlineage/impact/${encodeURIComponent(datasetId)}/${encodeURIComponent(fieldName)}`,
+      { params }
     );
     return response.data;
   },
