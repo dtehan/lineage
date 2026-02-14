@@ -1,7 +1,7 @@
 # Milestone v6.0: Redis Caching Layer
 
-**Status:** Complete
-**Phases:** 28-32
+**Status:** In Progress
+**Phases:** 28-33
 **Total Plans:** TBD
 
 ## Overview
@@ -23,6 +23,7 @@ Add Redis response caching to the Teradata lineage API using the repository deco
 - [x] **Phase 30: Graceful Degradation** - Application starts and serves requests normally when Redis is unavailable
 - [x] **Phase 31: Cache Control & Observability** - Cache status headers, bypass parameter, and UI refresh controls
 - [x] **Phase 32: Update Documentation** - All repository documentation and READMEs updated to reflect Redis caching implementation
+- [ ] **Phase 33: Remove Go Backend** - Remove all Go backend code and documentation references, keeping only the Python backend
 
 ## Phase Details
 
@@ -137,9 +138,41 @@ Plans:
 
 ---
 
+### Phase 33: Remove Go Backend
+
+**Goal**: Simplify the codebase by removing the Go backend implementation and all related documentation, keeping only the Python backend
+
+**Depends on**: Phase 32
+
+**Requirements**: None (codebase simplification)
+
+**Success Criteria** (what must be TRUE):
+1. All Go backend code (lineage-api directory) is removed from the repository
+2. Documentation references to the Go backend are updated to show only Python backend
+3. CLAUDE.md, README files, and user guides reflect Python-only backend
+4. Build and deployment documentation no longer mentions Go, Makefile, or ODBC setup
+5. The Python backend continues to function correctly after Go removal
+
+**Plans:** 3 plans
+
+Plans:
+- [x] 33-01-PLAN.md -- Delete Go backend code, binaries, debug files, and spec files
+- [x] 33-02-PLAN.md -- Update CLAUDE.md and .env.example for Python-only backend
+- [x] 33-03-PLAN.md -- Update lineage-api/README.md and docs/ for Python-only backend
+
+**Details:**
+
+Phase 33 removes all Go backend code from the lineage-api/ directory while preserving the Python Flask backend. The phase executes in 2 waves: Wave 1 deletes all Go files (Plan 01), then Wave 2 updates documentation in parallel (Plans 02 and 03).
+
+**Wave Structure:**
+- Wave 1: Plan 01 (delete Go code)
+- Wave 2: Plans 02 and 03 (update docs in parallel)
+
+---
+
 ## Progress
 
-**Execution Order:** Phase 28 -> Phase 29 -> Phase 30 -> Phase 31 -> Phase 32
+**Execution Order:** Phase 28 -> Phase 29 -> Phase 30 -> Phase 31 -> Phase 32 -> Phase 33
 
 Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could execute in parallel. However, sequential ordering is simpler and Phase 29 builds the key/TTL infrastructure that Phase 30 tests against.
 
@@ -150,6 +183,7 @@ Note: Phase 30 depends on Phase 28 but not Phase 29, so Phases 29 and 30 could e
 | 30. Graceful Degradation | 1/1 | Complete | 2026-02-12 |
 | 31. Cache Control & Observability | 2/2 | Complete | 2026-02-12 |
 | 32. Update Documentation | 2/2 | Complete | 2026-02-13 |
+| 33. Remove Go Backend | 3/3 | Complete | 2026-02-13 |
 
 ---
 
