@@ -28,14 +28,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User sees column-level impact counts per affected table (e.g., "3 columns affected in DIM_CUSTOMER")
   4. User sees affected asset count summary at top of impact view (e.g., "5 tables, 12 columns, 2 databases impacted")
   5. Backend recursive CTE logic for lineage traversal exists in exactly one place (repository layer) and is reused by all endpoints (column/table/database lineage and impact analysis)
-**Plans:** 5 plans
+**Plans:** 6 plans
 
 Plans:
 - [ ] 01-01-PLAN.md -- Extract repository layer (config, base repo, LineageRepository, DatasetRepository)
-- [ ] 01-02-PLAN.md -- Implement service layer and refactor python_server.py into Flask Blueprints
-- [ ] 01-03-PLAN.md -- Add Impact Analysis API endpoint and update backend API tests
-- [ ] 01-04-PLAN.md -- Implement Impact Analysis frontend UI with TanStack Table
-- [ ] 01-05-PLAN.md -- Add frontend unit tests and end-to-end verification
+- [ ] 01-02-PLAN.md -- Create service layer (LineageService, DatasetService, ImpactService)
+- [ ] 01-03-PLAN.md -- Create Flask Blueprints and refactor python_server.py to Application Factory
+- [ ] 01-04-PLAN.md -- Add Impact Analysis API endpoint and update backend API tests
+- [ ] 01-05-PLAN.md -- Implement Impact Analysis frontend UI with TanStack Table
+- [ ] 01-06-PLAN.md -- Add frontend unit tests and end-to-end verification
 
 ### Phase 2: Exception Handling & Observability
 **Goal**: All API errors produce structured logs with correlation IDs and preserve frontend error response contract
@@ -73,7 +74,7 @@ Phases execute in numeric order: 1 -> 2 -> 3
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Refactoring & Impact Analysis Core | 0/5 | Planning complete | - |
+| 1. Foundation Refactoring & Impact Analysis Core | 0/6 | Planning complete | - |
 | 2. Exception Handling & Observability | 0/TBD | Not started | - |
 | 3. SQL Parser Consolidation & DBQL Validation | 0/TBD | Not started | - |
 
