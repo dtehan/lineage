@@ -7,6 +7,7 @@ Delegates to LineageRepository and DatasetRepository for data access.
 
 from repositories.lineage_repository import LineageRepository
 from repositories.dataset_repository import DatasetRepository
+from exceptions import DatasetNotFoundError
 
 
 class LineageService:
@@ -54,7 +55,7 @@ class LineageService:
         # Look up dataset name and namespace
         dataset_info = self.dataset_repo.get_dataset_with_namespace(dataset_id)
         if not dataset_info:
-            raise ValueError(f"Dataset not found: {dataset_id}")
+            raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
 
         dataset_name = dataset_info["name"]
         namespace_uri = dataset_info["namespace_uri"]
@@ -116,7 +117,7 @@ class LineageService:
         # Look up dataset name and namespace
         dataset_info = self.dataset_repo.get_dataset_with_namespace(dataset_id)
         if not dataset_info:
-            raise ValueError(f"Dataset not found: {dataset_id}")
+            raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
 
         dataset_name = dataset_info["name"]
         namespace_uri = dataset_info["namespace_uri"]
@@ -124,7 +125,7 @@ class LineageService:
         # Get all fields for this dataset
         fields = self.dataset_repo.get_dataset_fields(dataset_id)
         if not fields:
-            raise ValueError(f"No fields found for dataset: {dataset_id}")
+            raise DatasetNotFoundError(f"No fields found for dataset: {dataset_id}")
 
         nodes = {}
         edges = []
@@ -218,7 +219,7 @@ class LineageService:
                 dataset_names.add(dataset["name"])
 
             if not datasets:
-                raise ValueError(f"No tables found in database '{database_name}'")
+                raise DatasetNotFoundError(f"No tables found in database '{database_name}'")
 
             # Create a mapping of dataset name to metadata for quick lookup
             dataset_metadata = {

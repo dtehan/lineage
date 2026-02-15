@@ -7,6 +7,7 @@ Delegates to LineageRepository and DatasetRepository for data access.
 
 from repositories.lineage_repository import LineageRepository
 from repositories.dataset_repository import DatasetRepository
+from exceptions import DatasetNotFoundError
 
 
 class ImpactService:
@@ -68,7 +69,7 @@ class ImpactService:
         # Look up dataset name
         dataset_name = self.dataset_repo.get_dataset_name(dataset_id)
         if not dataset_name:
-            raise ValueError(f"Dataset not found: {dataset_id}")
+            raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
 
         # Get downstream lineage
         downstream_records = self.lineage_repo.get_downstream_lineage(

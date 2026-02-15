@@ -6,6 +6,7 @@ Delegates to DatasetRepository for data access.
 """
 
 from repositories.dataset_repository import DatasetRepository
+from exceptions import DatasetNotFoundError
 
 
 class DatasetService:
@@ -51,7 +52,7 @@ class DatasetService:
         """
         namespace = self.dataset_repo.get_namespace(namespace_id)
         if not namespace:
-            raise ValueError(f"Namespace not found: {namespace_id}")
+            raise DatasetNotFoundError(f"Namespace not found: {namespace_id}")
         return namespace
 
     def list_datasets(self, namespace_id: str, limit: int = 100, offset: int = 0) -> dict:
@@ -93,7 +94,7 @@ class DatasetService:
         """
         dataset = self.dataset_repo.get_dataset(dataset_id)
         if not dataset:
-            raise ValueError(f"Dataset not found: {dataset_id}")
+            raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
         return dataset
 
     def search_datasets(self, query: str, limit: int = 50) -> dict:
@@ -147,7 +148,7 @@ class DatasetService:
         """
         stats = self.dataset_repo.get_dataset_statistics(dataset_id)
         if not stats:
-            raise ValueError(f"Dataset not found or statistics unavailable: {dataset_id}")
+            raise DatasetNotFoundError(f"Dataset not found or statistics unavailable: {dataset_id}")
         return stats
 
     def get_dataset_ddl(self, dataset_id: str) -> dict:
@@ -165,5 +166,5 @@ class DatasetService:
         """
         ddl = self.dataset_repo.get_dataset_ddl(dataset_id)
         if not ddl:
-            raise ValueError(f"Dataset not found or DDL unavailable: {dataset_id}")
+            raise DatasetNotFoundError(f"Dataset not found or DDL unavailable: {dataset_id}")
         return ddl
