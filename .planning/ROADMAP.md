@@ -13,7 +13,7 @@ This roadmap transforms a functional but monolithic column-level lineage applica
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Refactoring & Impact Analysis Core** - Extract repository layer, implement service pattern, deliver Impact Analysis feature
-- [x] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
+- [ ] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
 - [x] **Phase 3: SQL Parser Consolidation & DBQL Validation** - Consolidate duplicate parsers, validate DBQL extraction, display truncation warnings
 
 ## Phase Details
@@ -48,12 +48,13 @@ Plans:
   3. All traceback.print_exc() calls replaced with logger.exception() calls that capture full context
   4. Frontend receives errors in exact same format as before ({"error": string} schema) for all API endpoints
   5. Every API request has a correlation ID that appears in logs and error responses for tracing
-**Plans:** 3 plans
+**Plans:** 4 plans
 
 Plans:
 - [x] 02-01-PLAN.md -- Create exception hierarchy, loguru config, and sanitization utility
 - [x] 02-02-PLAN.md -- Wire correlation ID middleware, global error handlers, and domain exceptions into Flask app
 - [x] 02-03-PLAN.md -- Strip try/except from routes and update API tests for error contract verification
+- [ ] 02-04-PLAN.md -- Add dual-sink logging (stdout + rotating file) [GAP CLOSURE]
 
 ### Phase 3: SQL Parser Consolidation & DBQL Validation
 **Goal**: Single SQL parser module validates DBQL extraction and UI displays view truncation warnings
@@ -78,9 +79,9 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
-| 2. Exception Handling & Observability | 3/3 | Complete | 2026-02-15 |
+| 2. Exception Handling & Observability | 3/4 | Gap Closure | - |
 | 3. SQL Parser Consolidation & DBQL Validation | 2/2 | Complete | 2026-02-14 |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 3 complete)*
+*Last updated: 2026-02-15 (Phase 2 gap closure plan added)*
