@@ -188,7 +188,7 @@ class DBQLExtractor:
             since: Only fetch queries after this timestamp
 
         Returns:
-            List of (QueryID, StatementType, SQLText, StartTime, DefaultDatabase) tuples
+            List of (QueryID, StatementType, SQLText, StartTime, DefaultDatabase, sql_length) tuples
         """
         if since:
             since_str = since.strftime('%Y-%m-%d %H:%M:%S')
@@ -200,7 +200,8 @@ class DBQLExtractor:
                     q.StatementType,
                     CAST(s.SQLTextInfo AS VARCHAR(32000)) as query_text,
                     q.StartTime,
-                    q.DefaultDatabase
+                    q.DefaultDatabase,
+                    LENGTH(s.SQLTextInfo) as sql_length
                 FROM DBC.DBQLogTbl q
                 JOIN DBC.DBQLSQLTbl s
                     ON q.QueryID = s.QueryID
@@ -220,7 +221,8 @@ class DBQLExtractor:
                     q.StatementType,
                     CAST(s.SQLTextInfo AS VARCHAR(32000)) as query_text,
                     q.StartTime,
-                    q.DefaultDatabase
+                    q.DefaultDatabase,
+                    LENGTH(s.SQLTextInfo) as sql_length
                 FROM DBC.DBQLogTbl q
                 JOIN DBC.DBQLSQLTbl s
                     ON q.QueryID = s.QueryID
@@ -232,6 +234,16 @@ class DBQLExtractor:
             """)
 
         queries = self.cursor.fetchall()
+
+        # Warn about truncated SQL text
+        truncated_count = sum(1 for q in queries if q[5] and q[5] > 32000)
+        if truncated_count:
+            logger.warning(
+                "DBQL truncation: %d of %d queries exceed VARCHAR(32000) limit - "
+                "lineage extraction may be incomplete for these queries",
+                truncated_count, len(queries)
+            )
+
         logger.info("Found %d queries to process", len(queries))
         return queries
 
@@ -286,7 +298,7 @@ class DBQLExtractor:
         # Process each query
         lineage_records: List[Dict] = []
 
-        for i, (query_id, stmt_type, query_text, query_time, default_db) in enumerate(queries):
+        for i, (query_id, stmt_type, query_text, query_time, default_db, sql_length) in enumerate(queries):
             # Progress logging
             if (i + 1) % 1000 == 0:
                 logger.info("Progress: %d/%d queries (%.1f%%)",
@@ -296,6 +308,14 @@ class DBQLExtractor:
             if not query_text:
                 self.stats.record_skip("null query_text")
                 continue
+
+            # Warn about truncated query text
+            if sql_length and sql_length > 32000:
+                logger.warning(
+                    "Query %s SQL text truncated: %d chars (limit: 32000) - "
+                    "target: %s",
+                    query_id, sql_length, self._extract_target_table(query_text)
+                )
 
             try:
                 # Set default database context for unqualified table names
