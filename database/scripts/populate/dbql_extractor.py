@@ -40,12 +40,9 @@ import teradatasql
 
 from db_config import CONFIG
 
-# Import the SQL parser
-try:
-    from sql_parser import TeradataSQLParser
-except ImportError:
-    # Fallback for direct script execution
-    from scripts.populate.sql_parser import TeradataSQLParser
+# Import SQL parser from canonical location (lineage-api/utils/)
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "lineage-api"))
+from utils.sql_parser import TeradataSQLParser
 
 
 # Module-level logger
