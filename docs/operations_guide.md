@@ -13,9 +13,10 @@ This guide enables an operations team to deploy the Lineage application from scr
 3. [Configuration](#configuration)
 4. [Database Setup](#database-setup)
 5. [Running the Application](#running-the-application)
-6. [Production Deployment](#production-deployment)
-7. [Architecture](#architecture)
-8. [Troubleshooting](#troubleshooting)
+6. [Logging and Observability](#logging-and-observability)
+7. [Production Deployment](#production-deployment)
+8. [Architecture](#architecture)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -266,11 +267,164 @@ Start components in the following order:
 
 ---
 
+## Logging and Observability
+
+The backend uses structured JSON logging for both local debugging and production observability. All logs include correlation IDs for request tracing.
+
+### 6.1 Log Output
+
+The application writes logs to two destinations simultaneously:
+
+| Destination | Path | Format | Purpose |
+|-------------|------|--------|---------|
+| **stdout** | Console output | JSON | Container environments, log aggregators |
+| **File** | `lineage-api/logs/lineage-api.log` | JSON | Local debugging, persistent storage |
+
+Both sinks use identical JSON format for consistent parsing.
+
+### 6.2 Log Format
+
+All log entries are JSON objects with the following structure:
+
+```json
+{
+  "text": "Request started GET /api/v2/openlineage/namespaces",
+  "record": {
+    "elapsed": {"repr": "0:00:00.001234", "seconds": 0.001234},
+    "exception": null,
+    "extra": {"correlation_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"},
+    "file": {"name": "python_server.py", "path": "/path/to/lineage-api/python_server.py"},
+    "function": "before_request",
+    "level": {"icon": "ℹ️", "name": "INFO", "no": 20},
+    "line": 45,
+    "message": "Request started GET /api/v2/openlineage/namespaces",
+    "module": "python_server",
+    "name": "lineage-api",
+    "process": {"id": 12345, "name": "MainProcess"},
+    "thread": {"id": 67890, "name": "MainThread"},
+    "time": {"repr": "2026-02-15 13:30:45.123456-08:00", "timestamp": 1739654445.123456}
+  }
+}
+```
+
+**Key fields for debugging:**
+- `text` -- Human-readable message
+- `record.extra.correlation_id` -- Unique ID for tracking requests across multiple log entries
+- `record.level.name` -- Log level (INFO, WARNING, ERROR)
+- `record.file.name` and `record.line` -- Source code location
+- `record.time.repr` -- Timestamp with timezone
+
+### 6.3 Correlation IDs
+
+Every API request is assigned a unique correlation ID (UUID4) that appears in:
+- Log entries (in `record.extra.correlation_id`)
+- HTTP response headers (`X-Correlation-ID`)
+- Error responses (in the JSON body)
+
+Use correlation IDs to trace all log entries related to a single request:
+
+```bash
+# Extract all logs for a specific request
+grep "a1b2c3d4-e5f6-7890-abcd-ef1234567890" lineage-api/logs/lineage-api.log
+
+# Parse JSON and extract relevant fields
+grep "a1b2c3d4-e5f6-7890-abcd-ef1234567890" lineage-api/logs/lineage-api.log | \
+  jq -r '[.record.time.repr, .record.level.name, .text] | @tsv'
+```
+
+### 6.4 Log Rotation and Retention
+
+The file sink automatically rotates logs to prevent unbounded disk usage:
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **Rotation** | 100 MB | When `lineage-api.log` reaches 100 MB, it's renamed with a timestamp suffix and a new file is created |
+| **Retention** | 30 days | Rotated files older than 30 days are automatically deleted |
+| **Compression** | gzip | Rotated files are compressed to `.log.gz` to save disk space |
+
+**Example rotated files:**
+```
+logs/lineage-api.log              # Current log file
+logs/lineage-api.2026-02-14.log.gz    # Yesterday's compressed log
+logs/lineage-api.2026-02-13.log.gz    # 2 days ago
+```
+
+The `logs/` directory is excluded from version control (`.gitignore`) and should be excluded from backups.
+
+### 6.5 Parsing Logs
+
+Use `jq` to parse and filter JSON logs:
+
+```bash
+# Show only ERROR level logs
+jq -r 'select(.record.level.name == "ERROR") | .text' logs/lineage-api.log
+
+# Extract timestamps and messages
+jq -r '[.record.time.repr, .text] | @tsv' logs/lineage-api.log
+
+# Find all logs related to a specific table
+jq -r 'select(.text | contains("DIM_CUSTOMER")) | .text' logs/lineage-api.log
+
+# Count logs by level
+jq -r '.record.level.name' logs/lineage-api.log | sort | uniq -c
+```
+
+### 6.6 Integration with Log Aggregators
+
+The JSON output to stdout is designed for container environments and log aggregation platforms:
+
+**Docker/Kubernetes:**
+```bash
+# Logs go to stdout and are collected by the container runtime
+docker logs <container-id>
+kubectl logs <pod-name>
+```
+
+**Splunk/Elasticsearch/Datadog:**
+Configure your log shipper (Fluentd, Logstash, Filebeat) to:
+1. Read from stdout (container logs) or the `logs/lineage-api.log` file
+2. Parse as JSON (no custom parsing rules needed)
+3. Index the `record.extra.correlation_id` field for request tracing
+4. Create alerts on `record.level.name == "ERROR"`
+
+### 6.7 Log Levels
+
+The application uses the following log levels:
+
+| Level | Usage | Examples |
+|-------|-------|----------|
+| **INFO** | Normal operations, request lifecycle | Request started, response sent, database query executed |
+| **WARNING** | Recoverable issues, degraded state | SQL truncation detected, slow query (>5s) |
+| **ERROR** | Request failures, exceptions | 404 not found, 500 internal error, database connection failed |
+
+All levels are logged to both stdout and the file sink. To change the log level, modify `lineage-api/utils/logging_config.py` and restart the backend.
+
+### 6.8 Troubleshooting with Logs
+
+**Find all errors in the last hour:**
+```bash
+jq -r 'select(.record.level.name == "ERROR" and (.record.time.timestamp > (now - 3600))) | .text' logs/lineage-api.log
+```
+
+**Trace a failed request:**
+1. Get the correlation ID from the error response or browser network tab
+2. Extract all logs for that request:
+   ```bash
+   grep "<correlation-id>" logs/lineage-api.log | jq -r '.text'
+   ```
+
+**Check for database connection issues:**
+```bash
+jq -r 'select(.text | contains("Teradata") or contains("database")) | .text' logs/lineage-api.log
+```
+
+---
+
 ## Production Deployment
 
 The application is designed to run behind a reverse proxy that handles authentication, TLS termination, rate limiting, and security headers. The application itself does NOT implement authentication -- this is intentional. See [Security Documentation](SECURITY.md) for complete configuration examples including Traefik + Docker Compose, Nginx, and Kubernetes Ingress.
 
-### 6.1 Security Overview
+### 7.1 Security Overview
 
 | Requirement | Description | Details |
 |-------------|-------------|---------|
@@ -278,11 +432,11 @@ The application is designed to run behind a reverse proxy that handles authentic
 | TLS | All traffic must use HTTPS (TLS 1.2 minimum, TLS 1.3 recommended) | [SECURITY.md - TLS](SECURITY.md#1-tls-requirements) |
 | Security Headers | Reverse proxy must add HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Cache-Control | [SECURITY.md - Headers](SECURITY.md#4-security-headers) |
 | CORS | Restrict allowed origins to your domain (never use wildcard `*`) | [SECURITY.md - CORS](SECURITY.md#5-cors-configuration) |
-| Rate Limiting | Configure per-endpoint rate limits at the proxy level | See [Rate Limiting](#62-rate-limiting) below |
+| Rate Limiting | Configure per-endpoint rate limits at the proxy level | See [Rate Limiting](#72-rate-limiting) below |
 
 **Note:** The application's built-in CORS configuration (`localhost:3000`, `localhost:5173`) is for development only. In production, CORS must be configured at the reverse proxy level with your actual domain.
 
-### 6.2 Rate Limiting
+### 7.2 Rate Limiting
 
 Configure rate limiting at the reverse proxy or API gateway level. The following limits are recommended by endpoint category:
 
@@ -298,7 +452,7 @@ Configure rate limiting at the reverse proxy or API gateway level. The following
 
 See [SECURITY.md - Rate Limiting](SECURITY.md#3-rate-limiting-requirements) for proxy-specific configuration examples (Traefik, Nginx, Kubernetes Ingress).
 
-### 6.3 Frontend Production Serving
+### 7.3 Frontend Production Serving
 
 Build the frontend for production:
 
@@ -332,7 +486,7 @@ location /api/ {
 
 **Do not use `npm run dev` in production.** The Vite development server is not designed for production use.
 
-### 6.4 Deployment Checklist
+### 7.4 Deployment Checklist
 
 Verify each item before going live:
 
