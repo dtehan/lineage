@@ -1,12 +1,12 @@
 ---
-status: complete
+status: diagnosed
 phase: 02-exception-handling-observability
 source:
   - 02-01-SUMMARY.md
   - 02-02-SUMMARY.md
   - 02-03-SUMMARY.md
 started: 2026-02-15T08:30:00Z
-updated: 2026-02-15T08:37:00Z
+updated: 2026-02-15T08:40:00Z
 ---
 
 ## Current Test
@@ -60,6 +60,14 @@ skipped: 0
   reason: "User reported: we should be sending the logs to stdout and to a file"
   severity: major
   test: 6
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "Logging configuration deliberately designed for stderr-only during Phase 02-01 based on research decision to defer file logging. Implementation uses print() which goes to stdout (not stderr as documented), but lacks file sink entirely."
+  artifacts:
+    - path: "lineage-api/utils/logging_config.py"
+      issue: "Lines 36-41 need dual sinks (stdout + file) instead of single print() sink"
+    - path: "lineage-api/utils/logging_config.py"
+      issue: "Docstrings (lines 1-11, 17-30) incorrectly claim stderr output"
+  missing:
+    - "Add sys.stdout sink with JSON serialization"
+    - "Add file sink with rotation/retention (location TBD: logs/lineage-api.json or environment variable)"
+    - "Configuration decision: file path, rotation policy (100 MB suggested), retention (30 days suggested)"
+  debug_session: "gsd-debugger agent a431fbb"
