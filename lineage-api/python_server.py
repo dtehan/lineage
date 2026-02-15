@@ -11,6 +11,7 @@ Data access in repositories/ package.
 import os
 from flask import Flask
 from flask_cors import CORS
+from loguru import logger
 
 from config import get_db_connection
 from repositories.lineage_repository import LineageRepository
@@ -21,6 +22,9 @@ from services.impact_service import ImpactService
 from routes.health import health_bp
 from routes.openlineage import openlineage_bp
 from routes import openlineage as openlineage_routes
+from utils.logging_config import configure_logging
+from middleware.correlation_id import init_correlation_id_middleware
+from middleware.error_handlers import register_error_handlers
 
 
 def create_app():
@@ -28,15 +32,22 @@ def create_app():
     Application factory for Flask app.
 
     Creates and configures the Flask application with:
+    - Structured logging (loguru)
     - CORS configuration
     - Database connection
     - Repository layer
     - Service layer
     - Route Blueprints
+    - Correlation ID middleware
+    - Global error handlers
 
     Returns:
         Flask: Configured Flask application
     """
+    # Step 1: Configure logging FIRST (before any other setup)
+    # This ensures all subsequent startup logs use structured JSON format
+    configure_logging()
+
     app = Flask(__name__)
 
     # Configure CORS
@@ -46,6 +57,9 @@ def create_app():
         "http://localhost:3004",
         "http://localhost:5173"
     ])
+
+    # Step 2: Initialize correlation ID middleware (after CORS, before routes)
+    init_correlation_id_middleware(app)
 
     # Create database connection (shared across all repositories)
     connection = get_db_connection()
@@ -66,12 +80,15 @@ def create_app():
     app.register_blueprint(health_bp)
     app.register_blueprint(openlineage_bp)
 
+    # Step 3: Register error handlers LAST (after all routes are registered)
+    register_error_handlers(app)
+
     return app
 
 
 if __name__ == "__main__":
     port = int(os.environ.get("API_PORT") or os.environ.get("PORT", "8080"))
-    print(f"Starting Python Lineage API on port {port}")
+    logger.info(f"Starting Python Lineage API on port {port}", port=port)
 
     app = create_app()
     app.run(host="0.0.0.0", port=port, debug=False)
