@@ -10,28 +10,28 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 2 of 3 (Exception Handling & Observability)
-Plan: 1 of 4 in current phase
+Plan: 2 of 3 in current phase
 Status: Complete
-Last activity: 2026-02-15 — Completed plan 02-01 (Foundation - Exception Hierarchy and Logging)
+Last activity: 2026-02-15 — Completed plan 02-02 (Middleware Integration and Domain Exception Wiring)
 
-Progress: [██▓▓▓▓▓▓▓▓] 25%
+Progress: [███▓▓▓▓▓▓▓] 30%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 12.6 min
-- Total execution time: 1.48 hours
+- Total plans completed: 8
+- Average duration: 11.6 min
+- Total execution time: 1.55 hours
 
 **By Phase:**
 
 | Phase | Plans | Total    | Avg/Plan  |
 |-------|-------|----------|-----------|
 | 01    | 6     | 86.0 min | 14.3 min  |
-| 02    | 1     | 2.3 min  | 2.3 min   |
+| 02    | 2     | 4.6 min  | 2.3 min   |
 
 **Recent Trend:**
-- Last 6 plans: 01-02 (2 min), 01-03 (3.4 min), 01-04 (4.5 min), 01-05 (2.6 min), 01-06 (54 min), 02-01 (2.3 min)
+- Last 6 plans: 01-03 (3.4 min), 01-04 (4.5 min), 01-05 (2.6 min), 01-06 (54 min), 02-01 (2.3 min), 02-02 (2.3 min)
 - Trend: Fast autonomous plans (~2-4 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
@@ -64,6 +64,9 @@ Recent decisions affecting current work:
 - [Phase 02-01]: to_dict() returns only {"error": string} preserving existing API contract
 - [Phase 02-01]: Sanitization via regex patterns with conservative filtering (passwords/tokens only)
 - [Phase 02-01]: loguru with JSON serialization to stderr only (container-friendly)
+- [Phase 02-02]: Use logger.contextualize() instead of logger.bind() for thread-safe correlation ID binding
+- [Phase 02-02]: Register error handlers AFTER blueprint registration to ensure coverage of all routes
+- [Phase 02-02]: Call configure_logging() FIRST in create_app() to ensure all startup logs use JSON format
 
 ### Pending Todos
 
@@ -96,6 +99,9 @@ None yet.
 - Exception hierarchy (LineageException base, DatasetNotFoundError 404, others 500)
 - loguru configured for structured JSON logging to stderr (container-friendly)
 - Sanitization utility filters passwords/tokens from error messages
+- Correlation ID middleware generates UUID per request and binds via contextualize()
+- Global error handlers catch domain exceptions and return consistent {"error": string} responses
+- Services raise DatasetNotFoundError instead of ValueError for middleware handling
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -109,10 +115,10 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-15 (plan 02-01 execution)
-Stopped at: Completed 02-01-PLAN.md (Foundation - Exception Hierarchy and Logging)
+Last session: 2026-02-15 (plan 02-02 execution)
+Stopped at: Completed 02-02-PLAN.md (Middleware Integration and Domain Exception Wiring)
 Resume file: None
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-14*
+*Last updated: 2026-02-15*
