@@ -612,6 +612,75 @@ def test_content_type_json(results):
     except Exception as e:
         results.add_result("TC-API-020: Content-Type JSON Response", False, str(e))
 
+def test_correlation_id_in_response(results):
+    """TC-API-021: Correlation ID in Response Headers"""
+    try:
+        response = requests.get(f"{BASE_URL}/health")
+        correlation_id = response.headers.get("X-Correlation-ID", "")
+        # Validate UUID format (basic check - 36 characters with dashes)
+        passed = len(correlation_id) == 36 and correlation_id.count("-") == 4
+        results.add_result("TC-API-021: Correlation ID in Response Headers", passed,
+                          f"X-Correlation-ID: {correlation_id}")
+    except Exception as e:
+        results.add_result("TC-API-021: Correlation ID in Response Headers", False, str(e))
+
+def test_correlation_id_propagated(results):
+    """TC-API-022: Unique Correlation ID Per Request"""
+    try:
+        response1 = requests.get(f"{BASE_URL}/health")
+        response2 = requests.get(f"{BASE_URL}/health")
+        correlation_id1 = response1.headers.get("X-Correlation-ID", "")
+        correlation_id2 = response2.headers.get("X-Correlation-ID", "")
+        # Each request should have different correlation IDs
+        passed = correlation_id1 != correlation_id2 and len(correlation_id1) == 36 and len(correlation_id2) == 36
+        results.add_result("TC-API-022: Unique Correlation ID Per Request", passed,
+                          f"ID1: {correlation_id1}, ID2: {correlation_id2}")
+    except Exception as e:
+        results.add_result("TC-API-022: Unique Correlation ID Per Request", False, str(e))
+
+def test_not_found_error_format(results):
+    """TC-API-023: Not Found Error Response Format"""
+    try:
+        response = requests.get(f"{BASE_URL}/api/v2/openlineage/datasets/nonexistent-dataset-id-99999")
+        data = response.json()
+        # Verify 404 status, error key in body, and correlation ID header
+        passed = (response.status_code == 404 and
+                 "error" in data and
+                 isinstance(data.get("error"), str) and
+                 "X-Correlation-ID" in response.headers)
+        results.add_result("TC-API-023: Not Found Error Response Format", passed,
+                          f"Status: {response.status_code}, Error: {data.get('error', '')[:50]}")
+    except Exception as e:
+        results.add_result("TC-API-023: Not Found Error Response Format", False, str(e))
+
+def test_error_response_contract(results):
+    """TC-API-024: Error Response Contract Preserved"""
+    try:
+        response = requests.get(f"{BASE_URL}/api/v2/openlineage/namespaces/nonexistent-namespace-id-99999")
+        data = response.json()
+        # Verify exact contract: {"error": string} with no extra keys
+        passed = (response.status_code == 404 and
+                 list(data.keys()) == ["error"] and
+                 isinstance(data.get("error"), str))
+        results.add_result("TC-API-024: Error Response Contract Preserved", passed,
+                          f"Status: {response.status_code}, Keys: {list(data.keys())}")
+    except Exception as e:
+        results.add_result("TC-API-024: Error Response Contract Preserved", False, str(e))
+
+def test_search_validation_error(results):
+    """TC-API-025: Search Validation Error"""
+    try:
+        response = requests.get(f"{BASE_URL}/api/v2/openlineage/datasets/search?q=a")
+        data = response.json()
+        # Verify 400 status and error key in body
+        passed = (response.status_code == 400 and
+                 "error" in data and
+                 isinstance(data.get("error"), str))
+        results.add_result("TC-API-025: Search Validation Error", passed,
+                          f"Status: {response.status_code}, Error: {data.get('error', '')}")
+    except Exception as e:
+        results.add_result("TC-API-025: Search Validation Error", False, str(e))
+
 
 def main():
     print("=" * 60)
@@ -646,6 +715,11 @@ def main():
     test_lineage_edge_structure(results)
     test_impact_summary_structure(results)
     test_content_type_json(results)
+    test_correlation_id_in_response(results)
+    test_correlation_id_propagated(results)
+    test_not_found_error_format(results)
+    test_error_response_contract(results)
+    test_search_validation_error(results)
 
     # Print results
     print("=" * 60)
