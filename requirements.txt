@@ -9,6 +9,9 @@ teradatasql>=17.20.0
 flask>=3.0.0
 flask-cors>=4.0.0
 
+# Structured logging
+loguru>=0.7.3
+
 # HTTP client (for testing)
 requests>=2.31.0
 
