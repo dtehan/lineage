@@ -9,29 +9,30 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 1 of 3 (Foundation Refactoring & Impact Analysis Core)
-Plan: 6 of 6 in current phase
+Phase: 2 of 3 (Exception Handling & Observability)
+Plan: 1 of 4 in current phase
 Status: Complete
-Last activity: 2026-02-14 — Completed plan 01-06 (Frontend Unit Tests and End-to-End Verification)
+Last activity: 2026-02-15 — Completed plan 02-01 (Foundation - Exception Hierarchy and Logging)
 
-Progress: [██████████] 100%
+Progress: [██▓▓▓▓▓▓▓▓] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: 14.3 min
-- Total execution time: 1.43 hours
+- Total plans completed: 7
+- Average duration: 12.6 min
+- Total execution time: 1.48 hours
 
 **By Phase:**
 
 | Phase | Plans | Total    | Avg/Plan  |
 |-------|-------|----------|-----------|
 | 01    | 6     | 86.0 min | 14.3 min  |
+| 02    | 1     | 2.3 min  | 2.3 min   |
 
 **Recent Trend:**
-- Last 6 plans: 01-01 (3 min), 01-02 (2 min), 01-03 (3.4 min), 01-04 (4.5 min), 01-05 (2.6 min), 01-06 (54 min)
-- Trend: Variable duration with checkpoint-heavy plans taking longer
+- Last 6 plans: 01-02 (2 min), 01-03 (3.4 min), 01-04 (4.5 min), 01-05 (2.6 min), 01-06 (54 min), 02-01 (2.3 min)
+- Trend: Fast autonomous plans (~2-4 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
 
@@ -59,6 +60,10 @@ Recent decisions affecting current work:
 - [Phase 01-05]: Depth badge colors: blue (1), amber (2), slate (3+) for visual hierarchy
 - [Phase 01-06]: getAllByText pattern for duplicate table values in test assertions
 - [Phase 01-06]: Container queries for summary cards to avoid numeric value collisions in tests
+- [Phase 02-01]: Exception hierarchy with status_code attribute for middleware HTTP mapping
+- [Phase 02-01]: to_dict() returns only {"error": string} preserving existing API contract
+- [Phase 02-01]: Sanitization via regex patterns with conservative filtering (passwords/tokens only)
+- [Phase 02-01]: loguru with JSON serialization to stderr only (container-friendly)
 
 ### Pending Todos
 
@@ -88,6 +93,9 @@ None yet.
 - python_server.py reduced from 1454 lines to 77 lines via layered architecture
 - TanStack Table used for sortable Impact Analysis data display
 - 559 total frontend tests (542 existing + 17 new Impact Analysis tests)
+- Exception hierarchy (LineageException base, DatasetNotFoundError 404, others 500)
+- loguru configured for structured JSON logging to stderr (container-friendly)
+- Sanitization utility filters passwords/tokens from error messages
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -101,8 +109,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-14 (plan 01-06 execution)
-Stopped at: Completed 01-06-PLAN.md (Frontend Unit Tests and End-to-End Verification) - Phase 1 Complete
+Last session: 2026-02-15 (plan 02-01 execution)
+Stopped at: Completed 02-01-PLAN.md (Foundation - Exception Hierarchy and Logging)
 Resume file: None
 
 ---
