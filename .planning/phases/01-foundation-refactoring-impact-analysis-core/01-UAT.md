@@ -1,11 +1,11 @@
 ---
-status: complete
+status: diagnosed
 phase: 01-foundation-refactoring-impact-analysis-core
 source:
   - 01-05-SUMMARY.md (Impact Analysis Frontend UI)
   - 01-06-SUMMARY.md (Human Verification)
 started: 2026-02-14T22:00:00Z
-updated: 2026-02-14T22:10:00Z
+updated: 2026-02-14T22:20:00Z
 ---
 
 ## Current Test
@@ -66,9 +66,22 @@ skipped: 7
 ## Gaps
 
 - truth: "Impact Analysis page loads and displays view with header, loading spinner, then summary cards and impact table"
-  status: failed
+  status: fixed
   reason: "User reported: fail: no impact analysis information show, screen shot shows white page"
   severity: blocker
   test: 1
-  artifacts: []
-  missing: []
+  root_cause: "Navigation passed columnId as single URL parameter (/impact/demo_user.FACT_SALES.net_amount) but route expected TWO parameters (/impact/:datasetId/:fieldName). React Router treated entire columnId as datasetId, leaving fieldName undefined. ImpactPage hit early return and rendered blank page."
+  artifacts:
+    - path: "lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx"
+      issue: "handleViewImpactAnalysis passed entire columnId to navigation instead of splitting into datasetId and fieldName"
+    - path: "lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx"
+      issue: "Same navigation issue"
+    - path: "lineage-ui/src/components/domain/LineageGraph/AllDatabasesLineageGraph.tsx"
+      issue: "Same navigation issue"
+    - path: "lineage-api/repositories/dataset_repository.py"
+      issue: "get_dataset_name() only accepted full dataset IDs with namespace hash, not simple dataset names"
+  fix_applied:
+    - "Updated all 3 graph components to split columnId into datasetId (database.table) and fieldName before navigation"
+    - "Updated dataset_repository.py to accept both full IDs and simple dataset names via fallback lookup"
+    - "Commit: 6b2f228"
+  debug_session: ".planning/debug/resolved/impact-analysis-blank-page.md"
