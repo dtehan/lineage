@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 3 of 3 (SQL Parser Consolidation & DBQL Validation)
-Plan: 1 of 2 in current phase
+Plan: 2 of 2 in current phase
 Status: Complete
-Last activity: 2026-02-15 — Completed plan 03-01 (SQL Parser Consolidation)
+Last activity: 2026-02-15 — Completed plan 03-02 (DBQL Truncation Warnings and Validation Tooling)
 
-Progress: [████▓▓▓▓▓▓] 45%
+Progress: [█████▓▓▓▓▓] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
-- Average duration: 9.6 min
-- Total execution time: 1.62 hours
+- Total plans completed: 11
+- Average duration: 9.0 min
+- Total execution time: 1.66 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [████▓▓▓▓▓▓] 45%
 |-------|-------|----------|-----------|
 | 01    | 6     | 86.0 min | 14.3 min  |
 | 02    | 3     | 7.0 min  | 2.3 min   |
-| 03    | 1     | 2.6 min  | 2.6 min   |
+| 03    | 2     | 4.9 min  | 2.5 min   |
 
 **Recent Trend:**
-- Last 6 plans: 01-05 (2.6 min), 01-06 (54 min), 02-01 (2.3 min), 02-02 (2.3 min), 02-03 (2.4 min), 03-01 (2.6 min)
+- Last 6 plans: 01-06 (54 min), 02-01 (2.3 min), 02-02 (2.3 min), 02-03 (2.4 min), 03-01 (2.6 min), 03-02 (2.3 min)
 - Trend: Fast autonomous plans (~2-4 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
@@ -72,6 +72,9 @@ Recent decisions affecting current work:
 - [Phase 02-03]: Preserved explicit input validation in routes (search query length check)
 - [Phase 03-01]: Chose lineage-api/utils/ as canonical location for shared utilities (aligns with API-centric architecture)
 - [Phase 03-01]: Removed try/except import fallback in favor of explicit sys.path configuration
+- [Phase 03-02]: Two-tier warning logging for data quality: aggregate count + per-query context with target table
+- [Phase 03-02]: Sample-based validation (100 records) with SHA256 hashing for fast regression checks
+- [Phase 03-02]: Use LENGTH(s.SQLTextInfo) alongside CAST to detect truncation without re-parsing CLOB
 
 ### Pending Todos
 
@@ -118,6 +121,9 @@ None yet.
 - 25 API tests validate endpoints, error contract, and correlation ID propagation
 - SQL parser consolidated to single canonical location at lineage-api/utils/sql_parser.py
 - TeradataSQLParser class provides SQLGlot-based column-level lineage extraction (684 lines)
+- DBQL extraction warns when SQL text exceeds VARCHAR(32000) limit (aggregate + per-query)
+- Regression validation script (validate_migration.py) for OL_COLUMN_LINEAGE data integrity
+- CLEANUP-05 verified: Backend detects RequestTxtOverFlow, frontend displays yellow truncation banner
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -131,12 +137,12 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-15 (plan 03-01 execution)
-Stopped at: Completed 03-01-PLAN.md (SQL Parser Consolidation)
+Last session: 2026-02-15 (plan 03-02 execution)
+Stopped at: Completed 03-02-PLAN.md (DBQL Truncation Warnings and Validation Tooling)
 Resume file: None
 
-**Phase 3 In Progress:** 1 of 2 plans completed in SQL Parser Consolidation & DBQL Validation phase
+**Phase 3 Complete:** 2 of 2 plans completed in SQL Parser Consolidation & DBQL Validation phase
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-15*
+*Last updated: 2026-02-15 (Plan 03-02 completed)*
