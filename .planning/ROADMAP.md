@@ -1,87 +1,30 @@
 # Roadmap: Lineage Data Lineage Application
 
-## Overview
+## Milestones
 
-This roadmap transforms a functional but monolithic column-level lineage application into a maintainable, observable system with complete Impact Analysis capabilities. The journey moves through three sequential phases: (1) extracting shared lineage traversal logic and implementing Impact Analysis core, (2) establishing structured exception handling and logging infrastructure, and (3) consolidating duplicate SQL parsers with DBQL validation. Each phase delivers independently verifiable capabilities while maintaining backward compatibility with 73 database tests, 20 API tests, and the existing frontend.
+- ✅ **v1.0 Code Quality & Missing Features** — Phases 1-3 (shipped 2026-02-15)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
+<details>
+<summary>✅ v1.0 Code Quality & Missing Features (Phases 1-3) — SHIPPED 2026-02-15</summary>
 
-Decimal phases appear between their surrounding integers in numeric order.
+- [x] Phase 1: Foundation Refactoring & Impact Analysis Core (6/6 plans) — completed 2026-02-14
+- [x] Phase 2: Exception Handling & Observability (4/4 plans) — completed 2026-02-15
+- [x] Phase 3: SQL Parser Consolidation & DBQL Validation (2/2 plans) — completed 2026-02-14
 
-- [x] **Phase 1: Foundation Refactoring & Impact Analysis Core** - Extract repository layer, implement service pattern, deliver Impact Analysis feature
-- [x] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
-- [x] **Phase 3: SQL Parser Consolidation & DBQL Validation** - Consolidate duplicate parsers, validate DBQL extraction, display truncation warnings
+**Archive:** See [v1.0-ROADMAP.md](milestones/v1.0-ROADMAP.md) for full phase details
 
-## Phase Details
-
-### Phase 1: Foundation Refactoring & Impact Analysis Core
-**Goal**: Users can view downstream impact for column changes with depth indicators and asset counts, powered by refactored backend with shared lineage traversal logic
-**Depends on**: Nothing (first phase)
-**Requirements**: ARCH-01, ARCH-02, ARCH-03, ARCH-04, ARCH-05, ARCH-06, IMPACT-01, IMPACT-02, IMPACT-03, IMPACT-04, IMPACT-05, IMPACT-06, IMPACT-07
-**Success Criteria** (what must be TRUE):
-  1. User can view downstream impact list showing all affected tables and columns when selecting any column
-  2. User can distinguish between direct dependencies (depth 1) and indirect dependencies (depth 2+) with visual depth indicators
-  3. User sees column-level impact counts per affected table (e.g., "3 columns affected in DIM_CUSTOMER")
-  4. User sees affected asset count summary at top of impact view (e.g., "5 tables, 12 columns, 2 databases impacted")
-  5. Backend recursive CTE logic for lineage traversal exists in exactly one place (repository layer) and is reused by all endpoints (column/table/database lineage and impact analysis)
-**Plans:** 6 plans
-
-Plans:
-- [x] 01-01-PLAN.md -- Extract repository layer (config, base repo, LineageRepository, DatasetRepository)
-- [x] 01-02-PLAN.md -- Create service layer (LineageService, DatasetService, ImpactService)
-- [x] 01-03-PLAN.md -- Create Flask Blueprints and refactor python_server.py to Application Factory
-- [x] 01-04-PLAN.md -- Add Impact Analysis API endpoint and update backend API tests
-- [x] 01-05-PLAN.md -- Implement Impact Analysis frontend UI with TanStack Table
-- [x] 01-06-PLAN.md -- Add frontend unit tests and end-to-end verification
-
-### Phase 2: Exception Handling & Observability
-**Goal**: All API errors produce structured logs with correlation IDs and preserve frontend error response contract
-**Depends on**: Phase 1
-**Requirements**: EXCEPT-01, EXCEPT-02, EXCEPT-03, EXCEPT-04, EXCEPT-05, EXCEPT-06
-**Success Criteria** (what must be TRUE):
-  1. System uses domain exception classes (DatasetNotFoundError, LineageTraversalError, DatabaseConnectionError) instead of bare Exception catches
-  2. All errors produce JSON log entries with correlation IDs via loguru logger
-  3. All traceback.print_exc() calls replaced with logger.exception() calls that capture full context
-  4. Frontend receives errors in exact same format as before ({"error": string} schema) for all API endpoints
-  5. Every API request has a correlation ID that appears in logs and error responses for tracing
-**Plans:** 4 plans
-
-Plans:
-- [x] 02-01-PLAN.md -- Create exception hierarchy, loguru config, and sanitization utility
-- [x] 02-02-PLAN.md -- Wire correlation ID middleware, global error handlers, and domain exceptions into Flask app
-- [x] 02-03-PLAN.md -- Strip try/except from routes and update API tests for error contract verification
-- [x] 02-04-PLAN.md -- Add dual-sink logging (stdout + rotating file) [GAP CLOSURE]
-
-### Phase 3: SQL Parser Consolidation & DBQL Validation
-**Goal**: Single SQL parser module validates DBQL extraction and UI displays view truncation warnings
-**Depends on**: Phase 2
-**Requirements**: CLEANUP-01, CLEANUP-02, CLEANUP-03, CLEANUP-04, CLEANUP-05
-**Success Criteria** (what must be TRUE):
-  1. SQL parser code exists in lineage-api/utils/sql_parser.py only (duplicate in database/archive/ removed)
-  2. All imports (populate_lineage.py and related scripts) reference the consolidated parser location
-  3. DBQL extraction produces same record counts before and after consolidation (regression validation passes)
-  4. User sees warning messages in UI when view SQL is truncated in Teradata metadata
-**Plans:** 2 plans
-
-Plans:
-- [x] 03-01-PLAN.md -- Consolidate sql_parser.py to lineage-api/utils/ and update all imports
-- [x] 03-02-PLAN.md -- Add DBQL truncation warnings and regression validation script
+</details>
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3
-
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
-| 2. Exception Handling & Observability | 4/4 | Complete | 2026-02-15 |
-| 3. SQL Parser Consolidation & DBQL Validation | 2/2 | Complete | 2026-02-14 |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Foundation Refactoring & Impact Analysis Core | v1.0 | 6/6 | Complete | 2026-02-14 |
+| 2. Exception Handling & Observability | v1.0 | 4/4 | Complete | 2026-02-15 |
+| 3. SQL Parser Consolidation & DBQL Validation | v1.0 | 2/2 | Complete | 2026-02-14 |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 2 complete with gap closure)*
+*Last updated: 2026-02-15 (v1.0 milestone complete)*

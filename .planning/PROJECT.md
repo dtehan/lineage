@@ -8,17 +8,16 @@ A column-level data lineage application for Teradata databases that visualizes d
 
 Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases.
 
-## Current Milestone: v1.0 Code Quality & Missing Features
+## Current State
 
-**Goal:** Address critical tech debt and implement missing impact analysis feature to improve reliability and complete core functionality.
+**Shipped:** v1.0 Code Quality & Missing Features (Feb 15, 2026)
 
-**Target features:**
-- Implement complete Impact Analysis feature (currently placeholder)
-- Fix exception handling across all 11 API endpoints with proper logging
-- Clean up archived code and consolidate SQL parser implementations
-- Refactor large backend file into maintainable service/repository pattern
-- Add error context to statistics endpoint
-- Display view SQL truncation warnings in UI
+**What's working:**
+- Impact Analysis feature with depth indicators and column-level impact counts
+- Structured exception handling with correlation IDs and dual-sink logging
+- Maintainable service/repository architecture (replaced 1454-line monolith)
+- DBQL truncation warnings visible in UI
+- All test suites passing (73 DB + 20 API + 260+ frontend + 21 E2E)
 
 ## Requirements
 
@@ -26,18 +25,16 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 <!-- Shipped and confirmed valuable. -->
 
-(None yet — ship to validate)
+- ✓ Impact Analysis feature fully functional — v1.0
+- ✓ Proper exception handling with logging across all API endpoints — v1.0
+- ✓ Single consolidated SQL parser module — v1.0
+- ✓ Backend code organized into service/repository layers — v1.0
+- ✓ Statistics endpoint errors properly logged and communicated — v1.0
+- ✓ View SQL truncation warnings visible to users — v1.0
 
 ### Active
 
 <!-- Current scope. Building toward these. -->
-
-- [ ] Impact Analysis feature fully functional
-- [ ] Proper exception handling with logging across all API endpoints
-- [ ] Single consolidated SQL parser module
-- [ ] Backend code organized into service/repository layers
-- [ ] Statistics endpoint errors properly logged and communicated
-- [ ] View SQL truncation warnings visible to users
 
 ### Out of Scope
 
@@ -50,25 +47,27 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 ## Context
 
-**Current State:**
-- Backend: Python Flask API (1454-line python_server.py) with OpenLineage-aligned endpoints
-- Frontend: React 18 + TypeScript with React Flow graph visualization
+**Codebase State (v1.0):**
+- Backend: Python Flask with layered architecture (repositories, services, blueprints)
+- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table
 - Database: Teradata with OpenLineage schema (OL_* tables)
-- Testing: 73 database tests, 20 API tests, 260+ frontend unit tests, 21 E2E tests
+- LOC: ~444K lines (Python + TypeScript)
+- Testing: 73 database tests + 20 API tests + 260+ frontend tests + 21 E2E tests
 
-**Technical Environment:**
+**Technical Stack:**
 - OpenLineage spec v2-0-2 implementation
 - DBQL-based lineage extraction using SQLGlot parser
 - Recursive CTEs for lineage traversal with cycle detection
 - React Flow + ELKjs for graph layout
+- Loguru for structured JSON logging with correlation IDs
 
-**Known Issues from Codebase Mapping:**
-- Impact Analysis page shows "Feature In Development" placeholder
-- 11 API endpoints use bare `except Exception` with traceback.print_exc()
-- Duplicate SQL parsing code in archive and active directories
-- Large backend file mixes routing, database logic, and transformations
-- Statistics endpoint silently ignores errors with `except Exception: pass`
-- View SQL truncation detected but not clearly communicated to frontend
+**Recent Changes (v1.0):**
+- Refactored python_server.py from 1454 lines to 77 lines (Application Factory pattern)
+- Eliminated 5 duplicate recursive CTEs into 3 shared repository functions
+- Replaced bare exception handlers with domain exception hierarchy
+- Added dual-sink logging (stdout + rotating file with 100 MB/30-day retention)
+- Consolidated duplicate SQL parsers into canonical location
+- Implemented complete Impact Analysis feature with TanStack Table UI
 
 ## Constraints
 
@@ -83,10 +82,14 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| OpenLineage schema alignment | Industry standard for lineage metadata; enables future tool integration | — Pending |
-| DBQL-based extraction over SQL parsing | More reliable; uses Teradata's own query logs rather than parsing SQL strings | — Pending |
-| React Flow for graph visualization | Best-in-class React graph library; handles auto-layout and interactivity | — Pending |
-| Defer security to v2.0 | Internal tool; focus on correctness before hardening | — Pending |
+| OpenLineage schema alignment | Industry standard for lineage metadata; enables future tool integration | ✓ Good — Enables interoperability |
+| DBQL-based extraction over SQL parsing | More reliable; uses Teradata's own query logs rather than parsing SQL strings | ✓ Good — Accurate lineage |
+| React Flow for graph visualization | Best-in-class React graph library; handles auto-layout and interactivity | ✓ Good — Excellent UX |
+| Defer security to v2.0 | Internal tool; focus on correctness before hardening | ✓ Good — Enabled rapid v1.0 delivery |
+| Repository pattern for data access | Extract duplicate CTEs, enable testing, separate concerns | ✓ Good — Reduced 1454-line file to 77 lines |
+| Domain exception hierarchy | Map exceptions to HTTP status codes, preserve error contract | ✓ Good — Clean error handling |
+| Loguru for structured logging | JSON logs with correlation IDs for observability | ✓ Good — Production-ready logging |
+| TanStack Table for Impact Analysis | Sortable, accessible data tables with minimal code | ✓ Good — Rich UX with low overhead |
 
 ---
-*Last updated: 2026-02-13 after milestone v1.0 initialization*
+*Last updated: 2026-02-15 after v1.0 milestone completion*
