@@ -13,7 +13,7 @@ This roadmap transforms a functional but monolithic column-level lineage applica
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Refactoring & Impact Analysis Core** - Extract repository layer, implement service pattern, deliver Impact Analysis feature
-- [ ] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
+- [x] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
 - [ ] **Phase 3: SQL Parser Consolidation & DBQL Validation** - Consolidate duplicate parsers, validate DBQL extraction, display truncation warnings
 
 ## Phase Details
@@ -51,9 +51,9 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md -- Create exception hierarchy, loguru config, and sanitization utility
-- [ ] 02-02-PLAN.md -- Wire correlation ID middleware, global error handlers, and domain exceptions into Flask app
-- [ ] 02-03-PLAN.md -- Strip try/except from routes and update API tests for error contract verification
+- [x] 02-01-PLAN.md -- Create exception hierarchy, loguru config, and sanitization utility
+- [x] 02-02-PLAN.md -- Wire correlation ID middleware, global error handlers, and domain exceptions into Flask app
+- [x] 02-03-PLAN.md -- Strip try/except from routes and update API tests for error contract verification
 
 ### Phase 3: SQL Parser Consolidation & DBQL Validation
 **Goal**: Single SQL parser module validates DBQL extraction and UI displays view truncation warnings
@@ -77,9 +77,9 @@ Phases execute in numeric order: 1 -> 2 -> 3
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
-| 2. Exception Handling & Observability | 0/3 | Not started | - |
+| 2. Exception Handling & Observability | 3/3 | Complete | 2026-02-15 |
 | 3. SQL Parser Consolidation & DBQL Validation | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-14 (Phase 2 planned)*
+*Last updated: 2026-02-15 (Phase 2 completed)*
