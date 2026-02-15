@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 2 - Exception Handling & Observability (COMPLETE)
+**Current focus:** Phase 3 - SQL Parser Consolidation & DBQL Validation (IN PROGRESS)
 
 ## Current Position
 
-Phase: 2 of 3 (Exception Handling & Observability)
-Plan: 3 of 3 in current phase
+Phase: 3 of 3 (SQL Parser Consolidation & DBQL Validation)
+Plan: 1 of 2 in current phase
 Status: Complete
-Last activity: 2026-02-15 — Completed plan 02-03 (Route Handler Cleanup and Error Contract Tests)
+Last activity: 2026-02-15 — Completed plan 03-01 (SQL Parser Consolidation)
 
-Progress: [████▓▓▓▓▓▓] 40%
+Progress: [████▓▓▓▓▓▓] 45%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 10.3 min
-- Total execution time: 1.58 hours
+- Total plans completed: 10
+- Average duration: 9.6 min
+- Total execution time: 1.62 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [████▓▓▓▓▓▓] 40%
 |-------|-------|----------|-----------|
 | 01    | 6     | 86.0 min | 14.3 min  |
 | 02    | 3     | 7.0 min  | 2.3 min   |
+| 03    | 1     | 2.6 min  | 2.6 min   |
 
 **Recent Trend:**
-- Last 6 plans: 01-04 (4.5 min), 01-05 (2.6 min), 01-06 (54 min), 02-01 (2.3 min), 02-02 (2.3 min), 02-03 (2.4 min)
+- Last 6 plans: 01-05 (2.6 min), 01-06 (54 min), 02-01 (2.3 min), 02-02 (2.3 min), 02-03 (2.4 min), 03-01 (2.6 min)
 - Trend: Fast autonomous plans (~2-4 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
@@ -69,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Call configure_logging() FIRST in create_app() to ensure all startup logs use JSON format
 - [Phase 02-03]: Removed all route-level try/except blocks - global handlers now catch all exceptions
 - [Phase 02-03]: Preserved explicit input validation in routes (search query length check)
+- [Phase 03-01]: Chose lineage-api/utils/ as canonical location for shared utilities (aligns with API-centric architecture)
+- [Phase 03-01]: Removed try/except import fallback in favor of explicit sys.path configuration
 
 ### Pending Todos
 
@@ -113,6 +116,8 @@ None yet.
 - Services raise DatasetNotFoundError instead of ValueError for middleware handling
 - Route handlers contain zero try/except blocks - all exception handling delegated to middleware
 - 25 API tests validate endpoints, error contract, and correlation ID propagation
+- SQL parser consolidated to single canonical location at lineage-api/utils/sql_parser.py
+- TeradataSQLParser class provides SQLGlot-based column-level lineage extraction (684 lines)
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -126,11 +131,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-15 (plan 02-03 execution)
-Stopped at: Completed 02-03-PLAN.md (Route Handler Cleanup and Error Contract Tests)
+Last session: 2026-02-15 (plan 03-01 execution)
+Stopped at: Completed 03-01-PLAN.md (SQL Parser Consolidation)
 Resume file: None
 
-**Phase 2 Complete:** All 3 plans in Exception Handling & Observability phase finished
+**Phase 3 In Progress:** 1 of 2 plans completed in SQL Parser Consolidation & DBQL Validation phase
 
 ---
 *State initialized: 2026-02-14*
