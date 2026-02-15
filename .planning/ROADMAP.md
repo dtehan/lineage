@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation Refactoring & Impact Analysis Core** - Extract repository layer, implement service pattern, deliver Impact Analysis feature
 - [x] **Phase 2: Exception Handling & Observability** - Replace bare exception handlers with structured logging and middleware
-- [ ] **Phase 3: SQL Parser Consolidation & DBQL Validation** - Consolidate duplicate parsers, validate DBQL extraction, display truncation warnings
+- [x] **Phase 3: SQL Parser Consolidation & DBQL Validation** - Consolidate duplicate parsers, validate DBQL extraction, display truncation warnings
 
 ## Phase Details
 
@@ -67,8 +67,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md -- Consolidate sql_parser.py to lineage-api/utils/ and update all imports
-- [ ] 03-02-PLAN.md -- Add DBQL truncation warnings and regression validation script
+- [x] 03-01-PLAN.md -- Consolidate sql_parser.py to lineage-api/utils/ and update all imports
+- [x] 03-02-PLAN.md -- Add DBQL truncation warnings and regression validation script
 
 ## Progress
 
@@ -79,8 +79,8 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
 | 2. Exception Handling & Observability | 3/3 | Complete | 2026-02-15 |
-| 3. SQL Parser Consolidation & DBQL Validation | 0/2 | In Progress | - |
+| 3. SQL Parser Consolidation & DBQL Validation | 2/2 | Complete | 2026-02-14 |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 3 planned)*
+*Last updated: 2026-02-14 (Phase 3 complete)*
