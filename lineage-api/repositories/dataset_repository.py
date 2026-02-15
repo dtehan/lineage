@@ -575,24 +575,42 @@ class DatasetRepository(BaseRepository):
 
     def get_dataset_name(self, dataset_id: str):
         """
-        Get dataset name by ID.
+        Get dataset name by ID or name.
+
+        Supports flexible lookup:
+        - If dataset_id contains '/', treats as full ID (namespace_hash/dataset_name)
+        - Otherwise, treats as dataset name and looks up by name
 
         Args:
-            dataset_id: Dataset identifier
+            dataset_id: Dataset identifier (full ID or name)
 
         Returns:
             str or None: Dataset name. None if not found.
         """
         with self.connection.cursor() as cur:
+            # Try exact match by dataset_id first
             cur.execute("""
                 SELECT "name"
                 FROM OL_DATASET
                 WHERE dataset_id = ?
             """, [dataset_id])
             row = cur.fetchone()
-            if not row:
-                return None
-            return self._strip(row[0]) if row[0] else ""
+            if row:
+                return self._strip(row[0]) if row[0] else ""
+
+            # If not found and input doesn't look like a full ID, try matching by name
+            # This allows callers to pass dataset name directly (e.g., "demo_user.FACT_SALES")
+            if '/' not in dataset_id:
+                cur.execute("""
+                    SELECT "name"
+                    FROM OL_DATASET
+                    WHERE "name" = ?
+                """, [dataset_id])
+                row = cur.fetchone()
+                if row:
+                    return self._strip(row[0]) if row[0] else ""
+
+            return None
 
     def get_dataset_fields(self, dataset_id: str):
         """

@@ -391,8 +391,16 @@ function AllDatabasesLineageGraphInner() {
 
   // Handle impact analysis from panel
   const handleViewImpactAnalysis = useCallback((columnId: string) => {
-    navigate(`/impact/${encodeURIComponent(columnId)}`);
-  }, [navigate]);
+    // Find the node to extract datasetId and fieldName
+    const node = storeNodes.find((n) => n.id === columnId);
+    if (!node || node.type !== 'column') return;
+
+    // Construct datasetId from database.table
+    const datasetId = `${node.databaseName}.${node.tableName}`;
+    const fieldName = node.columnName || '';
+
+    navigate(`/impact/${encodeURIComponent(datasetId)}/${encodeURIComponent(fieldName)}`);
+  }, [navigate, storeNodes]);
 
   // Handle table view row click
   const handleTableRowClick = useCallback(
