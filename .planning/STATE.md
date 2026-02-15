@@ -12,28 +12,28 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 Phase: 3 of 3 (SQL Parser Consolidation & DBQL Validation)
 Plan: 2 of 2 in current phase
 Status: Complete
-Last activity: 2026-02-15 — Completed plan 03-02 (DBQL Truncation Warnings and Validation Tooling)
+Last activity: 2026-02-15 — Completed plan 02-04 (Dual-Sink Logging) [gap closure]
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 9.0 min
-- Total execution time: 1.66 hours
+- Total plans completed: 12
+- Average duration: 8.3 min
+- Total execution time: 1.67 hours
 
 **By Phase:**
 
 | Phase | Plans | Total    | Avg/Plan  |
 |-------|-------|----------|-----------|
 | 01    | 6     | 86.0 min | 14.3 min  |
-| 02    | 3     | 7.0 min  | 2.3 min   |
+| 02    | 4     | 8.0 min  | 2.0 min   |
 | 03    | 2     | 4.9 min  | 2.5 min   |
 
 **Recent Trend:**
-- Last 6 plans: 01-06 (54 min), 02-01 (2.3 min), 02-02 (2.3 min), 02-03 (2.4 min), 03-01 (2.6 min), 03-02 (2.3 min)
-- Trend: Fast autonomous plans (~2-4 min), checkpoint-heavy plans take longer (50+ min)
+- Last 6 plans: 02-01 (2.3 min), 02-02 (2.3 min), 02-03 (2.4 min), 03-01 (2.6 min), 03-02 (2.3 min), 02-04 (1.0 min)
+- Trend: Fast autonomous plans (~1-3 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
 
@@ -70,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase 02-02]: Call configure_logging() FIRST in create_app() to ensure all startup logs use JSON format
 - [Phase 02-03]: Removed all route-level try/except blocks - global handlers now catch all exceptions
 - [Phase 02-03]: Preserved explicit input validation in routes (search query length check)
+- [Phase 02-04]: Dual-sink logging (stdout + rotating file) with 100 MB rotation and 30-day retention
+- [Phase 02-04]: sys.stdout over print() lambda for cleaner sink implementation
 - [Phase 03-01]: Chose lineage-api/utils/ as canonical location for shared utilities (aligns with API-centric architecture)
 - [Phase 03-01]: Removed try/except import fallback in favor of explicit sys.path configuration
 - [Phase 03-02]: Two-tier warning logging for data quality: aggregate count + per-query context with target table
@@ -109,7 +111,8 @@ None yet.
 - TanStack Table used for sortable Impact Analysis data display
 - 559 total frontend tests (542 existing + 17 new Impact Analysis tests)
 - Exception hierarchy (LineageException base, DatasetNotFoundError 404, others 500)
-- loguru configured for structured JSON logging to stderr (container-friendly)
+- loguru configured for dual-sink structured JSON logging (stdout + rotating file)
+- Rotating file sink at logs/lineage-api.log with 100 MB rotation, 30-day retention, gzip compression
 - Sanitization utility filters passwords/tokens from error messages
 - Correlation ID middleware generates UUID per request and binds via contextualize()
 - Global error handlers catch domain exceptions and return consistent {"error": string} responses
@@ -134,10 +137,11 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-15 (plan 03-02 execution)
-Stopped at: Completed 03-02-PLAN.md (DBQL Truncation Warnings and Validation Tooling)
+Last session: 2026-02-15 (plan 02-04 execution)
+Stopped at: Completed 02-04-PLAN.md (Dual-Sink Logging) [gap closure]
 Resume file: None
 
+**Phase 2 Complete:** 4 of 4 plans completed in Exception Handling & Observability phase
 **Phase 3 Complete:** 2 of 2 plans completed in SQL Parser Consolidation & DBQL Validation phase
 
 ---
