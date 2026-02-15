@@ -64,10 +64,11 @@ Plans:
   2. All imports (populate_lineage.py and related scripts) reference the consolidated parser location
   3. DBQL extraction produces same record counts before and after consolidation (regression validation passes)
   4. User sees warning messages in UI when view SQL is truncated in Teradata metadata
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-(To be defined during planning)
+- [ ] 03-01-PLAN.md -- Consolidate sql_parser.py to lineage-api/utils/ and update all imports
+- [ ] 03-02-PLAN.md -- Add DBQL truncation warnings and regression validation script
 
 ## Progress
 
@@ -78,8 +79,8 @@ Phases execute in numeric order: 1 -> 2 -> 3
 |-------|----------------|--------|-----------|
 | 1. Foundation Refactoring & Impact Analysis Core | 6/6 | Complete | 2026-02-14 |
 | 2. Exception Handling & Observability | 3/3 | Complete | 2026-02-15 |
-| 3. SQL Parser Consolidation & DBQL Validation | 0/TBD | Not started | - |
+| 3. SQL Parser Consolidation & DBQL Validation | 0/2 | In Progress | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 2 completed)*
+*Last updated: 2026-02-15 (Phase 3 planned)*
