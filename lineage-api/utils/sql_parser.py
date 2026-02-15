@@ -6,7 +6,7 @@ Uses SQLGlot to parse SQL statements and extract column-level lineage.
 Supports Teradata SQL dialect including INSERT...SELECT, MERGE, CTAS, and UPDATE statements.
 
 Usage:
-    from sql_parser import TeradataSQLParser
+    from utils.sql_parser import TeradataSQLParser
 
     parser = TeradataSQLParser()
     lineage = parser.extract_column_lineage(sql_text, statement_type)
