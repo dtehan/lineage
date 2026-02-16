@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 4 of 7 (Database Query Optimization)
-Plan: 1 of TBD (in progress)
+Plan: 2 of TBD (in progress)
 Status: Executing
-Last activity: 2026-02-16 — Completed plan 04-01: baseline performance and composite indexes
+Last activity: 2026-02-16 — Completed plan 04-02: CTE query optimization with LOCKING hints and VARCHAR path optimization
 
-Progress: [███░░░░░░░] 46% (13 of 28 estimated plans complete across all milestones)
+Progress: [███░░░░░░░] 50% (14 of 28 estimated plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13 (12 v1.0 + 1 v2.0)
-- Average duration: 8.1 min
-- Total execution time: 1.75 hours
+- Total plans completed: 14 (12 v1.0 + 2 v2.0)
+- Average duration: 7.7 min
+- Total execution time: 1.81 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [███░░░░░░░] 46% (13 of 28 estimated plans complet
 | 01    | 6     | 86.0 min | 14.3 min  |
 | 02    | 4     | 8.0 min  | 2.0 min   |
 | 03    | 2     | 4.9 min  | 2.5 min   |
-| 04    | 1     | 4.5 min  | 4.5 min   |
+| 04    | 2     | 8.2 min  | 4.1 min   |
 
 **Recent Trend:**
-- Last 6 plans: 02-02 (2.3 min), 02-03 (2.4 min), 03-01 (2.6 min), 03-02 (2.3 min), 02-04 (1.0 min), 04-01 (4.5 min)
+- Last 6 plans: 02-03 (2.4 min), 03-01 (2.6 min), 03-02 (2.3 min), 02-04 (1.0 min), 04-01 (4.5 min), 04-02 (3.7 min)
 - Trend: Fast autonomous plans (~1-5 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
@@ -50,6 +50,9 @@ Recent decisions affecting v2.0 work:
 - Composite secondary indexes on join column pairs for CTE optimization (Phase 4, Plan 01)
 - Statistics collection required immediately after index creation for optimizer usage (Phase 4, Plan 01)
 - Kept single-column indexes alongside composite indexes per research guidance (Phase 4, Plan 01)
+- [Phase 04]: Reduced VARCHAR path from 4000/10000 to 500 bytes based on baseline measurements (max 67 bytes, 7.5x safety margin)
+- [Phase 04]: Applied LOCKING ROW FOR ACCESS to all lineage queries as default behavior for concurrent access
+- [Phase 04]: Deferred index usage validation to production (test data too small for realistic cost-based optimizer analysis)
 
 ### Pending Todos
 
@@ -58,10 +61,10 @@ None yet.
 ### Blockers/Concerns
 
 **v2.0 Performance Optimization:**
-- Test data (169 rows) insufficient to measure index optimization impact - need production volume
-- Production graph depth distribution unknown — affects path sizing optimization (Phase 4)
+- Test data (89 rows) insufficient to measure index optimization impact - need production volume
+- EXPLAIN shows full table scans for test data (correct optimizer behavior, deferred to production validation)
 - Optimal cache TTL unknown — need real ETL schedule and usage patterns (Phase 6)
-- Path VARCHAR(4000) is 60-250x oversized (actual: 16-67 bytes) - optimization opportunity
+- Path VARCHAR optimized to 500 bytes (was 4000/10000) - completed Phase 04 Plan 02
 
 ### Codebase Insights
 - OpenLineage schema (OL_* tables) aligned with spec v2-0-2
@@ -81,6 +84,8 @@ None yet.
 - OL_COLUMN_LINEAGE has 9 indexes: 6 single-column + 2 composite + 1 primary (Phase 04)
 - Composite indexes match exact CTE join patterns: (target_dataset, target_field) and (source_dataset, source_field)
 - collect_statistics.py automates statistics collection on indexed columns (Phase 04)
+- All lineage CTE queries use LOCKING ROW FOR ACCESS for concurrent access (Phase 04 Plan 02)
+- Path columns optimized to VARCHAR(500) based on baseline measurements (Phase 04 Plan 02)
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -95,13 +100,13 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-16 (Phase 04 Plan 01 execution)
-Stopped at: Completed 04-01: baseline performance metrics, composite indexes, statistics collection
+Last session: 2026-02-16 (Phase 04 Plan 02 execution)
+Stopped at: Completed 04-02: CTE query optimization with LOCKING hints and VARCHAR path optimization
 Resume file: None
 
 **Milestone v1.0 Complete:** 3 phases, 12 plans shipped (2026-02-15)
-**Milestone v2.0 In Progress:** Phase 04 started, 1 plan complete
+**Milestone v2.0 In Progress:** Phase 04 started, 2 plans complete
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-16 (Phase 04 Plan 01 complete)*
+*Last updated: 2026-02-16 (Phase 04 Plan 02 complete)*
