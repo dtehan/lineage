@@ -949,7 +949,7 @@ describe('DetailPanel', () => {
             <DetailPanel
               isOpen={true}
               onClose={() => {}}
-              selectedColumn={newColumn}
+              selectedColumns={[newColumn]}
             />
           </MemoryRouter>
         </QueryClientProvider>
