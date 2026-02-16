@@ -2,7 +2,7 @@ import { useRef, useCallback } from 'react';
 
 export interface ProfilerMetrics {
   id: string;
-  phase: 'mount' | 'update';
+  phase: 'mount' | 'update' | 'nested-update';
   actualDuration: number;
   baseDuration: number;
   startTime: number;
@@ -32,7 +32,7 @@ export function useProfiler(id: string) {
   const onRender = useCallback(
     (
       profileId: string,
-      phase: 'mount' | 'update',
+      phase: 'mount' | 'update' | 'nested-update',
       actualDuration: number,
       baseDuration: number,
       startTime: number,

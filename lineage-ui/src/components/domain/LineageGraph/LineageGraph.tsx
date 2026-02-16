@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, Profiler } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ReactFlow,
@@ -39,7 +39,9 @@ import {
   useSmartViewport,
   useFitToSelection,
   useLayoutWorker,
+  useProfiler,
 } from './hooks';
+import { toggleTransitions, shouldDisableTransitions } from '../../../utils/graph/disableTransitions';
 
 /**
  * Threshold for enabling React Flow's onlyRenderVisibleElements optimization.
@@ -146,6 +148,9 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Use layout worker hook for off-thread layout computation
   const { layoutGraph: workerLayoutGraph } = useLayoutWorker();
 
+  // Use profiler hook for measuring re-render frequency (FRONTEND-02)
+  const { onRender } = useProfiler('LineageGraph');
+
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
     // Get the set of node IDs that match the asset type filter
@@ -172,6 +177,18 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Create database clusters from filtered nodes
   const clusters = useDatabaseClustersFromNodes(filteredNodesAndEdges.filteredNodes);
+
+  // Disable CSS transitions for large graphs to prevent animation jank (FRONTEND-05)
+  useEffect(() => {
+    const nodeCount = filteredNodesAndEdges.filteredNodes.length;
+    if (shouldDisableTransitions(nodeCount)) {
+      toggleTransitions(false);
+    } else {
+      toggleTransitions(true);
+    }
+    // Re-enable transitions on unmount
+    return () => toggleTransitions(true);
+  }, [filteredNodesAndEdges.filteredNodes.length]);
 
   // Reset loading state and viewport flags when datasetId changes
   useEffect(() => {
@@ -562,12 +579,13 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const selectedEdgeDetail = selectedEdgeId ? getEdgeDetail(selectedEdgeId) : null;
 
   return (
-    <div
-      ref={wrapperRef}
-      className={`flex flex-col h-full ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
-    >
-      {/* Toolbar */}
-      <Toolbar
+    <Profiler id="LineageGraph" onRender={onRender}>
+      <div
+        ref={wrapperRef}
+        className={`flex flex-col h-full ${isFullscreen ? 'fixed inset-0 z-50 bg-white' : ''}`}
+      >
+        {/* Toolbar */}
+        <Toolbar
         viewMode={viewMode}
         onViewModeChange={setViewMode}
         direction={direction}
@@ -694,7 +712,8 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         onViewFullLineage={handleViewFullLineage}
         onViewImpactAnalysis={handleViewImpactAnalysis}
       />
-    </div>
+      </div>
+    </Profiler>
   );
 }
 
