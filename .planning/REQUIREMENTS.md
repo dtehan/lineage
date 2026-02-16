@@ -70,13 +70,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (To be filled by roadmapper) | | |
+| DBQUERY-01 | Phase 4 | Pending |
+| DBQUERY-02 | Phase 4 | Pending |
+| DBQUERY-03 | Phase 4 | Pending |
+| DBQUERY-04 | Phase 4 | Pending |
+| DBQUERY-05 | Phase 4 | Pending |
+| DBQUERY-06 | Phase 4 | Pending |
+| FRONTEND-01 | Phase 5 | Pending |
+| FRONTEND-02 | Phase 5 | Pending |
+| FRONTEND-03 | Phase 5 | Pending |
+| FRONTEND-04 | Phase 5 | Pending |
+| FRONTEND-05 | Phase 5 | Pending |
+| CACHE-01 | Phase 6 | Pending |
+| CACHE-02 | Phase 6 | Pending |
+| CACHE-03 | Phase 6 | Pending |
+| CACHE-04 | Phase 6 | Pending |
+| CACHE-05 | Phase 6 | Pending |
+| CACHE-06 | Phase 6 | Pending |
+| MEASURE-01 | Phase 4 | Pending |
+| MEASURE-02 | Phase 4, 5, 6, 7 | Pending |
+| MEASURE-03 | Phase 5, 6 | Pending |
+| MEASURE-04 | Phase 6, 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 21 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 21 ⚠️
+- Mapped to phases: 21
+- Unmapped: 0 ✓
+
+**Notes:**
+- MEASURE-01: Profiling infrastructure established in Phase 4 (benchmark_cte.py, API timing)
+- MEASURE-02: All phases must pass 73 database tests before/after changes
+- MEASURE-03: Benchmark validation occurs in Phase 5 (frontend) and Phase 6 (caching)
+- MEASURE-04: CI pipeline automation happens in Phase 6 and Phase 7
 
 ---
 *Requirements defined: 2026-02-15*
-*Last updated: 2026-02-15 after initial definition*
+*Last updated: 2026-02-15 after roadmap creation*
