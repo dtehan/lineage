@@ -54,6 +54,14 @@ body,
   animation: fade-in 150ms ease-out;
 }
 
+/* Performance: Disable transitions for large graphs (>200 nodes) */
+.no-transitions *,
+.no-transitions *::before,
+.no-transitions *::after {
+  transition-property: none !important;
+  animation: none !important;
+}
+
 /* Accessibility: Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,

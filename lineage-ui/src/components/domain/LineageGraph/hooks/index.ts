@@ -6,3 +6,4 @@ export * from './useLineageExport';
 export * from './useSmartViewport';
 export * from './useFitToSelection';
 export * from './useLayoutWorker';
+export * from './useProfiler';
