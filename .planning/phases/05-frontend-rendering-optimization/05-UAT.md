@@ -55,17 +55,17 @@ skipped: 0
   reason: "User reported: I loaded DBC database that has over 600 objects and it takes well over 60 seconds to load the first time, subsequent times are faster"
   severity: major
   test: 5
-  root_cause: ""
-  artifacts: []
-  missing: []
-  debug_session: ""
+  root_cause: "N+1 query problem in backend service layer (NOT a frontend rendering issue). lineage_service.get_database_lineage_graph executes 600+ individual queries to fetch field metadata for each dataset (lines 234-262 in services/lineage_service.py). At ~100ms per query, this accounts for 60+ seconds. Subsequent loads are fast due to TanStack Query 5-minute cache. Phase 5 frontend optimizations ARE working (142ms layout time), but backend N+1 queries dominate end-to-end time."
+  artifacts: ["lineage-api/services/lineage_service.py:234-262", "lineage-ui/src/App.tsx:11-18 (TanStack Query config)"]
+  missing: ["Bulk field metadata query to replace N+1 pattern (requires backend optimization, not frontend)"]
+  debug_session: ".planning/debug/dbc-database-slow-initial-load.md"
 
 - truth: "All frontend tests pass with no new failures introduced by Phase 05 changes"
-  status: failed
+  status: resolved
   reason: "User reported: these are the results: Test Files 6 failed | 29 passed (35), Tests 35 failed | 540 passed (575). 2 fewer passing tests than baseline (540 vs 542)"
   severity: major
   test: 6
-  root_cause: ""
-  artifacts: []
+  root_cause: "NOT a Phase 05 regression. Commit 04365d9 (Feb 7, 2026) 'fix(19): show table details when clicking table node' changed DetailPanel props from selectedColumn to selectedColumns array but missed updating line 952 in TC-PANEL-07 test's rerender call. This incomplete refactor occurred AFTER Phase 05 was completed (Jan 29). Fixed by changing selectedColumn={newColumn} to selectedColumns={[newColumn]}. Post-fix: 32 failed / 543 passed (1 MORE than baseline 542), confirming Phase 05 introduced zero test regressions."
+  artifacts: ["lineage-ui/src/components/domain/LineageGraph/DetailPanel.test.tsx:952", ".planning/debug/phase05-test-regression.md"]
   missing: []
-  debug_session: ""
+  debug_session: ".planning/debug/phase05-test-regression.md"
