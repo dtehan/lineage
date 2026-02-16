@@ -38,3 +38,22 @@ Project milestone history tracking completed phases and shipped features.
 
 ---
 
+
+## v2.0 Performance Optimization (Shipped: 2026-02-16)
+
+**Phases completed:** 3 phases (4-6), 8 plans
+
+**Delivered:** 324 files modified (+44,550/-38,627 lines), 28 commits over 18 days
+
+**Key accomplishments:**
+1. Database Query Optimization — Implemented composite secondary indexes on join column pairs, collected statistics for optimizer usage, added LOCKING ROW FOR ACCESS hints, and optimized VARCHAR path columns from 4000/10000 to 500 bytes
+2. Frontend Rendering Performance — Offloaded ELKjs layout computation to Web Worker (eliminating 3-5s UI freeze), validated 600-node graphs complete in 142ms, disabled CSS transitions for large graphs (>200 nodes) to prevent animation jank
+3. Redis Caching Layer — Implemented cache-aside pattern on all LineageRepository methods with hierarchical keys, added stampede prevention with distributed locks, created cache management API endpoints (/invalidate, /stats) for ETL integration
+4. Production-Ready Architecture — All optimizations structurally verified with comprehensive test coverage (374 tests: 73 DB + 20 API + 260+ frontend + 21 E2E), graceful degradation when Redis unavailable
+5. Complete System Integration — Verified 15/15 integration points properly wired, 5/5 critical E2E user flows operational, zero broken flows or orphaned code
+6. Performance Instrumentation — Established baseline measurement infrastructure (benchmark_cte.py), React Profiler for re-render tracking, cache hit rate monitoring
+
+**Note:** Phase 7 (Performance Validation with CI automation) deferred to future milestone. Database optimization performance targets require production data validation (test data insufficient for realistic optimizer behavior).
+
+---
+
