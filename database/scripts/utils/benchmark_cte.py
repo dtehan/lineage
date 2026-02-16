@@ -117,6 +117,7 @@ def build_upstream_query(dataset: str, field: str, max_depth: int, count_only: b
     """
 
     return f"""
+        LOCKING ROW FOR ACCESS
         WITH RECURSIVE lineage_path (
             lineage_id, source_dataset, source_field, target_dataset, target_field,
             depth, path
@@ -167,6 +168,7 @@ def build_downstream_query(dataset: str, field: str, max_depth: int, count_only:
     """
 
     return f"""
+        LOCKING ROW FOR ACCESS
         WITH RECURSIVE lineage_path (
             lineage_id, source_dataset, source_field, target_dataset, target_field,
             depth, path

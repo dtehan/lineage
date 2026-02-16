@@ -41,6 +41,7 @@ class LineageRepository(BaseRepository):
         """
         with self.connection.cursor() as cur:
             cur.execute("""
+                LOCKING ROW FOR ACCESS
                 WITH RECURSIVE upstream_lineage AS (
                     SELECT
                         source_namespace,
@@ -129,6 +130,7 @@ class LineageRepository(BaseRepository):
         """
         with self.connection.cursor() as cur:
             cur.execute("""
+                LOCKING ROW FOR ACCESS
                 WITH RECURSIVE downstream_lineage AS (
                     SELECT
                         source_namespace,
@@ -221,6 +223,7 @@ class LineageRepository(BaseRepository):
         dataset_list = list(dataset_names)
 
         lineage_query = f"""
+            LOCKING ROW FOR ACCESS
             WITH RECURSIVE lineage_cte AS (
                 -- Base case: direct lineage involving database tables
                 SELECT
