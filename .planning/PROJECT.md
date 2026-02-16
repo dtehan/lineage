@@ -19,6 +19,20 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - DBQL truncation warnings visible in UI
 - All test suites passing (73 DB + 20 API + 260+ frontend + 21 E2E)
 
+## Current Milestone: v2.0 Performance Optimization
+
+**Goal:** Reduce graph loading time from 60 seconds to 2-4 seconds across all graph types.
+
+**Target improvements:**
+- Database-level lineage graphs (600 nodes): 60s → 2-4s end-to-end
+- Table-level lineage graphs: 60s → 2-4s end-to-end
+- Column-level lineage graphs: 60s → 2-4s end-to-end
+
+**Constraints:**
+- Preserve OpenLineage schema compatibility
+- Maintain current tech stack (Flask, React Flow, Teradata)
+- Can add caching layer (Redis) if beneficial
+
 ## Requirements
 
 ### Validated
@@ -40,9 +54,8 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 <!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
 
-- Performance optimization (recursive CTE, indexes, N+1 queries) — Defer to v2.0; focus on correctness first
-- Security hardening (auth, rate limiting, input validation) — Defer to v2.0; internal tool usage only for now
-- Missing features (version tracking, batch operations, quality metrics) — Defer to v2.0; address tech debt first
+- Security hardening (auth, rate limiting, input validation) — Defer to future milestone; internal tool usage only for now
+- Missing features (version tracking, batch operations, quality metrics) — Defer to future milestone; focus on performance first
 - Test coverage expansion — Will add tests as part of implementation but not as separate initiative
 
 ## Context
@@ -92,4 +105,4 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | TanStack Table for Impact Analysis | Sortable, accessible data tables with minimal code | ✓ Good — Rich UX with low overhead |
 
 ---
-*Last updated: 2026-02-15 after v1.0 milestone completion*
+*Last updated: 2026-02-15 after v2.0 milestone start*

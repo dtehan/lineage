@@ -9,11 +9,10 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Milestone: v1.0 Code Quality & Missing Features
-Status: Shipped (2026-02-15)
-Last activity: 2026-02-15 — Milestone v1.0 archived
-
-Progress: [██████████] 100% (v1.0 complete)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-15 — Milestone v2.0 started
 
 ## Performance Metrics
 
