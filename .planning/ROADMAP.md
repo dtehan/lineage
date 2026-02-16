@@ -70,11 +70,12 @@ Plans:
   4. Large graphs (200+ nodes) render without animation jank (transitions disabled automatically)
   5. All 260+ frontend unit tests and 21 E2E tests pass
 
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 05-01: TBD
-- [ ] 05-02: TBD
+- [ ] 05-01-PLAN.md — ELKjs Web Worker with Comlink (offload layout to Worker thread)
+- [ ] 05-02-PLAN.md — React Profiler instrumentation + CSS transition disabling for large graphs
+- [ ] 05-03-PLAN.md — Performance benchmarks (600 nodes, depth 20+) and test validation
 
 ### Phase 6: Caching Layer
 **Goal**: Achieve sub-2-second response time for repeated lineage queries through Redis cache-aside pattern
