@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 4 of 7 (Database Query Optimization)
-Plan: 3 of 3 (complete)
+Phase: 5 of 7 (Frontend Rendering Optimization)
+Plan: 1 of 3
 Status: Complete
-Last activity: 2026-02-16 — Phase 4 Database Query Optimization complete
+Last activity: 2026-02-16 — Completed Phase 5 Plan 01: Web Worker for ELKjs Layout
 
-Progress: [███░░░░░░░] 54% (15 of 28 estimated plans complete across all milestones)
+Progress: [████░░░░░░] 57% (16 of 28 estimated plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15 (12 v1.0 + 3 v2.0)
-- Average duration: 7.5 min
-- Total execution time: 1.89 hours
+- Total plans completed: 16 (12 v1.0 + 4 v2.0)
+- Average duration: 7.3 min
+- Total execution time: 1.98 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [███░░░░░░░] 54% (15 of 28 estimated plans complet
 | 02    | 4     | 8.0 min  | 2.0 min   |
 | 03    | 2     | 4.9 min  | 2.5 min   |
 | 04    | 3     | 13.0 min | 4.3 min   |
+| 05    | 1     | 5.0 min  | 5.0 min   |
 
 **Recent Trend:**
-- Last 6 plans: 03-01 (2.6 min), 03-02 (2.3 min), 02-04 (1.0 min), 04-01 (4.5 min), 04-02 (3.7 min), 04-03 (4.8 min)
+- Last 6 plans: 03-02 (2.3 min), 02-04 (1.0 min), 04-01 (4.5 min), 04-02 (3.7 min), 04-03 (4.8 min), 05-01 (5.0 min)
 - Trend: Fast autonomous plans (~1-5 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
@@ -55,6 +56,11 @@ Recent decisions affecting v2.0 work:
 - [Phase 04]: Deferred index usage validation to production (test data too small for realistic cost-based optimizer analysis)
 - [Phase 04]: Accepted structural correctness over measurable speedup for test environment (89-row dataset insufficient for optimizer to use indexes)
 - [Phase 04]: Chose VARCHAR(500) optimization over numeric lineage_id conversion (UUID-based IDs prevent integer path optimization without schema change)
+- [Phase 05]: Use Comlink for Worker communication (type-safe API, automatic structured cloning)
+- [Phase 05]: Create Worker as module-level singleton (prevents Worker thread leaks, follows best practices)
+- [Phase 05]: Remove onProgress callback from Worker (functions not serializable via structured clone)
+- [Phase 05]: Use bundled ELK in Worker, not Worker-in-Worker pattern (Worker IS the offloaded thread)
+- [Phase 05]: Mock Worker and Comlink in tests (jsdom doesn't support Workers)
 
 ### Pending Todos
 
@@ -90,6 +96,11 @@ None yet.
 - All lineage CTE queries use LOCKING ROW FOR ACCESS for concurrent access (Phase 04 Plan 02)
 - Path columns optimized to VARCHAR(500) based on baseline measurements (Phase 04 Plan 02)
 - Phase 04 achieved structural correctness (indexes, statistics, locking) with production validation deferred
+- ELKjs layout computation now runs in Web Worker off main thread (Phase 05 Plan 01)
+- Comlink 4.4.2 provides type-safe Worker communication via structured cloning (Phase 05 Plan 01)
+- useLayoutWorker hook wraps singleton Worker instance (created once at module level, not per-render)
+- Worker mock in tests calls real layoutGraph function (jsdom doesn't support Workers)
+- Production build bundles Worker as separate 1.4MB chunk (includes ELKjs)
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -104,13 +115,13 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-16 (Phase 04 Database Query Optimization)
-Stopped at: Completed Phase 4, ready to start Phase 5 Frontend Rendering Optimization
+Last session: 2026-02-16 (Phase 05 Frontend Rendering Optimization)
+Stopped at: Completed 05-01-PLAN.md (Web Worker for ELKjs Layout)
 Resume file: None
 
 **Milestone v1.0 Complete:** 3 phases, 12 plans shipped (2026-02-15)
-**Milestone v2.0 In Progress:** Phase 04 complete (3/3 plans), ready for Phase 05
+**Milestone v2.0 In Progress:** Phase 05 started (1/3 plans complete)
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-16 (Phase 04 complete - 3/3 plans)*
+*Last updated: 2026-02-16 (Phase 05-01 complete - Web Worker for ELKjs Layout)*
