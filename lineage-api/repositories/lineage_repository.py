@@ -5,6 +5,7 @@ Provides data access methods for lineage graph traversal using
 recursive CTEs on OL_COLUMN_LINEAGE table.
 """
 
+from loguru import logger
 from repositories.base import BaseRepository
 
 
@@ -15,6 +16,23 @@ class LineageRepository(BaseRepository):
     Handles upstream, downstream, and database-level lineage queries
     using recursive CTEs with cycle detection.
     """
+
+    def _cache_get(self, key: str):
+        """Try to get from cache, return None on failure."""
+        try:
+            from cache import cache
+            return cache.get(key)
+        except Exception as e:
+            logger.warning(f"Cache get failed for {key}: {e}")
+            return None
+
+    def _cache_set(self, key: str, value, timeout: int = 3600):
+        """Try to set in cache, silently fail."""
+        try:
+            from cache import cache
+            cache.set(key, value, timeout=timeout)
+        except Exception as e:
+            logger.warning(f"Cache set failed for {key}: {e}")
 
     def get_upstream_lineage(self, dataset_name: str, field_name: str, max_depth: int = 5):
         """
@@ -39,6 +57,13 @@ class LineageRepository(BaseRepository):
                 - transformation_type: Transformation type (e.g., DIRECT, TRANSFORMATION)
                 - depth: Traversal depth from starting column
         """
+        # Check cache first
+        from cache.keys import make_column_lineage_key
+        cache_key = make_column_lineage_key(dataset_name, field_name, "upstream", max_depth)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         with self.connection.cursor() as cur:
             cur.execute("""
                 LOCKING ROW FOR ACCESS
@@ -91,7 +116,7 @@ class LineageRepository(BaseRepository):
             """, [dataset_name, field_name, max_depth])
 
             rows = cur.fetchall()
-            return [
+            result = [
                 {
                     "source_namespace": self._strip(row[0]) if row[0] else "",
                     "source_dataset": self._strip(row[1]) if row[1] else "",
@@ -104,6 +129,10 @@ class LineageRepository(BaseRepository):
                 }
                 for row in rows
             ]
+
+            # Cache the result
+            self._cache_set(cache_key, result)
+            return result
 
     def get_downstream_lineage(self, dataset_name: str, field_name: str, max_depth: int = 5):
         """
@@ -128,6 +157,13 @@ class LineageRepository(BaseRepository):
                 - transformation_type: Transformation type (e.g., DIRECT, TRANSFORMATION)
                 - depth: Traversal depth from starting column
         """
+        # Check cache first
+        from cache.keys import make_column_lineage_key
+        cache_key = make_column_lineage_key(dataset_name, field_name, "downstream", max_depth)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         with self.connection.cursor() as cur:
             cur.execute("""
                 LOCKING ROW FOR ACCESS
@@ -180,7 +216,7 @@ class LineageRepository(BaseRepository):
             """, [dataset_name, field_name, max_depth])
 
             rows = cur.fetchall()
-            return [
+            result = [
                 {
                     "source_namespace": self._strip(row[0]) if row[0] else "",
                     "source_dataset": self._strip(row[1]) if row[1] else "",
@@ -193,6 +229,10 @@ class LineageRepository(BaseRepository):
                 }
                 for row in rows
             ]
+
+            # Cache the result
+            self._cache_set(cache_key, result)
+            return result
 
     def get_database_lineage(self, dataset_names, max_depth: int = 3):
         """
@@ -218,6 +258,14 @@ class LineageRepository(BaseRepository):
         """
         if not dataset_names:
             return []
+
+        # Check cache first - extract database name from first dataset
+        from cache.keys import make_database_lineage_key
+        database_name = dataset_names[0].split('.')[0] if '.' in dataset_names[0] else dataset_names[0]
+        cache_key = make_database_lineage_key(database_name, max_depth)
+        cached = self._cache_get(cache_key)
+        if cached is not None:
+            return cached
 
         placeholders = ",".join("?" * len(dataset_names))
         dataset_list = list(dataset_names)
@@ -282,7 +330,7 @@ class LineageRepository(BaseRepository):
             cur.execute(lineage_query, params)
 
             rows = cur.fetchall()
-            return [
+            result = [
                 {
                     "source_namespace": self._strip(row[0]) if row[0] else "",
                     "source_dataset": self._strip(row[1]) if row[1] else "",
@@ -295,3 +343,7 @@ class LineageRepository(BaseRepository):
                 }
                 for row in rows
             ]
+
+            # Cache the result
+            self._cache_set(cache_key, result)
+            return result
