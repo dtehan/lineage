@@ -28,7 +28,7 @@
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 4: Database Query Optimization** - Optimize Teradata recursive CTEs with indexes, statistics, and path-based cycle detection
+- [x] **Phase 4: Database Query Optimization** - Optimize Teradata recursive CTEs with indexes, statistics, and path-based cycle detection
 - [ ] **Phase 5: Frontend Rendering Optimization** - Eliminate UI freezes with ELKjs Web Worker and React memoization
 - [ ] **Phase 6: Caching Layer** - Implement Redis cache-aside pattern for repeated queries
 - [ ] **Phase 7: Performance Validation** - Establish automated performance regression detection
@@ -49,11 +49,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Cycle detection paths use lineage_id integers instead of string concatenation (verified in CTE logic)
   5. All 73 database tests pass including cycle detection tests (CYCLE5_TEST, NESTED_DIAMOND, FANOUT10_TEST)
 
-**Plans**: TBD
+**Plans**: 3/3 complete
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [x] 04-01: Baseline & Index Creation
+- [x] 04-02: Query Optimization & Validation
+- [x] 04-03: Performance Verification
 
 ### Phase 5: Frontend Rendering Optimization
 **Goal**: Eliminate 3-5 second UI freeze during graph layout computation while maintaining correct rendering
@@ -123,7 +124,7 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 1. Foundation Refactoring & Impact Analysis Core | v1.0 | 6/6 | Complete | 2026-02-14 |
 | 2. Exception Handling & Observability | v1.0 | 4/4 | Complete | 2026-02-15 |
 | 3. SQL Parser Consolidation & DBQL Validation | v1.0 | 2/2 | Complete | 2026-02-14 |
-| 4. Database Query Optimization | v2.0 | 0/TBD | Not started | - |
+| 4. Database Query Optimization | v2.0 | 3/3 | Complete | 2026-02-16 |
 | 5. Frontend Rendering Optimization | v2.0 | 0/TBD | Not started | - |
 | 6. Caching Layer | v2.0 | 0/TBD | Not started | - |
 | 7. Performance Validation | v2.0 | 0/TBD | Not started | - |
