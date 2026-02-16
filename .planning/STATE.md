@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 
 ## Current Position
 
-Phase: 5 of 7 (Frontend Rendering Optimization)
-Plan: 3 of 3
+Phase: 6 of 7 (Caching Layer)
+Plan: 1 of 3
 Status: Complete
-Last activity: 2026-02-16 — Completed Phase 5 Plan 03: Performance Benchmarks for 600-Node Graphs
+Last activity: 2026-02-16 — Completed Phase 6 Plan 01: Redis Caching Infrastructure
 
-Progress: [████░░░░░░] 64% (18 of 28 estimated plans complete across all milestones)
+Progress: [████░░░░░░] 68% (19 of 28 estimated plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18 (12 v1.0 + 6 v2.0)
-- Average duration: 6.9 min
-- Total execution time: 2.15 hours
+- Total plans completed: 19 (12 v1.0 + 7 v2.0)
+- Average duration: 6.6 min
+- Total execution time: 2.21 hours
 
 **By Phase:**
 
@@ -32,16 +32,17 @@ Progress: [████░░░░░░] 64% (18 of 28 estimated plans complet
 | 03    | 2     | 4.9 min  | 2.5 min   |
 | 04    | 3     | 13.0 min | 4.3 min   |
 | 05    | 3     | 15.0 min | 5.0 min   |
+| 06    | 1     | 3.7 min  | 3.7 min   |
 
 **Recent Trend:**
-- Last 6 plans: 04-01 (4.5 min), 04-02 (3.7 min), 04-03 (4.8 min), 05-01 (5.0 min), 05-02 (3.0 min), 05-03 (7.0 min)
+- Last 6 plans: 04-02 (3.7 min), 04-03 (4.8 min), 05-01 (5.0 min), 05-02 (3.0 min), 05-03 (7.0 min), 06-01 (3.7 min)
 - Trend: Fast autonomous plans (~1-7 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
 
 | Plan | Duration (min) | Tasks | Files |
 |------|----------------|-------|-------|
-| Phase 05 P03 | 7.0 | 2 tasks | 3 files |
+| Phase 06 P01 | 3.7 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,10 @@ Recent decisions affecting v2.0 work:
 - [Phase 05]: 200-node threshold for CSS transition disabling based on Phase 18 benchmarks
 - [Phase 05]: CSS transitions toggle via .no-transitions class (preserves React Flow transforms)
 - [Phase 05]: Transitions re-enabled on component unmount to prevent global state leakage
+- [Phase 06]: Use redis>=5.0.0 for broader compatibility (vs. 7.x) - supports all needed features (SCAN, pipelines, pooling)
+- [Phase 06]: Use explicit cache.get()/cache.set() over @cache.memoize() decorator (works with constructor-injected repositories)
+- [Phase 06]: Cache only LineageRepository (CTE bottleneck), not DatasetRepository (fast indexed lookups)
+- [Phase 06]: Hierarchical cache keys (lineage:graph:type:identifier:params) enable pattern-based invalidation
 
 ### Pending Todos
 
@@ -118,6 +123,11 @@ None yet.
 - Performance benchmarks cover 50-600 nodes with near-linear scaling (16ms-142ms) (Phase 05 Plan 03)
 - Benchmark suite includes depth-20 tests and Worker serialization overhead measurements (Phase 05 Plan 03)
 - 600-node graphs complete in <150ms, validating production-scale performance (Phase 05 Plan 03)
+- Flask-Caching 2.3.1 with Redis 7.0.1 backend for lineage query caching (Phase 06 Plan 01)
+- Cache-aside pattern on all 3 LineageRepository methods with graceful degradation (Phase 06 Plan 01)
+- Hierarchical cache keys (lineage:graph:type:id:params) enable pattern-based invalidation (Phase 06 Plan 01)
+- Cache gracefully degrades to SimpleCache (in-memory) when Redis unavailable (Phase 06 Plan 01)
+- 1-hour cache TTL (3600s) configurable via CACHE_TTL environment variable (Phase 06 Plan 01)
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -132,13 +142,13 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-16 (Phase 05 Frontend Rendering Optimization)
-Stopped at: Completed 05-03-PLAN.md (Performance Benchmarks for 600-Node Graphs)
+Last session: 2026-02-16 (Phase 06 Caching Layer)
+Stopped at: Completed 06-01-PLAN.md (Redis Caching Infrastructure)
 Resume file: None
 
 **Milestone v1.0 Complete:** 3 phases, 12 plans shipped (2026-02-15)
-**Milestone v2.0 In Progress:** Phase 05 complete (3/3 plans), Phase 06 next
+**Milestone v2.0 In Progress:** Phase 05 complete (3/3 plans), Phase 06 in progress (1/3 plans)
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-16 (Phase 05-03 complete - Performance Benchmarks for 600-Node Graphs)*
+*Last updated: 2026-02-16 (Phase 06-01 complete - Redis Caching Infrastructure)*
