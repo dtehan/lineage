@@ -91,11 +91,11 @@ Plans:
   4. ETL jobs can clear affected cache entries via API endpoint (POST /api/v2/cache/invalidate)
   5. Concurrent cache misses don't trigger multiple database queries for same graph (stampede prevention with distributed locks)
 
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
+- [ ] 06-01-PLAN.md — Redis cache infrastructure + cache-aside on LineageRepository (Flask-Caching, hierarchical keys, graceful degradation)
+- [ ] 06-02-PLAN.md — Stampede prevention, pattern-based invalidation, cache management API (POST /invalidate, GET /stats)
 
 ### Phase 7: Performance Validation
 **Goal**: Establish automated performance regression detection in CI pipeline
@@ -127,9 +127,9 @@ Phases execute in numeric order: 4 → 5 → 6 → 7
 | 3. SQL Parser Consolidation & DBQL Validation | v1.0 | 2/2 | Complete | 2026-02-14 |
 | 4. Database Query Optimization | v2.0 | 3/3 | Complete | 2026-02-16 |
 | 5. Frontend Rendering Optimization | v2.0 | 3/3 | Complete | 2026-02-15 |
-| 6. Caching Layer | v2.0 | 0/TBD | Not started | - |
+| 6. Caching Layer | v2.0 | 0/2 | Not started | - |
 | 7. Performance Validation | v2.0 | 0/TBD | Not started | - |
 
 ---
 *Roadmap created: 2026-02-14*
-*Last updated: 2026-02-15 (Phase 5 Frontend Rendering Optimization complete)*
+*Last updated: 2026-02-15 (Phase 6 Caching Layer planned)*
