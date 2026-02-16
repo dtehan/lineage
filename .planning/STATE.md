@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 6 of 7 (Caching Layer)
-Plan: 1 of 3
+Plan: 2 of 3
 Status: Complete
-Last activity: 2026-02-16 — Completed Phase 6 Plan 01: Redis Caching Infrastructure
+Last activity: 2026-02-16 — Completed Phase 6 Plan 02: Cache Stampede Prevention and Management
 
-Progress: [████░░░░░░] 68% (19 of 28 estimated plans complete across all milestones)
+Progress: [████░░░░░░] 71% (20 of 28 estimated plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19 (12 v1.0 + 7 v2.0)
-- Average duration: 6.6 min
-- Total execution time: 2.21 hours
+- Total plans completed: 20 (12 v1.0 + 8 v2.0)
+- Average duration: 6.4 min
+- Total execution time: 2.27 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [████░░░░░░] 68% (19 of 28 estimated plans complet
 | 03    | 2     | 4.9 min  | 2.5 min   |
 | 04    | 3     | 13.0 min | 4.3 min   |
 | 05    | 3     | 15.0 min | 5.0 min   |
-| 06    | 1     | 3.7 min  | 3.7 min   |
+| 06    | 2     | 7.0 min  | 3.5 min   |
 
 **Recent Trend:**
-- Last 6 plans: 04-02 (3.7 min), 04-03 (4.8 min), 05-01 (5.0 min), 05-02 (3.0 min), 05-03 (7.0 min), 06-01 (3.7 min)
+- Last 6 plans: 04-03 (4.8 min), 05-01 (5.0 min), 05-02 (3.0 min), 05-03 (7.0 min), 06-01 (3.7 min), 06-02 (3.2 min)
 - Trend: Fast autonomous plans (~1-7 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
@@ -43,6 +43,7 @@ Progress: [████░░░░░░] 68% (19 of 28 estimated plans complet
 | Plan | Duration (min) | Tasks | Files |
 |------|----------------|-------|-------|
 | Phase 06 P01 | 3.7 | 2 tasks | 6 files |
+| Phase 06 P02 | 3.2 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -77,6 +78,9 @@ Recent decisions affecting v2.0 work:
 - [Phase 06]: Use explicit cache.get()/cache.set() over @cache.memoize() decorator (works with constructor-injected repositories)
 - [Phase 06]: Cache only LineageRepository (CTE bottleneck), not DatasetRepository (fast indexed lookups)
 - [Phase 06]: Hierarchical cache keys (lineage:graph:type:identifier:params) enable pattern-based invalidation
+- [Phase 06]: Use redis-lock distributed locks for stampede prevention with auto-renewal
+- [Phase 06]: SCAN over KEYS for cache invalidation (non-blocking, production-safe)
+- [Phase 06]: Compute closures in _cache_get_or_compute centralize stampede prevention logic
 
 ### Pending Todos
 
@@ -128,6 +132,10 @@ None yet.
 - Hierarchical cache keys (lineage:graph:type:id:params) enable pattern-based invalidation (Phase 06 Plan 01)
 - Cache gracefully degrades to SimpleCache (in-memory) when Redis unavailable (Phase 06 Plan 01)
 - 1-hour cache TTL (3600s) configurable via CACHE_TTL environment variable (Phase 06 Plan 01)
+- Distributed locks prevent concurrent cache misses from stampeding database (Phase 06 Plan 02)
+- Double-check cache after lock acquisition prevents redundant queries (Phase 06 Plan 02)
+- Pattern-based invalidation via POST /api/v2/cache/invalidate for ETL-triggered clearing (Phase 06 Plan 02)
+- Cache monitoring via GET /api/v2/cache/stats exposes hit rate and health metrics (Phase 06 Plan 02)
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -143,12 +151,12 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-16 (Phase 06 Caching Layer)
-Stopped at: Completed 06-01-PLAN.md (Redis Caching Infrastructure)
+Stopped at: Completed 06-02-PLAN.md (Cache Stampede Prevention and Management)
 Resume file: None
 
 **Milestone v1.0 Complete:** 3 phases, 12 plans shipped (2026-02-15)
-**Milestone v2.0 In Progress:** Phase 05 complete (3/3 plans), Phase 06 in progress (1/3 plans)
+**Milestone v2.0 In Progress:** Phase 05 complete (3/3 plans), Phase 06 in progress (2/3 plans)
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-16 (Phase 06-01 complete - Redis Caching Infrastructure)*
+*Last updated: 2026-02-16 (Phase 06-02 complete - Cache Stampede Prevention and Management)*
