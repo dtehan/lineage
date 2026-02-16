@@ -1,252 +1,363 @@
-# Project Research Summary
+# Performance Optimization Research Summary
 
-**Project:** Teradata Data Lineage Application - Impact Analysis & Backend Refactoring
-**Domain:** Enterprise Data Governance (Lineage Analysis)
-**Researched:** 2026-02-13
+**Project:** Lineage v2.0 - Column-Level Data Lineage Performance Optimization
+**Domain:** Multi-layer web application performance (Database + Backend + Frontend + Caching)
+**Researched:** 2026-02-15
 **Confidence:** HIGH
 
 ## Executive Summary
 
-This project enhances an existing Teradata column-level lineage application by adding Impact Analysis capabilities and refactoring a 1454-line monolithic Flask backend into a service/repository architecture. The application helps data engineers understand downstream dependencies before making schema changes, preventing production breaks through blast radius analysis.
+The 60-second lineage graph load time bottleneck spans three layers: Teradata recursive CTEs (estimated 50-55s), ELKjs layout computation (3-5s), and React rendering overhead (1-2s). Research across all layers identifies clear optimization paths with high confidence: composite indexes + statistics collection for database queries, Web Worker offloading for graph layout, Redis cache-aside pattern for repeated queries, and React memoization for component re-renders.
 
-Research reveals this is a classic data governance tool expansion requiring careful incremental refactoring. The recommended approach is three-phase: (1) extract shared lineage traversal logic and implement Impact Analysis, (2) migrate exception handling to structured logging with middleware-based error responses, and (3) consolidate duplicate SQL parsers while preserving DBQL extraction. The critical risk is breaking existing functionality during refactoring - the codebase has 73 passing database tests and 20 API tests that must continue passing. The mitigation is strangler fig pattern: small, tested commits with characterization tests before extraction.
+The recommended approach follows a profile-measure-optimize cycle with each layer independently measurable. Database optimization (Phase 1) targets the 50-55s CTE execution through composite indexes on join pairs, statistics collection, and lineage_id-based cycle detection. Frontend optimization (Phase 2) eliminates the 3-5s UI freeze by moving ELKjs to Web Workers. Caching (Phase 3) provides 30-600x speedup for repeated queries with 80%+ hit rates. This layered approach ensures optimizations compound rather than conflict.
 
-The application already has strong foundations (recursive CTE lineage traversal, OpenLineage schema, React Flow visualization, TanStack Query integration). Impact Analysis reuses this infrastructure rather than building from scratch. The key architectural insight is that Impact Analysis is downstream lineage traversal plus aggregation - not a separate feature requiring new queries.
+**Critical risk:** Breaking CTE correctness while optimizing. The existing 73 database tests with cycle detection validation (CYCLE5_TEST, NESTED_DIAMOND, FANOUT10_TEST) must pass before/after every change. Secondary risk: optimizing the wrong layer first. Profiling infrastructure (benchmark_cte.py, API timing logs, React Profiler) must establish baseline measurements before any optimization work begins.
 
 ## Key Findings
 
-### Recommended Stack
+### Backend Query Optimization (BACKEND.md)
 
-The recommended stack focuses on minimal new dependencies with maximum leverage of existing patterns. Core additions are loguru for structured logging (replacing print statements and traceback), pytest-mock/pytest-flask for service layer testing, and TanStack Table for Impact Analysis UI. Notably, the research explicitly recommends AGAINST adding a dependency injection framework (Flask-Injector, python-dependency-injector) - the application size doesn't justify the complexity, and Flask's request context makes manual dependency injection via factory functions sufficient.
+Teradata recursive CTEs for lineage traversal take approximately 60 seconds across all graph types. The bottleneck is compounded by missing composite indexes, stale/missing statistics, string-based cycle detection overhead, and potential lock contention.
 
-**Core technologies:**
-- **loguru (>=0.7.3)**: Structured logging with zero-config JSON output - replaces bare exception handlers with proper context capture while avoiding stdlib logging complexity
-- **Flask Blueprints (stdlib)**: Modular application structure for service/repository pattern - official Flask pattern with zero dependencies
-- **TanStack Table (^8.21.3)**: Headless data table for Impact Analysis UI - ecosystem consistency with existing TanStack Query, no charting library needed (Impact Analysis is tabular data only)
-- **pytest-mock (>=3.15.1)**: Service layer unit tests with automatic cleanup - mock repositories without manual teardown
-- **NO new frameworks**: Explicitly avoid SQLAlchemy (raw teradatasql driver works), Flask-Injector (overkill), recharts/visx (no charts needed)
+**Core optimizations:**
+- **Composite indexes on join pairs**: `(target_dataset, target_field)` and `(source_dataset, source_field)` to cover recursive join conditions — Teradata requires all columns in WHERE clause for composite index usage
+- **Statistics collection**: COLLECT STATISTICS on indexed columns enables optimizer to choose efficient join strategies — #1 Teradata optimization per official docs and community consensus
+- **lineage_id-based cycle detection**: Replace `dataset.field` string concatenation with integer-based paths to reduce VARCHAR overhead and POSITION() string search cost
+- **LOCKING ROW FOR ACCESS**: Row-level locks instead of table-level READ locks improves concurrency in multi-user environments
 
-**Critical version notes:**
-- Application already uses Flask >=3.0.0, React 18.2.0, Python >=3.5
-- loguru compatible with existing teradatasql driver (no conflicts)
-- TanStack Table v8 is successor to deprecated react-table v7
+**Expected improvement:** 60s → 2-4s (15-30x) after Phase 1 (indexing) + Phase 2 (query patterns) optimizations.
 
-### Expected Features
+### Frontend Rendering Optimization (FRONTEND.md)
 
-Impact Analysis is fundamentally a specialized view of existing lineage data, not a separate system. Users expect three categories of features: operational necessities (downstream impact list, direct vs indirect classification, column-level granularity), visibility enhancements (error states, retry mechanisms, loading contexts), and secondary conveniences (depth filtering, transformation type breakdown, export reports).
+React Flow 12.0 performs well for 600-node graphs when properly configured, but ELKjs layout computation blocks the main thread for 3-5 seconds. Current implementation already uses best practices (Zustand state management, virtualization threshold at 50 nodes, memoized TableNode components).
 
-**Must have (table stakes):**
-- **Downstream Impact List** - Shows what breaks when you change a column (core deliverable)
-- **Direct vs Indirect Dependencies** - Visual distinction and depth calculation (standard dependency analysis pattern)
-- **Column-Level Impact** - Count affected columns per table, not just table-level (differentiator for column-level lineage tools)
-- **Affected Asset Count Summary** - Blast radius quantification (tables/columns/databases impacted)
-- **Error State Handling** - Graceful degradation with inline errors and retry buttons (already implemented in DDLTab.tsx pattern)
+**Core optimizations:**
+- **ELKjs Web Worker**: Built-in worker support offloads layout computation from main thread — eliminates 3-5 second UI freeze, most impactful frontend optimization
+- **Memoization audit**: Verify nodeTypes, edgeTypes, and event handlers are stable references to prevent unnecessary re-renders
+- **Progressive rendering**: Show database clusters before full layout completes to improve perceived performance
+- **Disable transitions for large graphs**: CSS animations on 600+ nodes degrade performance significantly
 
-**Should have (competitive):**
-- **Depth-Based Filtering** - Control blast radius scope via maxDepth slider (API already supports, just add UI control)
-- **Transformation Type Breakdown** - Show HOW data flows (IDENTITY, AGGREGATION, JOIN) from existing OL_COLUMN_LINEAGE.transformation_type field
-- **Export Impact Report** - CSV/PDF for stakeholder communication (deferred to Phase 3)
-- **Impact Severity Scoring** - Classify assets as CRITICAL/MEDIUM/LOW based on downstream consumer count (deferred)
+**Expected improvement:** 3-5s blocking → <1s async (layout still computes but doesn't freeze UI).
 
-**Defer (v2+):**
-- **What-If Analysis Preview** - Simulate impact without persisting changes (high complexity, requires separate graph computation)
-- **Real-Time Lineage Sync** - Change detection on DBC views (out of scope, requires event streams)
-- **Affected Job/Process Identification** - Map to OL_JOB/OL_RUN tables (medium complexity, OL_JOB not fully utilized yet)
-- **Change History Tracking** - Lineage drift detection (requires historical snapshots)
+**Critical discovery:** React Flow 12.0 added batching of initial store updates and prevented unnecessary NodeRenderer re-renders. Current implementation uses correct patterns (Zustand, memoization, virtualization) so frontend is well-positioned.
 
-### Architecture Approach
+### Caching Strategy (CACHING.md)
 
-The recommended architecture is three-layer separation of concerns: Routes (Flask HTTP handling), Services (business logic orchestration), Repositories (Teradata SQL execution). This is NOT a ground-up rewrite - it's incremental extraction from the existing 1454-line python_server.py using strangler fig pattern. The key insight is that Impact Analysis doesn't need new SQL queries; it reuses existing recursive CTE lineage traversal with downstream direction and adds post-processing (BFS depth calculation, database/depth grouping, criticality scoring).
+Redis caching with cache-aside pattern fits naturally at the repository layer. Lineage data characteristics favor caching: deterministic (same inputs → same outputs), infrequent updates (hourly/daily ETL), repeated access (users explore same graphs during sessions), and expensive computation (recursive CTEs).
 
-**Major components:**
-1. **Routes Layer (api/routes/)** - Thin controllers for HTTP validation, parameter parsing, error-to-HTTP mapping - delegates to services
-2. **Service Layer (services/)** - Business logic and orchestration: lineage_service (graph building), dataset_service (metadata retrieval), impact_service (aggregation and scoring)
-3. **Repository Layer (repositories/)** - Teradata SQL execution: recursive CTEs, DBC view queries, connection pooling - abstracts database from services
-4. **Domain Layer (domain/)** - Core models (LineageNode, LineageEdge, LineageGraph) and domain exceptions (DatasetNotFoundError, LineageTraversalError) - no dependencies on Flask or database
-5. **Middleware (api/middleware/)** - Centralized exception handling with structured logging, correlation IDs, and consistent error responses
+**Core approach:**
+- **Repository-layer cache-aside**: Flask-Caching with Redis backend at `LineageRepository` methods using `@cache.memoize()` decorator
+- **Structured cache keys**: `lineage:{graph_type}:{dataset}:{field}:{direction}:{depth}` enables pattern-based invalidation
+- **Hybrid TTL + event-based invalidation**: 1-hour TTL baseline with manual invalidation API for ETL job completion
+- **Cache stampede prevention**: Distributed locking with Redis SETNX for high-traffic queries
 
-**Critical architectural constraints:**
-- MUST maintain backward compatibility with existing `/api/v2/openlineage/*` endpoints (frontend depends on response format)
-- SQL parser consolidation moves `database/scripts/populate/sql_parser.py` to `lineage-api/utils/sql_parser.py` (delete duplicate in `database/archive/`)
-- Exception handling migration MUST preserve `{"error": string}` response contract (frontend hardcodes this field name)
-- All lineage queries (column, table, database, impact) MUST use shared recursive CTE logic (avoid duplicate cycle detection bugs)
+**Expected improvement:** Cache hit <100ms vs 60s cache miss = 600x faster. With 80% hit rate after warmup, average query time drops from 60s to ~12s (4-5x overall improvement).
 
-### Critical Pitfalls
+**Memory estimate:** 600-node graph = ~250 KB JSON. 2 GB Redis can cache ~8,000 graphs, far exceeding typical dataset size (50 tables × 150 cached variations = 7,500 graphs).
 
-Research identified eight critical pitfalls with specific mitigation strategies. The most dangerous is duplicate cycle detection logic - if Impact Analysis writes separate recursive CTEs instead of reusing existing traversal, it will produce inconsistent results on circular dependencies. Second highest risk is breaking frontend error response contract during exception handling migration - changing JSON schema breaks all TanStack Query error displays. Third is fixture-based testing hiding DBQL integration bugs - production lineage can fail silently while all tests pass.
+### Performance Pitfalls (PITFALLS.md)
 
-1. **Duplicate Cycle Detection Logic** - Impact Analysis must reuse existing recursive CTE functions, not reimplement cycle detection separately; integration test must verify identical graph structure for same column
-2. **Breaking Frontend Error Response Contract** - Exception handling MUST preserve `{"error": string}` schema; write contract tests before changing error handlers; ONLY add optional fields, never rename/remove
-3. **SQL Parser Consolidation Breaks DBQL** - Verify DBQL extraction works after moving sql_parser.py; run `populate_lineage.py --dbql --dry-run` as regression test; maintain Teradata dialect config separately
-4. **Large File Refactoring Without Incremental Testing** - Write characterization tests for ALL endpoints before extracting code; refactor one endpoint at a time, commit; use strangler fig pattern with old code commented until tests pass
-5. **Impact Analysis Query Performance Degrades Production** - Test with 1000+ table databases before deploy; always enforce maxDepth limits; add query timeout to Teradata connection; consider pagination for large results
+Eight critical pitfalls identified with phase-specific prevention strategies:
 
-**Prevention summary:**
-- Phase 1: Extract shared traversal logic BEFORE implementing Impact Analysis (prevents duplicate cycle detection)
-- Phase 2: Write contract tests BEFORE changing exception handlers (prevents breaking frontend)
-- Phase 3: Add DBQL integration tests BEFORE consolidating parsers (prevents silent extraction failures)
-- All phases: Characterization tests before refactoring, incremental commits, validate after each step
+1. **Optimizing without profiling first** — Profile before optimizing to identify actual bottleneck (database vs backend vs frontend). 60s could be 55s DB + 3s layout + 2s render, making wrong layer optimization wasteful.
+
+2. **Breaking CTE correctness** — Recursive CTE optimization changes (cycle detection, path tracking, join conditions) must not break correctness. All 73 database tests must pass before/after.
+
+3. **React re-render hell** — Direct store access to `nodes` array causes graph to re-render on every pan/zoom/drag. Use selective Zustand selectors, React.memo on components, and virtualization.
+
+4. **Cache invalidation failures** — Caching without TTL and invalidation strategy shows stale lineage. Every cache key needs TTL, tag-based invalidation for related entries, and stampede prevention.
+
+5. **CTE path string overflow** — `VARCHAR(4000)` path column overflows on deep graphs (depth 20+) with long table names. Use lineage_id instead of qualified names in paths.
+
+6. **ELKjs blocking main thread** — Synchronous layout freezes browser for 3-5 seconds on 600-node graphs. Move to Web Worker to keep UI responsive.
+
+7. **Measuring "feels faster"** — Subjective optimization without concrete measurements. Document baseline before optimization, use automated benchmarking, measure median not average.
+
+8. **Premature index creation** — Creating indexes without EXPLAIN analysis may not help and slows writes. Analyze execution plans before creating indexes.
 
 ## Implications for Roadmap
 
-Based on research, the milestone should be structured as three sequential phases addressing distinct concerns with clear validation gates. The ordering is dependency-driven: foundation refactoring enables shared logic reuse (prevents pitfall #1), exception handling establishes observability before complex features (prevents pitfall #6), SQL parser consolidation happens last when infrastructure is stable (prevents pitfall #3).
+Based on research, suggested four-phase structure optimizes each layer independently with compounding benefits:
 
-### Phase 1: Foundation Refactoring & Impact Analysis Core
-**Rationale:** Extract shared lineage traversal logic BEFORE implementing Impact Analysis to prevent duplicate cycle detection bugs (Pitfall #1). Establish service/repository layering while Impact Analysis is still simple, making it easier to test the refactoring independently.
+### Phase 1: Database Query Optimization
+
+**Rationale:** Database queries account for 50-55s of 60s load time (estimated 90%+ of bottleneck). Optimizing this layer first provides largest absolute improvement. Composite indexes + statistics are foundational optimizations with HIGH confidence from Teradata official docs.
 
 **Delivers:**
-- Repository layer with shared recursive CTE functions (upstream/downstream lineage)
-- Service layer (lineage_service, dataset_service, impact_service)
-- Flask blueprints replacing direct route handlers
-- Impact Analysis API endpoint (`/api/v2/openlineage/lineage/{datasetId}/{fieldName}/impact`)
-- Impact Analysis UI with downstream impact list, direct/indirect badges, asset count summary
+- Composite secondary indexes on join pairs (target_dataset/target_field, source_dataset/source_field)
+- Statistics collection on all indexed columns
+- lineage_id-based cycle detection to reduce path overhead
+- LOCKING ROW FOR ACCESS hints for concurrency
+- Baseline measurement infrastructure (benchmark_cte.py with --depths and --iterations)
 
 **Addresses:**
-- Downstream Impact List (table stakes)
-- Direct vs Indirect Dependencies (table stakes)
-- Column-Level Impact (table stakes)
-- Affected Asset Count Summary (table stakes)
+- Missing composite indexes bottleneck
+- Stale/missing statistics causing suboptimal query plans
+- String concatenation overhead in cycle detection
+- Lock contention in multi-user scenarios
 
 **Avoids:**
-- Pitfall #1 (duplicate cycle detection) via shared traversal functions
-- Pitfall #4 (large refactoring) via incremental extraction with tests
-- Pitfall #5 (performance) via maxDepth enforcement and production-scale testing
+- Pitfall #8 (premature index creation) by using EXPLAIN analysis first
+- Pitfall #2 (breaking CTE correctness) by running 73 database tests before/after
+- Pitfall #7 (measuring "feels faster") by establishing baseline metrics
 
-**Validation gates:**
-- All 73 database tests pass after repository extraction
-- All 20 API tests pass after service layer extraction
-- New Impact Analysis test passes (already defined at line 128 of run_api_tests.py)
-- Integration test verifies Impact Analysis and column lineage return identical graphs for same column
+**Target:** 60s → 10-15s (4-6x improvement)
 
-### Phase 2: Exception Handling & Observability
-**Rationale:** Establish structured logging and middleware-based error handling after foundation refactoring (when code is properly layered). This prevents exception context loss during migration (Pitfall #6) and ensures error response contract preservation (Pitfall #2) before adding complex features.
+**Research flags:**
+- Standard Teradata optimization patterns (skip deeper research)
+- Existing benchmark_cte.py infrastructure ready to use
+- May need EXPLAIN plan analysis skills (documented in research)
+
+---
+
+### Phase 2: Frontend Layout Optimization
+
+**Rationale:** After database optimization reduces query time to 10-15s, frontend becomes visible bottleneck (3-5s layout computation). ELKjs Web Worker is HIGH confidence optimization with built-in support. Memoization patterns are well-documented React Flow best practices.
 
 **Delivers:**
-- Domain exception classes (DatasetNotFoundError, LineageTraversalError, DatabaseConnectionError)
-- Middleware exception handlers with structured logging (loguru with JSON output)
-- Correlation IDs for request tracing
-- Replacement of all `traceback.print_exc()` with `logger.exception()` calls
-- Contract tests validating `{"error": string}` response schema
+- ELKjs Web Worker integration for non-blocking layout
+- React Profiler instrumentation for re-render measurement
+- Memoization audit on TableNode, event handlers, and layout options
+- Progressive rendering with loading states
+- Performance-aware transitions (disabled for graphs > 200 nodes)
 
 **Uses:**
-- loguru (>=0.7.3) for structured logging
-- pytest-mock for exception handler testing
-- Flask error handler registration
+- ELKjs Web Worker API (built-in support)
+- React.memo for component optimization
+- React Profiler for measurement
+- Existing Zustand store (already optimal, no changes needed)
 
 **Implements:**
-- Error state handling (table stakes)
-- Retry mechanism (table stakes via existing TanStack Query pattern)
-- Loading states with context (table stakes)
+- Non-blocking layout computation architecture
+- Selective re-render strategy for graph interactions
 
 **Avoids:**
-- Pitfall #2 (breaking frontend contract) via contract tests before changes
-- Pitfall #6 (exception context loss) via logger.exception() with correlation IDs
-- Security mistakes (logging credentials) via sanitization before logging
+- Pitfall #6 (ELKjs blocking main thread) via Web Worker offloading
+- Pitfall #3 (React re-render hell) via memoization and selective selectors
+- Pitfall #7 (measuring "feels faster") via React Profiler metrics
 
-**Validation gates:**
-- Contract tests pass for all error responses
-- Exception logging tests verify stack traces appear in logs
-- Frontend error displays still work (manual E2E check)
-- No sensitive data in logged exceptions (security review)
+**Target:** 10-15s → 6-10s (eliminating 3-5s UI freeze, layout still computes asynchronously)
 
-### Phase 3: SQL Parser Consolidation & DBQL Validation
-**Rationale:** Consolidate duplicate SQL parsers AFTER core functionality and error handling are stable. This allows DBQL extraction regression testing without conflating parser bugs with refactoring bugs (Pitfall #3). Happens last because DBQL extraction is production lineage source - lowest risk tolerance.
+**Research flags:**
+- Standard React Flow patterns (skip deeper research)
+- Web Worker implementation is straightforward (ELK provides API)
+- May need performance testing on actual 600-node graphs
+
+---
+
+### Phase 3: Redis Caching Layer
+
+**Rationale:** After database + frontend optimization reduces load time to 6-10s, caching provides final leap to <2s for repeated queries. Cache-aside pattern is proven for read-heavy workloads. 80%+ hit rate expected based on user session patterns (exploring related datasets).
 
 **Delivers:**
-- sql_parser.py moved to lineage-api/utils/ (delete database/archive/ copy)
-- DBQL extraction integration tests using sample query logs
-- Updated imports in populate_lineage.py and related scripts
-- DBQL regression validation (compare record counts before/after consolidation)
+- Flask-Caching integration with Redis backend
+- Repository-layer cache decorators on lineage queries
+- Structured cache key design with pattern-based invalidation
+- Cache invalidation API endpoint for ETL job completion
+- Cache warming strategy for high-value graphs
+- Monitoring for hit rate, memory usage, and eviction rate
 
-**Addresses:**
-- Code consolidation (removes 685-line duplicate file)
-- DBQL extraction reliability
-- Teradata dialect preservation
+**Uses:**
+- Redis 7 with RDB persistence
+- Flask-Caching library (mature, v1.0+)
+- Connection pooling (50 max connections)
+
+**Implements:**
+- Cache-aside pattern at repository layer
+- Hybrid TTL (1 hour) + event-based invalidation
+- Distributed locking for cache stampede prevention
 
 **Avoids:**
-- Pitfall #3 (breaking DBQL extraction) via regression tests before/after consolidation
-- Pitfall #7 (fixture-only testing) via DBQL integration tests with sample logs
+- Pitfall #4 (cache invalidation failures) via TTL on all keys + manual invalidation API
+- Pitfall #7 (measuring "feels faster") via cache hit rate monitoring
+- Cache key explosion via structured key patterns and sanitization
 
-**Validation gates:**
-- DBQL extraction test passes with sample query logs
-- `populate_lineage.py --dbql --dry-run` produces expected record count
-- Fixture-based tests still pass (no regression)
-- Import paths work in all calling scripts
+**Target:** 6-10s → <2s average with 80% hit rate (cache hit <100ms, cache miss 6-10s)
+
+**Research flags:**
+- Standard Redis caching patterns (skip deeper research)
+- May need TTL tuning based on actual ETL schedules
+- Cache warming integration with populate_lineage.py needs coordination
+
+---
+
+### Phase 4: Query Pattern Refinement
+
+**Rationale:** If Phase 1-3 don't reach 2-4s target, this phase applies advanced query optimizations. Deferred because these are higher complexity with MEDIUM confidence on benefit. Only pursue if earlier phases insufficient.
+
+**Delivers:**
+- VARCHAR path column sizing optimization (reduce from 4000 to measured 2x max)
+- Early filtering optimization (push namespace to base query)
+- Incremental layout for depth changes (avoid full recalculation)
+- Join indexes for common traversal patterns (if materialization needed)
+
+**Uses:**
+- Teradata join index capabilities
+- ELK incremental layout mode
+- Production path length measurements
+
+**Avoids:**
+- Pitfall #5 (path VARCHAR overflow) via production validation
+- Over-optimization before measuring actual need
+
+**Target:** 2-4s → 1-2s (refinement, not major jump)
+
+**Research flags:**
+- MEDIUM confidence — needs deeper research if pursued
+- Incremental layout complexity may be high (ELK integration)
+- Join indexes require careful analysis of storage/maintenance tradeoffs
+
+---
 
 ### Phase Ordering Rationale
 
-- **Foundation first:** Repository extraction establishes shared lineage traversal functions that Impact Analysis depends on - prevents duplicate cycle detection bugs
-- **Impact Analysis in Phase 1:** Implements core feature while refactoring is fresh in memory; validates that service/repository layering works for complex recursive CTEs
-- **Exception handling second:** Observability layer established after architecture is stable; error logging crucial before adding depth filtering and export features (deferred capabilities)
-- **SQL parser last:** Lowest risk tolerance (production lineage source) so happens when infrastructure is proven stable; DBQL extraction bugs only discoverable via integration tests (not unit tests)
+**Why this order:**
+1. **Database first**: Largest absolute time savings (50-55s → 10-15s). Foundational optimization with HIGH confidence.
+2. **Frontend second**: Next visible bottleneck after database optimization. ELKjs Worker is high-impact, low-complexity change.
+3. **Caching third**: Multiplicative benefit after query optimization. Cache 2s query is better than caching 60s query.
+4. **Query patterns last**: Advanced optimizations only if target not met. Defer complexity until proven necessary.
 
-**Incremental validation:** Each phase ends with full test suite passing (73 database tests, 20 API tests, new feature tests). No phase proceeds until previous phase validation gates are green.
+**Dependencies discovered:**
+- Caching effectiveness depends on query speed (caching 60s queries provides less UX benefit than caching 2s queries)
+- Frontend optimization impact only visible after database optimization (3s layout hidden by 55s query)
+- Statistics collection required for index effectiveness (optimizer needs fresh stats to use indexes)
+
+**Pitfall avoidance:**
+- Phase 1 establishes profiling infrastructure before optimization (avoids Pitfall #1)
+- All phases require running existing test suites (avoids Pitfall #2)
+- Each phase has measurable success criteria (avoids Pitfall #7)
+
+**Compounding benefits:**
+- Phase 1 reduces query time 4-6x
+- Phase 2 eliminates UI freeze (perceived 2-3x faster)
+- Phase 3 provides 30-600x speedup on cache hits (80%+ hit rate after warmup)
+- Combined: 60s → 2s average (30x overall improvement)
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 1 Impact Analysis:** BFS depth calculation algorithm needs validation for graphs with multiple paths to same node (shortest path vs all paths?)
-- **Phase 2 Correlation IDs:** Middleware implementation pattern for Flask (research shows multiple approaches - need specific Flask 3.x example)
-- **Phase 3 DBQL Sample Logs:** Creating representative test data requires real Teradata DBQL access - may need production snapshot
+**Phases with standard patterns (skip research-phase):**
+- **Phase 1 (Database):** Well-documented Teradata optimization patterns. Existing benchmark_cte.py ready to use. EXPLAIN analysis is standard practice.
+- **Phase 2 (Frontend):** React Flow performance docs are comprehensive. ELKjs Web Worker has built-in support. Memoization patterns are established best practices.
+- **Phase 3 (Caching):** Redis cache-aside pattern is industry standard. Flask-Caching is mature library with extensive docs.
 
-Phases with standard patterns (skip research-phase):
-- **Phase 1 Repository Pattern:** Well-documented Flask pattern (Cosmic Python, Flask official docs)
-- **Phase 2 Domain Exceptions:** Standard Python exception hierarchy with domain-specific subclasses
-- **Phase 3 File Consolidation:** Straightforward file move with import updates (no research needed)
+**Phases needing validation during planning:**
+- **Phase 4 (Query Patterns):** MEDIUM confidence on benefit. Incremental layout complexity needs investigation. Join indexes require storage/maintenance analysis. Only pursue if Phase 1-3 insufficient.
+
+**Areas needing production validation:**
+- Actual path lengths in production (for VARCHAR sizing)
+- Real cache hit rates (depends on user behavior patterns)
+- Index selectivity on production data (EXPLAIN analysis required)
+- Optimal TTL for caching (depends on ETL schedule)
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All core recommendations verified with official documentation (loguru PyPI, TanStack Table npm, Flask official docs); version compatibility confirmed |
-| Features | HIGH | Impact Analysis requirements validated against industry tools (Atlan, Collibra, DataHub); existing codebase inspection confirms ImpactAnalysis.tsx patterns |
-| Architecture | HIGH | Service/repository pattern extensively documented for Flask (Cosmic Python, Real Python, Flask docs); existing code structure analyzed (1454-line python_server.py) |
-| Pitfalls | HIGH | All pitfalls sourced from authoritative guides (freeCodeCamp refactoring, OneUpTime exception handling, DataHub SQL parsing); mapped to specific code locations in python_server.py |
+| Database Optimization | HIGH | Composite indexes + statistics are foundational Teradata optimizations. Multiple official sources confirm approach. Existing benchmark infrastructure ready. |
+| Frontend Optimization | HIGH | React Flow 12.0 performance docs comprehensive. ELKjs Web Worker has built-in support. Existing implementation uses best practices (Zustand, memoization, virtualization). |
+| Caching Strategy | HIGH | Cache-aside pattern proven for read-heavy workloads. Flask-Caching is mature. Redis best practices well-documented. Repository-layer injection is clean architecture fit. |
+| Pitfalls Prevention | HIGH | Eight critical pitfalls identified with clear prevention strategies. Existing test infrastructure (73 DB + 20 API + 260 frontend + 21 E2E) supports validation. |
 
 **Overall confidence:** HIGH
 
-Research is grounded in official documentation and specific codebase analysis. Stack recommendations are conservative (no experimental libraries). Architecture patterns are proven for Flask applications. Pitfalls are tied to specific risks in this codebase (not generic warnings).
+Research synthesizes three high-quality domain-specific documents (BACKEND.md, FRONTEND.md, CACHING.md) with comprehensive pitfall analysis (PITFALLS.md). All sources are recent (2023-2026), from authoritative sources (official Teradata/React Flow/Redis docs, reputable technical blogs, academic papers), and converge on consistent recommendations.
 
 ### Gaps to Address
 
-Several areas require validation during implementation:
+**Database layer:**
+- **Gap:** Actual row count in OL_COLUMN_LINEAGE unknown — optimization strategy differs for 10K vs 10M rows
+- **Handle:** Query `SELECT COUNT(*) FROM OL_COLUMN_LINEAGE` during Phase 1 setup
+- **Gap:** Typical graph depth in production unknown — depth 5 vs 20 has different optimization priorities
+- **Handle:** Run benchmark_cte.py on production data to measure max_depth_found
 
-- **BFS depth calculation for Impact Analysis:** Research shows standard graph BFS algorithms but doesn't address lineage-specific case where multiple transformation paths exist to same column (e.g., via JOIN and separate AGGREGATION). Need to decide: shortest path depth or annotate all paths? Test with diamond-pattern lineage.
+**Frontend layer:**
+- **Gap:** React Flow 12.0 canvas renderer not yet available — would provide 2-3x better performance than SVG for 600+ nodes
+- **Handle:** Monitor React Flow releases, consider opt-in when available
 
-- **DBQL extraction test data:** DBQL integration tests require sample query logs with Teradata-specific syntax (QUALIFY, NORMALIZE, etc.). Research shows sqlglot has dialect limitations. Solution: Capture production DBQL sample during Phase 3 planning, anonymize table names, use as regression fixture.
+**Caching layer:**
+- **Gap:** Optimal TTL unknown — 1-hour TTL is educated guess based on typical ETL schedules
+- **Handle:** Start with 1 hour, monitor cache hit rates and staleness complaints, adjust based on real usage
+- **Gap:** Cache hit rate projection (80%+) based on assumption of user session patterns
+- **Handle:** Monitor actual hit rates after deployment, adjust warming strategy if below 60%
 
-- **Frontend error response evolution:** Research recommends RFC 9457 Problem Details for structured errors but notes it requires coordinated frontend update. Gap: No plan for eventual migration from `{"error": string}` to richer format. Solution: Add RFC 9457 to future roadmap, maintain current contract for this milestone.
+**Integration:**
+- **Gap:** Breakdown of 60s load time across layers unknown — could be 55s DB + 3s layout + 2s render, or different distribution
+- **Handle:** Add timing instrumentation (API logs, React Profiler) in Phase 1 before optimization to establish baseline breakdown
 
-- **Performance testing with 1000+ tables:** Research identifies recursive CTE performance as primary bottleneck but provides no Teradata-specific benchmarks. Gap: No baseline for "acceptable" query time. Solution: Establish performance budget during Phase 1 (e.g., Impact Analysis must return in <10s for depth 5, <30s for depth 10), load test with synthetic lineage data before production deploy.
-
-- **maxDepth default values:** Current system uses maxDepth=3 for database lineage, maxDepth=5 for column lineage (observed in existing code). Research doesn't provide guidance on Impact Analysis default. Gap: Unclear if Impact Analysis should default to same maxDepth=5 or higher (10?) since users need full blast radius. Solution: Start with maxDepth=5 matching column lineage, add UI slider, gather user feedback.
+**All gaps are addressable during implementation.** No gaps block Phase 1 planning.
 
 ## Sources
 
-### Primary (HIGH confidence)
-- Flask Official Documentation (Blueprints, Logging, Error Handling) - architectural patterns
-- Loguru PyPI (v0.7.3) - structured logging verification
-- TanStack Table npm (v8.21.3) - frontend component verification
-- Cosmic Python (Repository Pattern, Service Layer) - Flask layering patterns
-- OpenLineage Spec v2-0-2 - schema alignment verification (already implemented in codebase)
-- pytest-mock PyPI (v3.15.1), pytest-flask PyPI (v1.3.0) - testing library verification
-- Existing codebase (python_server.py, ImpactAnalysis.tsx, types/index.ts) - current implementation analysis
+### Backend Optimization (HIGH confidence)
 
-### Secondary (MEDIUM confidence)
-- Atlan Data Lineage Guide 2026 - Impact Analysis industry patterns
-- Collibra Data Lineage Features - competitive feature validation
-- DataHub Impact Analysis Docs - architecture patterns for lineage analysis
-- Better Stack Python Logging Guides - loguru vs structlog comparison
-- Real Python Flask Blueprint Tutorial - implementation examples
-- SQLForDevs Cycle Detection - recursive CTE patterns
-- freeCodeCamp Refactoring Guide - incremental refactoring strategies
+**Teradata Recursive CTEs:**
+- [Mastering Teradata Recursive Queries - DWH Pro](https://www.dwhpro.com/teradata-recursive-queries/)
+- [SQL Fundamentals | Teradata Vantage - Recursive Queries](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Fundamentals/SQL-Data-Definition-Control-and-Manipulation/Recursive-Queries)
+- [Mastering Teradata Performance Tuning - Medium](https://medium.com/@guruprasadnujaimalsaedi/mastering-teradata-performance-tuning-best-practices-for-sql-optimization-834dccbaa375)
 
-### Tertiary (LOW confidence - needs validation)
-- pytest-mock version 3.15.1 (Sep 2025 release) - future version, confirmed available but may have API changes
-- Impact Severity Scoring heuristics (>10 consumers = critical) - no industry standard found, requires validation
-- BFS depth calculation for multi-path graphs - standard graph algorithms but lineage-specific interpretation unclear
-- Query timeout values for Teradata - no Teradata-specific benchmarks found, needs production testing
+**Teradata Indexing:**
+- [3 ways to use Indexes in Teradata - Packt](https://hub.packtpub.com/3-ways-to-use-indexes-in-teradata-to-improve-database-performance/)
+- [Understanding The Teradata Primary Index - DWH Pro](https://www.dwhpro.com/teradata-primary-index-pi/)
+- [Multiple Secondary Indexes and Composites - Teradata](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Fundamentals/Database-Objects/Secondary-Indexes/Multiple-Secondary-Indexes-and-Composites)
+
+**Teradata Statistics:**
+- [Improving Query Performance Using COLLECT STATISTICS - Teradata](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/Database-Administration/Improving-Query-Performance-Using-COLLECT-STATISTICS-Application-DBAs)
+- [The Importance of Up-to-Date Statistics - DWH Pro](https://www.dwhpro.com/teradata-sql-tuning-top-10/)
+
+### Frontend Optimization (HIGH confidence)
+
+**React Flow Performance:**
+- [React Flow Performance Documentation](https://reactflow.dev/learn/advanced-use/performance)
+- [React Flow 12 Release Notes](https://reactflow.dev/whats-new/2024-07-09)
+- [The Ultimate Guide to Optimize React Flow - Medium](https://medium.com/@lukasz.jazwa_32493/the-ultimate-guide-to-optimize-react-flow-project-performance-42f4297b2b7b)
+- [Performance Discussion #4975](https://github.com/xyflow/xyflow/discussions/4975)
+
+**ELKjs Layout:**
+- [ELKjs GitHub Repository](https://github.com/kieler/elkjs)
+- [ELK Layered Algorithm Reference](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html)
+- [ELK Performance Paper - arXiv](https://arxiv.org/pdf/2311.00533)
+- [ELK JavaScript API](https://deepwiki.com/kieler/elkjs/3.1-javascript-api)
+
+**State Management:**
+- [Zustand vs Context Performance 2026](https://medium.com/@sparklewebhelp/redux-vs-zustand-vs-context-api-in-2026-7f90a2dc3439)
+
+### Caching Strategy (HIGH confidence)
+
+**Redis Caching Patterns:**
+- [Database Caching Strategies Using Redis - AWS](https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html)
+- [Redis Cache-Aside Simplified](https://redis.io/blog/redis-smart-cache/)
+- [Cache-Aside Pattern - Azure](https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside)
+
+**Flask-Redis Integration:**
+- [Flask-Caching Official Documentation](https://flask-caching.readthedocs.io/)
+- [Using Flask and Redis for Performance](https://medium.com/@fahadnujaimalsaedi/using-flask-and-redis-to-optimize-web-application-performance-34a8ae750097)
+
+**Cache Invalidation:**
+- [How to Implement Cache Invalidation with Redis](https://oneuptime.com/blog/post/2026-01-25-redis-cache-invalidation/view)
+- [Cache Invalidation Strategies](https://leapcell.io/blog/cache-invalidation-strategies-time-based-vs-event-driven)
+
+### Performance Pitfalls (HIGH confidence)
+
+**Correctness Testing:**
+- [Regression Testing Guide 2026](https://www.leapwork.com/blog/regression-testing)
+- [Regression Test Performance](https://speedscale.com/blog/regression-test-performance/)
+
+**Query Optimization:**
+- [Query Optimization Patterns - Medium](https://medium.com/@artemkhrenov/query-optimization-patterns-writing-efficient-sql-for-high-performance-applications-8143e5028443)
+- [Stop Optimizing the Wrong Things - Dagster](https://dagster.io/blog/when-and-when-not-to-optimize-data-pipelines)
+
+**Redis Anti-Patterns:**
+- [Redis Anti-Patterns to Avoid](https://redis.io/tutorials/redis-anti-patterns-every-developer-should-avoid/)
+- [Redis Caching Pitfalls - Medium](https://medium.com/@QuarkAndCode/redis-caching-pitfalls-invalidation-testing-best-practices-3950a0660f1a)
+
+### Project-Specific Context
+
+- Existing `benchmark_cte.py` with depth testing and metrics collection
+- 73 database tests including cycle detection (CYCLE5_TEST, NESTED_DIAMOND, FANOUT10_TEST)
+- Current implementation using React Flow 12.0, Zustand, virtualization (VIRTUALIZATION_THRESHOLD = 50)
+- Loguru structured logging with correlation IDs already in place
 
 ---
-*Research completed: 2026-02-13*
+
+*Research completed: 2026-02-15*
 *Ready for roadmap: yes*

@@ -1,377 +1,421 @@
-# Pitfalls Research
+# Performance Optimization Pitfalls
 
-**Domain:** Adding Impact Analysis, Backend Refactoring, Exception Handling Migration, SQL Parser Consolidation to Existing Teradata Lineage Application
-**Researched:** 2026-02-13
+**Domain:** Multi-layer performance optimization (Teradata, Python Flask, React Flow)
+**Researched:** 2026-02-15
 **Confidence:** HIGH
 
 ## Critical Pitfalls
 
-### Pitfall 1: Duplicate Cycle Detection Logic in Impact Analysis
+### Pitfall 1: Optimizing Without Profiling First
 
 **What goes wrong:**
-Impact Analysis queries need to traverse the same recursive lineage graph as existing column/table/database lineage endpoints. If you write separate recursive CTEs without reusing existing cycle detection logic, you'll introduce duplicate bugs. The current system uses `POSITION(... IN path) = 0` for cycle detection in recursive CTEs - if Impact Analysis reimplements this differently, it will produce inconsistent results or fail on circular dependencies.
+Teams optimize the wrong bottleneck based on assumptions rather than data, spending days optimizing React rendering when the real issue is a 50-second database query, or vice versa. The 60s load time could be 55s database + 3s backend + 2s frontend, making frontend optimization nearly worthless.
 
 **Why it happens:**
-Developers see Impact Analysis as a "new feature" and write queries from scratch instead of extracting shared logic. The recursive CTE in `python_server.py` (lines 716-762 for upstream, 804-850 for downstream) contains working cycle detection, but it's embedded in endpoint-specific code rather than extracted as reusable logic.
+Developers see slow graphs and immediately assume it's a rendering problem because "600 nodes is a lot," or assume the database is slow because "Teradata is old." Premature optimization feels productive even when misdirected.
 
 **How to avoid:**
-1. Extract recursive lineage traversal into shared Python functions that accept direction and filters
-2. All lineage queries (column, table, database, impact) must use the same traversal functions
-3. Write integration tests that verify Impact Analysis and existing endpoints return identical graph structure for the same column
+1. Profile before optimizing: measure database query time, backend processing time, network transfer time, and frontend rendering time separately
+2. Use existing `benchmark_cte.py` to establish baseline CTE performance
+3. Add API endpoint timing logs (already using Loguru with correlation IDs)
+4. Use browser DevTools Performance tab to measure frontend time
+5. Document baseline metrics BEFORE any optimization work begins
 
 **Warning signs:**
-- Impact Analysis queries written from scratch rather than calling shared functions
-- Different SQL text between Impact Analysis and existing lineage endpoints
-- Test data with cycles passes for column lineage but fails for Impact Analysis
-- Inconsistent behavior when maxDepth is reached
+- No baseline metrics documented before optimization work starts
+- Team debates "which layer is slow" without measurements
+- Optimization PRs that don't include before/after timing data
+- Claims like "this should make it faster" without profiling evidence
 
 **Phase to address:**
-Phase 1 (Foundation refactoring) - Extract shared lineage traversal logic BEFORE implementing Impact Analysis queries.
+Phase 1 (Requirements/Setup) — Establish profiling infrastructure and baseline metrics before any optimization work.
 
 ---
 
-### Pitfall 2: Breaking Frontend Error Response Contract
+### Pitfall 2: Breaking Correctness While Optimizing Recursive CTEs
 
 **What goes wrong:**
-The current backend returns errors as `{"error": "message string"}` in all exception handlers (lines 141-143, 175-177, 243-244, etc.). If exception handling migration changes error response structure (e.g., adding `code`, `details`, `type` fields without frontend updates), TanStack Query error handling in the frontend will break. API client expects `error.response.data.error` - changing this breaks all error displays.
+Optimization changes to recursive CTE logic break cycle detection, depth limiting, or path tracking, causing infinite loops, incorrect lineage results, or missing nodes. The graph loads fast but shows wrong data. Existing 73 database tests fail silently because they weren't run before committing.
 
 **Why it happens:**
-Backend developers improve error handling without checking frontend contract dependencies. Flask exception handlers change response schema for "better structure" but frontend code hardcodes field names. Research shows API changes that add nested objects can break parsers expecting rigid schemas ([Medium: Why did a simple API change break our entire ML pipeline?](https://medium.com/@khayyam.h/why-did-a-simple-api-change-break-our-entire-ml-pipeline-870d16502f43)).
+Recursive CTEs are complex: `POSITION(lineage_id IN path) = 0` for cycle detection, `VARCHAR(4000)` path length limits, and `depth < max_depth` termination. Developers remove "slow" path tracking without realizing it's the cycle detection mechanism, or change join conditions thinking they're equivalent when they're not.
 
 **How to avoid:**
-1. Document current error response contract: `{"error": string}` is the ONLY shape allowed
-2. If enhancing errors, ONLY add optional fields, never remove/rename `error` field
-3. Write contract tests that validate error response JSON schema
-4. Update frontend TypeScript types FIRST, then backend responses
-5. Consider RFC 9457 Problem Details for future (but requires coordinated frontend update)
+1. Run all 73 database tests BEFORE and AFTER every CTE optimization
+2. Never modify cycle detection logic without explicit test coverage
+3. Add specific regression tests for known edge cases: CYCLE5_TEST (5-node cycle), NESTED_DIAMOND (diamond patterns), FANOUT10_TEST (wide fan-out)
+4. Use `insert_cte_test_data.py` test patterns as validation after changes
+5. Compare row counts and max depths between baseline and optimized queries
+6. Keep path tracking even if it seems "expensive" — it prevents infinite loops
 
 **Warning signs:**
-- Exception handler changes don't have corresponding frontend commits
-- Error responses tested with curl but not through frontend
-- Frontend displays generic "An error occurred" instead of specific messages
-- Inconsistent error handling between endpoints (some use new format, some use old)
+- Tests not run before committing CTE changes
+- "Trust me, this is equivalent" code reviews without test evidence
+- Removing path-based cycle detection to "save memory"
+- Changing VARCHAR(4000) to smaller size without testing deep graphs
+- Skipping database tests because "it's just a performance change"
 
 **Phase to address:**
-Phase 2 (Exception Handling) - Write contract tests BEFORE refactoring exception handlers.
+Every phase — CTE correctness is non-negotiable. Add "run database tests" as pre-commit gate for any query changes.
 
 ---
 
-### Pitfall 3: SQL Parser Consolidation Breaks DBQL Extraction
+### Pitfall 3: React Flow Re-render Hell from Direct Store Access
 
 **What goes wrong:**
-`populate_lineage.py` uses `dbql_extractor.py` which relies on sqlglot for parsing Teradata SQL from DBQL logs. If consolidating SQL parsers changes dialect configuration, import paths, or error handling, DBQL extraction silently fails or produces incomplete lineage. Research shows sqlglot has dialect-specific challenges and doesn't support all SQL syntax ([DataHub: SQL Parsing Challenges](https://docs.datahub.com/docs/lineage/sql_parsing)).
+Components directly access `nodes` or `edges` arrays from store, causing entire graph to re-render on every pan/zoom/drag operation. 600-node graph becomes unusable because React is diffing 600 nodes 60 times per second during pan operations. Users report "graph is laggy" even though initial load is fast.
 
 **Why it happens:**
-Developers consolidate "SQL parsing" without realizing DBQL extraction has specific Teradata dialect requirements. sqlglot configuration for Teradata differs from generic SQL parsing. Import path changes break `populate_lineage.py`'s attempt to import dbql_extractor (lines 285-291).
+Most common React Flow performance pitfall: nodes and edges objects change frequently during dragging, panning, or zooming, causing unnecessary re-renders of components that depend on them. Developers don't realize that `useLineageStore()` selector is too broad and triggers on every state change.
 
 **How to avoid:**
-1. Verify DBQL extraction still works AFTER any SQL parser changes
-2. Keep `dbql_extractor.py` import path stable or update ALL callers
-3. Maintain Teradata dialect configuration separately from other SQL parsing
-4. Run `python populate_lineage.py --dbql --dry-run` as regression test
-5. Test with real DBQL logs, not synthetic SQL - Teradata-specific syntax is critical
+1. Use React.memo on TableNode, LineageEdge, and other graph components
+2. Declare custom node/edge components outside parent component or memoize them
+3. Use selective Zustand selectors: `useLineageStore(state => state.direction)` instead of `useLineageStore()`
+4. Enable `onlyRenderVisibleElements` for graphs > 50 nodes (already using VIRTUALIZATION_THRESHOLD)
+5. Throttle/debounce event handlers for pan/zoom/drag operations
+6. Never access `nodes`/`edges` arrays directly in component render paths
 
 **Warning signs:**
-- DBQL extraction returns 0 lineage records after parser changes
-- ImportError for dbql_extractor after refactoring
-- Lineage population works with --fixtures but fails with --dbql
-- sqlglot parse errors for Teradata-specific syntax (QUALIFY, NORMALIZE, etc.)
-- Lineage extraction runs but produces fewer records than before
+- React DevTools Profiler shows TableNode rendering 60fps during pan
+- Graph feels "laggy" even with small node counts (< 100 nodes)
+- Component renders logged on every zoom/pan operation
+- Zustand store selectors don't use equality checks
+- Components re-mount during interactions
 
 **Phase to address:**
-Phase 3 (SQL Parser Consolidation) - Write DBQL extraction regression tests BEFORE consolidating parsers.
+Phase 2 (Frontend Optimization) — After database/backend optimization, before claiming victory.
 
 ---
 
-### Pitfall 4: Large File Refactoring Without Incremental Testing
+### Pitfall 4: Cache Invalidation Failures Create Stale Lineage
 
 **What goes wrong:**
-`python_server.py` is 1455 lines with 15+ endpoints. Refactoring it in one large commit risks breaking multiple endpoints simultaneously. Testing reveals failures but can't identify which refactoring step introduced the bug. Rolling back loses all work. Research shows incremental refactoring with small steps is critical for large files ([freeCodeCamp: How to Refactor Complex Codebases](https://www.freecodecamp.org/news/how-to-refactor-complex-codebases)).
+Redis caching speeds up repeated queries but shows outdated lineage after database updates. User refreshes graph multiple times expecting updated lineage but sees cached stale data. Cache stampede on popular tables causes 100 simultaneous cache misses, hammering database worse than without caching.
 
 **Why it happens:**
-Developers see refactoring as "cleanup" and try to fix everything at once. The file has mixed concerns (routing, business logic, error handling, DB queries) making it tempting to reorganize comprehensively. Lack of pre-refactoring tests means changes can't be validated incrementally.
+"Cache invalidation is one of the hardest problems in computer science" for good reason. Teams add caching without invalidation strategy, use infinite TTLs because "lineage doesn't change often," include user input directly in cache keys causing unbounded key growth, and don't handle cache stampede on hot keys.
 
 **How to avoid:**
-1. Add characterization tests for ALL existing endpoints before refactoring
-2. Refactor one endpoint at a time, run tests, commit
-3. Extract helper functions first, then move route handlers
-4. Keep old code commented out until new code passes tests
-5. Use strangler fig pattern: new routes call extracted functions, old routes stay unchanged initially
+1. Every cache key MUST have a TTL — no exceptions, even for "static" data
+2. Use TTL jitter (random +/- 10%) to prevent stampede on popular keys
+3. Tag-based invalidation for related entries: invalidate all lineage for table X when X changes
+4. Stale-while-revalidate pattern: serve stale data while fetching fresh data in background
+5. Monitor cache hit rates and key cardinality — unbounded growth is a red flag
+6. Never include raw user input in cache keys without sanitization/limits
 
 **Warning signs:**
-- Refactoring PR changes 500+ lines across multiple endpoints
-- Tests added in same commit as refactoring
-- Multiple endpoints break simultaneously
-- Unable to identify which change caused test failure
-- "Works on my machine" but CI tests fail
+- Cache keys without expiration times
+- Users reporting "graph doesn't update" after schema changes
+- Database CPU spikes at regular intervals (synchronized TTL expiration)
+- Redis memory growing unbounded (check `INFO memory` and key count)
+- Cache invalidation code commented out because "it was causing issues"
 
 **Phase to address:**
-Phase 1 (Foundation) - Write endpoint characterization tests BEFORE extracting shared logic.
+Phase 3 (Caching Layer) — Design invalidation strategy BEFORE implementing caching, not after deployment.
 
 ---
 
-### Pitfall 5: Impact Analysis Query Performance Degrades Production
+### Pitfall 5: Teradata CTE Path String Overflow on Deep Graphs
 
 **What goes wrong:**
-Impact Analysis needs to query "all downstream columns affected by column X" which could traverse hundreds of tables in production databases. A naive implementation that fetches entire graph client-side will timeout or crash. Teradata recursive CTEs can run indefinitely without proper depth limits or cycle detection.
+Recursive CTE uses `VARCHAR(4000)` for path tracking. Deep lineage graphs (depth 20+ with long table names) overflow path column, causing Teradata truncation errors or silent cycle detection failures. Path becomes: `demo_user.really_long_table_name.column_with_long_name->demo_user.another_long...` and hits 4000 character limit around depth 15-18 depending on naming.
 
 **Why it happens:**
-Developers test Impact Analysis with small fixture data (10-20 tables) where full graph traversal is fast. Production databases have 1000+ tables with complex transformation chains. Research shows recursive CTEs without clear exit conditions cause queries to run indefinitely ([MySQL: Recursive CTE Running Away](https://dev.mysql.com/blog-archive/a-new-simple-way-to-figure-out-why-your-recursive-cte-is-running-away/)).
+CTE cycle detection uses `POSITION(lineage_id IN path)` which requires storing full path. With qualified names like `namespace://host:port->database.table.column`, path grows ~100-150 chars per depth level. 4000 char limit seemed safe but wasn't tested with real deep graphs.
 
 **How to avoid:**
-1. Always enforce maxDepth limit on recursive CTEs (current default is 3 for database, 5 for column)
-2. Add query timeout to Teradata connection (not currently set)
-3. Test Impact Analysis with production-scale test data (1000+ tables)
-4. Consider pagination for large impact results
-5. Add database indexes on OL_COLUMN_LINEAGE (source_dataset, target_dataset, is_active)
+1. Use `lineage_id` (integer/short string) in path instead of full qualified names
+2. Current benchmark_cte.py already does this: `CAST(l.lineage_id AS VARCHAR(4000))`
+3. Test deep graphs (depth 20+) with realistic naming conventions
+4. Monitor `AVG(CHARACTER_LENGTH(path))` from benchmark results
+5. If using qualified names in path, calculate max depth: `4000 chars / avg_name_length`
+6. Consider alternative cycle detection if path length becomes limiting factor
 
 **Warning signs:**
-- Impact Analysis query takes >30 seconds
-- Teradata session shows "Active" for minutes
-- Frontend timeout errors (504)
-- Memory usage spikes on backend server
-- Lineage queries work but Impact Analysis times out
+- Teradata "string overflow" errors on deep lineage queries
+- Cycle detection stops working at depth > 15
+- Path column approaching VARCHAR limit in benchmark results
+- Long table/column names (> 50 chars) combined with depth > 10
 
 **Phase to address:**
-Phase 1 (Impact Analysis) - Performance test with production-scale data before deploying.
+Phase 1 (Requirements/Setup) — Validate during baseline measurement phase, before optimization.
 
 ---
 
-### Pitfall 6: Exception Context Loss During Migration
+### Pitfall 6: ELKjs Layout Blocking Main Thread on Large Graphs
 
 **What goes wrong:**
-Current exception handlers use `traceback.print_exc()` which prints to stdout/stderr but isn't captured in structured logs. When migrating to better exception handling, developers replace print statements with logging but lose the exception context (stack trace, local variables). Debugging production failures becomes impossible.
+ELKjs layout algorithm runs synchronously on main thread, freezing browser for 2-5 seconds on 600-node graphs. Graph data arrives from API instantly after backend optimization but users still see "frozen" UI while ELKjs calculates positions. Frontend team claims "backend is still slow" when the real issue is layout computation.
 
 **Why it happens:**
-Python logging requires explicit `exc_info=True` to capture exception context. Developers write `logger.error(str(e))` instead of `logger.exception()`. Research shows proper exception handling must preserve context while avoiding sensitive data leaks ([OneUpTime: Handle Exceptions Properly in Python](https://oneuptime.com/blog/post/2026-01-24-handle-exceptions-properly-python/view)).
+ELKjs is a Java library ported to JavaScript, highly configurable but computationally expensive. Layout runs synchronously by default. Computing force layout every render for hundreds of nodes incurs big performance hit. Developers don't realize layout is async operation that can block.
 
 **How to avoid:**
-1. Use `logger.exception("message")` instead of `logger.error()` in exception handlers
-2. Add correlation IDs to track requests across logs
-3. Never log sensitive data (credentials, user data) in exception context
-4. Return generic error messages to clients, log detailed context privately
-5. Test exception logging by triggering errors and verifying log output
+1. Use Web Workers to offload ELKjs computation from main thread
+2. Show loading indicator during layout computation (separate from data fetch)
+3. Memoize layout results — don't recompute on every render
+4. Only compute layout when necessary (data changes, not on pan/zoom/filter)
+5. Use `useLayoutedElements` hook pattern for async layout computation
+6. Consider simpler layout algorithm for very large graphs (> 500 nodes)
 
 **Warning signs:**
-- Production errors show message but no stack trace
-- Cannot determine which code path caused exception
-- Logs missing request context (endpoint, user, parameters)
-- Exception messages in logs but no corresponding Python traceback
+- Browser DevTools Performance shows long blocking tasks during graph render
+- UI freezes after data arrives but before graph displays
+- Layout function called on every render (check React DevTools Profiler)
+- Users report "app is frozen" but network tab shows request completed
+- Main thread CPU usage spikes to 100% during graph load
 
 **Phase to address:**
-Phase 2 (Exception Handling) - Add structured logging BEFORE removing print statements.
+Phase 2 (Frontend Optimization) — After confirming ELKjs is bottleneck, not data fetch.
 
 ---
 
-### Pitfall 7: Fixture-Based Tests Hide DBQL Integration Bugs
+### Pitfall 7: Measuring "Feels Faster" Instead of Real Metrics
 
 **What goes wrong:**
-Database tests run against fixtures (`populate_lineage.py --fixtures`) which use hardcoded mappings. These fixtures work perfectly but don't test DBQL extraction logic. DBQL extraction bugs only appear in production when real query logs fail to parse.
+Team optimizes based on subjective "feels faster" judgments without concrete before/after measurements. Optimization that actually made things slower gets merged because "it felt smoother on my machine." 60s baseline claim turns out to be wrong — was actually 30s — so claiming 10s improvement to 20s looks like failure.
 
 **Why it happens:**
-DBQL extraction requires DBC.DBQLogTbl access and running queries to generate logs - complex to set up in CI. Developers write tests against fixtures because it's faster. Research shows manual data lineage tracking increases risk of missing transformations ([OvalEdge: Data Lineage Challenges](https://www.ovaledge.com/blog/data-lineage-challenges)).
+Developers test on different machines, networks, and data sizes. Local dev database has 10 rows, production has 10,000. "My laptop is fast" vs. "production is slow." Browser caching makes second load faster, mistaken for optimization. No documented baseline means no way to verify improvement.
 
 **How to avoid:**
-1. Add DBQL extraction integration tests that use sample query logs
-2. Create test harness that runs sample SQL and verifies extracted lineage
-3. Document DBQL test data requirements in README
-4. Run DBQL tests in CI if Teradata access available, skip with warning otherwise
-5. Compare fixture lineage vs DBQL lineage for overlapping tables
+1. Document baseline BEFORE optimization: specific query, specific depth, specific node count
+2. Use automated benchmarking: `benchmark_cte.py` with `--iterations 3` for DB layer
+3. Measure median not average (less influenced by outliers)
+4. Test on representative data size matching production (not tiny dev data)
+5. Clear all caches between test runs (browser, Redis, DB query cache)
+6. Measure end-to-end time: API call start to graph visible in browser
+7. Use control charts to show trend over time, not single data point
 
 **Warning signs:**
-- All tests pass but production lineage is empty
-- `populate_lineage.py --dbql` returns 0 records
-- DBQL extractor code has no test coverage
-- Tests only run with --fixtures flag
-- Production uses DBQL but CI uses fixtures
+- PR descriptions saying "this is faster" without timing data
+- No documented baseline measurements before optimization starts
+- Testing only on dev data (10 rows) not production scale (10,000 rows)
+- Single benchmark run instead of multiple iterations
+- No methodology documentation (cache state, data size, machine specs)
 
 **Phase to address:**
-Phase 3 (SQL Parser Consolidation) - Add DBQL integration tests using sample logs.
+Phase 1 (Requirements/Setup) — Establish measurement methodology before any optimization.
 
 ---
 
-### Pitfall 8: API Versioning Delay Causes Breaking Changes
+### Pitfall 8: Premature Index Creation Without Query Analysis
 
 **What goes wrong:**
-Current API is unversioned - all endpoints at `/api/v2/openlineage/*`. If refactoring requires breaking changes (new required fields, renamed fields, removed endpoints), existing frontend/clients break immediately. Research shows API versioning is safest route for major changes ([Stellar Code: Advanced API Development Best Practices 2026](https://stellarcode.io/blog/advanced-api-development-best-practices-2026/)).
+Team creates indexes on every column involved in lineage queries, slowing down writes and consuming storage without improving read performance. Wrong indexes created based on "these columns are in WHERE clauses" without analyzing actual execution plans. Teradata query optimizer ignores new indexes because existing plan is already optimal.
 
 **Why it happens:**
-Developers postpone versioning because "we only have one client (the frontend)". But frontend may cache API responses, have multiple versions deployed, or be used by other teams. Breaking changes without migration path cause outages.
+"Indexes make queries faster" is correct in principle but wrong without analysis. Teradata optimizer considers many factors: table statistics, index selectivity, join methods. Index on `source_dataset` seems obvious but may not help if optimizer already uses primary index efficiently. Creates maintenance overhead without benefit.
 
 **How to avoid:**
-1. Introduce `/api/v3/` endpoints for refactored logic
-2. Keep `/api/v2/` running unchanged during migration
-3. Frontend updates to use v3, then deprecate v2
-4. Document migration guide with field mapping changes
-5. Add deprecation warnings to v2 endpoints (response headers)
+1. Use EXPLAIN plans BEFORE creating indexes: `benchmark_cte.py --explain`
+2. Analyze existing execution plans to identify actual bottlenecks
+3. Check if Teradata optimizer is using full table scans (SCAN operations in EXPLAIN)
+4. Consider index selectivity: indexes on low-cardinality columns often ignored
+5. Test index impact with `COLLECT STATISTICS` before permanent creation
+6. Document why each index was created based on EXPLAIN analysis
+7. Monitor index usage over time — remove unused indexes
 
 **Warning signs:**
-- Backend changes require immediate frontend deployment
-- No API version in endpoint paths
-- Breaking changes merged without frontend updates
-- Old frontend versions stop working after backend deploy
+- Indexes created without EXPLAIN analysis
+- Multiple indexes on same table without selectivity analysis
+- Index creation based on "seems like it should help"
+- No before/after EXPLAIN comparison showing index usage
+- DBA reports high index maintenance overhead
 
 **Phase to address:**
-Phase 1 (Foundation) - Decide versioning strategy BEFORE breaking changes.
+Phase 1 (Database Optimization) — Only after EXPLAIN analysis proves index would help.
 
 ---
 
 ## Technical Debt Patterns
 
+Shortcuts that seem reasonable but create long-term problems.
+
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Skipping pre-refactoring tests | Faster refactoring start | Cannot validate changes don't break behavior | Never - tests are prerequisite |
-| In-place exception handler changes | Quick logging improvement | Breaks frontend error parsing | Never - must maintain contract |
-| Consolidating SQL parsers without DBQL tests | Cleaner codebase | DBQL extraction silently fails | Never - DBQL is production path |
-| Impact Analysis separate queries | Faster feature implementation | Duplicate cycle detection bugs | Never - must reuse traversal logic |
-| Testing with fixture data only | Fast CI pipeline | DBQL bugs only found in production | Only if DBQL tests run nightly |
-| Single large refactoring commit | Appears more organized | Impossible to debug test failures | Never - incremental commits required |
+| Skip database tests during "performance-only" changes | Faster commits | Silent correctness bugs, broken cycle detection | Never — correctness regression tests required |
+| Cache without TTL for "static" lineage data | Simpler implementation | Stale data, user confusion, debugging nightmares | Never — all cache keys need expiration |
+| Optimize most visible layer first (frontend) | User sees immediate UI responsiveness | Waste time if backend is real bottleneck | Only if profiling proves frontend is bottleneck |
+| Remove path tracking to "save memory" | Slightly faster CTE execution | Infinite loops on cyclic graphs, silent failures | Never — path tracking is cycle detection |
+| Use average instead of median for benchmarks | Simpler math | Outliers hide real performance, misleading metrics | Never — median is more representative |
+| Test optimization on dev data (10 rows) | Fast iteration | Doesn't validate production scale (10K rows) | Early exploration only, must validate on real data |
+| Memoize everything "just in case" | Feels safe | Memory leaks, stale closures, harder debugging | Only after profiling shows specific re-render problem |
+| Add Redis without invalidation strategy | Quick wins on cache hits | Data inconsistency, debugging hell | Never — design invalidation before implementing cache |
 
 ## Integration Gotchas
 
+Common mistakes when connecting to external services.
+
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Frontend error handling | Assuming `response.data` shape stays consistent | Write contract tests validating `{"error": string}` schema |
-| DBQL extraction | Consolidating SQL parsers without testing Teradata dialect | Test with real DBQL logs, maintain Teradata-specific config |
-| Recursive CTEs | Writing separate cycle detection logic for each query | Extract shared traversal functions with common cycle detection |
-| Exception logging | Using `logger.error(str(e))` losing stack traces | Use `logger.exception()` with correlation IDs |
-| Impact Analysis | Testing with 10 tables, deploying to 1000-table databases | Load test with production-scale data before deploy |
+| Redis caching | Including user input directly in keys (unbounded growth) | Sanitize input, use fixed key patterns, monitor cardinality |
+| Teradata CTEs | Assuming VARCHAR(4000) is always enough for paths | Calculate max depth based on name lengths, test deep graphs |
+| React Flow | Directly accessing store.nodes in render (re-render hell) | Use selective selectors, memoize components, throttle handlers |
+| ELKjs layout | Running synchronously on main thread (UI freeze) | Use Web Workers, show loading indicator, memoize results |
+| Flask profiling | Adding profiler only in dev (production mystery) | Use APM tools in production, structured logging with timing |
 
 ## Performance Traps
 
+Patterns that work at small scale but fail as usage grows.
+
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| Unbounded recursive CTE | Query runs >30s, Teradata session "Active" indefinitely | Always enforce maxDepth, add query timeout | >100 tables in lineage chain |
-| Missing OL_COLUMN_LINEAGE indexes | Slow lineage queries as data grows | Add indexes on (source_dataset, target_dataset, is_active) | >10K lineage records |
-| Client-side graph assembly | Frontend memory spike, browser hangs | Server-side graph construction, paginated results | >500 nodes in graph |
-| DBQL full table scan | populate_lineage takes hours | Add --since date filter, index DBC.DBQLogTbl.CollectTimeStamp | >1M DBQL records |
-| Exception handler blocking | 500 error takes 30s to return | Make logging async, use background queue | High error rate under load |
+| N+1 queries in lineage traversal | Fast for small graphs, exponential slowdown for large | Use recursive CTEs not iterative queries | > 100 nodes or depth > 5 |
+| Full graph layout on every filter | Responsive for 50 nodes, freezes at 500 | Memoize layout, only recompute on data change | > 200 nodes |
+| Synchronous ELKjs on main thread | Works fine for 50 nodes, locks UI at 300+ | Use Web Workers for layout computation | > 200 nodes |
+| Path string concat in CTE cycle detection | Fine for depth 10, overflows at 20+ | Use numeric IDs not qualified names in paths | Depth > 15 with long names |
+| Broad Zustand selectors | Fast for simple stores, re-renders entire graph | Use selective selectors with equality checks | > 100 nodes in graph |
+| Cache without stampede protection | Fast for low traffic, crushes DB on hot keys | TTL jitter, stale-while-revalidate pattern | Popular tables with synchronized expirations |
 
 ## Security Mistakes
 
+Domain-specific security issues beyond general web security.
+
 | Mistake | Risk | Prevention |
 |---------|------|------------|
-| Logging full exception in API response | Exposes stack traces, database schema, internal paths | Return generic message to client, log details privately |
-| Exception handler reveals database credentials | Connection strings in error messages | Sanitize connection string before logging |
-| DBQL extraction runs as admin user | Excessive permissions for lineage population | Use dedicated service account with minimal SELECT grants |
-| No rate limiting on Impact Analysis | DOS via expensive recursive queries | Add request rate limits per client |
-| Error messages leak table existence | 404 vs 403 reveals what user can't see | Return consistent 404 for unauthorized resources |
+| Unbounded cache keys from user input | Redis memory exhaustion, DoS | Sanitize input, limit key patterns, monitor cardinality |
+| No query timeout on recursive CTEs | Malicious/accidental infinite loops consume resources | Set QUERY_BAND timeout, max_depth limits, path-based termination |
+| Exposing internal table/column names in cache keys | Information disclosure in Redis | Hash sensitive names, use opaque identifiers |
 
 ## UX Pitfalls
 
+Common user experience mistakes in this domain.
+
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Impact Analysis takes 30s with no feedback | User thinks app froze, closes tab | Add loading states, progress indicators, timeout message |
-| Exception changes break error display | Generic "Error occurred" instead of specific message | Maintain error response contract, test error displays |
-| Lineage query times out silently | Empty graph displayed, user assumes no lineage | Show timeout message, suggest reducing maxDepth |
-| Refactoring breaks existing bookmarks | Users' saved lineage URLs stop working | API versioning preserves old endpoints during migration |
-| DBQL extraction fails, no notification | Stale lineage data, users make decisions on outdated info | Add data freshness indicator, alert on population failures |
+| No loading indicator during ELKjs layout | "App is frozen" perception even though working | Show progress for data fetch AND layout computation separately |
+| Showing stale cached lineage | Users make wrong decisions based on outdated data | TTL + last-updated timestamp + refresh button |
+| Graph re-renders on every pan/zoom | Laggy, unusable graph despite fast load | Memoize components, throttle handlers, virtualization |
+| No feedback when optimization actually worked | Users still complain "it's slow" out of habit | Show timing metrics in UI, before/after comparison |
+| Failing silently when path overflow occurs | Wrong lineage shown, users don't know data is incomplete | Error handling + warning message for deep graphs |
 
 ## "Looks Done But Isn't" Checklist
 
-- [ ] **Impact Analysis:** Often missing cycle detection testing — verify with test data containing circular dependencies
-- [ ] **Backend Refactoring:** Often missing pre-refactoring characterization tests — verify ALL endpoints have test coverage before extracting code
-- [ ] **Exception Handling:** Often missing structured logging correlation IDs — verify you can trace request from frontend to exception log
-- [ ] **SQL Parser Consolidation:** Often missing DBQL integration tests — verify `populate_lineage.py --dbql` produces lineage records
-- [ ] **API Changes:** Often missing frontend error handling updates — verify error responses still match `{"error": string}` contract
-- [ ] **Performance:** Often missing production-scale load testing — verify Impact Analysis works with 1000+ table databases
-- [ ] **Cycle Detection:** Often missing cycle test data — verify recursive CTEs handle circular lineage properly
-- [ ] **Incremental Refactoring:** Often missing intermediate commits — verify git history shows small, tested changes
+Things that appear complete but are missing critical pieces.
+
+- [ ] **CTE Optimization:** Often missing correctness regression tests — verify all 73 database tests pass
+- [ ] **Caching Layer:** Often missing invalidation strategy — verify TTL on all keys, stampede protection
+- [ ] **Frontend Optimization:** Often missing memoization — verify components use React.memo, selective selectors
+- [ ] **Performance Claims:** Often missing baseline measurements — verify documented before/after with methodology
+- [ ] **Index Creation:** Often missing EXPLAIN analysis — verify execution plan shows index usage
+- [ ] **Load Time Improvement:** Often missing breakdown — verify database time vs backend time vs frontend time
+- [ ] **Large Graph Testing:** Often missing realistic data scale — verify tested on production-size graphs (600+ nodes)
+- [ ] **Cache Key Design:** Often missing cardinality monitoring — verify key count stays bounded
 
 ## Recovery Strategies
 
+When pitfalls occur despite prevention, how to recover.
+
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Frontend breaks from error response changes | MEDIUM | 1. Revert backend changes 2. Add contract tests 3. Update frontend first 4. Change backend response with added fields only |
-| DBQL extraction broken after parser consolidation | HIGH | 1. Rollback to last working version 2. Add DBQL integration tests 3. Re-attempt consolidation with tests passing |
-| Impact Analysis query times out in production | LOW | 1. Add query timeout at database level 2. Reduce default maxDepth from 5 to 3 3. Add pagination |
-| Refactoring breaks multiple endpoints | MEDIUM | 1. Revert to working state 2. Write characterization tests for each endpoint 3. Refactor incrementally |
-| Exception context lost in logs | LOW | 1. Update logger calls to use `logger.exception()` 2. Add correlation ID middleware 3. Test by triggering errors |
-| Duplicate cycle detection bug in Impact Analysis | MEDIUM | 1. Extract shared traversal function 2. Replace Impact Analysis queries with shared function 3. Add cycle detection test data |
-| Production lineage empty due to fixture-only testing | HIGH | 1. Emergency: populate with --fixtures 2. Fix DBQL extraction 3. Add DBQL integration tests 4. Re-populate from query logs |
+| Broke cycle detection in CTE | MEDIUM | Revert to last working version, run regression tests, fix with test coverage |
+| Cache serving stale data | LOW | Flush Redis cache, add TTLs, implement invalidation |
+| React re-render performance issue | LOW | Add React.memo to components, profile with DevTools, add selective selectors |
+| Database query timeout on deep graphs | MEDIUM | Reduce max_depth, add path length monitoring, optimize CTE join conditions |
+| Index creation without benefit | LOW | Drop unused indexes, run EXPLAIN, create selective indexes only |
+| Path VARCHAR overflow | HIGH | Redesign path tracking (use IDs not names), adjust max_depth limits |
+| ELKjs blocking main thread | MEDIUM | Move to Web Worker, add loading indicator, memoize layout |
+| No baseline metrics to compare | HIGH | Stop optimization work, establish benchmarking infrastructure, measure baseline |
 
 ## Pitfall-to-Phase Mapping
 
+How roadmap phases should address these pitfalls.
+
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Duplicate cycle detection logic | Phase 1: Foundation | Integration test comparing Impact Analysis vs existing lineage for same column |
-| Breaking error response contract | Phase 2: Exception Handling | Contract test validating `{"error": string}` schema on all endpoints |
-| DBQL extraction broken | Phase 3: SQL Parser | Run `populate_lineage.py --dbql --dry-run` in CI |
-| Large file refactoring without tests | Phase 1: Foundation | All endpoints have characterization tests before extraction |
-| Impact Analysis performance | Phase 1: Impact Analysis | Load test with 1000-table database before deploy |
-| Exception context loss | Phase 2: Exception Handling | Trigger error and verify stack trace in logs |
-| Fixture-based tests hide DBQL bugs | Phase 3: SQL Parser | DBQL integration tests using sample query logs |
-| API versioning delay | Phase 1: Foundation | Decision documented: v3 or maintain v2 contract |
+| Optimizing without profiling | Phase 1: Requirements/Setup | Documented baseline with timing breakdown |
+| Breaking CTE correctness | All phases | 73 database tests pass before commit |
+| React re-render hell | Phase 2: Frontend | DevTools Profiler shows < 5 renders per interaction |
+| Cache invalidation failures | Phase 3: Caching | Test with schema change, verify fresh data shown |
+| Path VARCHAR overflow | Phase 1: Requirements/Setup | Test depth 20+ graphs, verify no truncation |
+| ELKjs blocking main thread | Phase 2: Frontend | Performance tab shows no > 500ms blocking tasks |
+| Measuring "feels faster" | Phase 1: Requirements/Setup | Automated benchmark with median timing |
+| Premature index creation | Phase 1: Database | EXPLAIN plan shows index usage |
 
-## Phase-Specific Warnings
+## Phase-Specific Research Flags
 
-### Phase 1: Impact Analysis + Foundation Refactoring
+Phases that will need deeper investigation during execution.
 
-**Likely Issues:**
-- Duplicate cycle detection between Impact Analysis and existing lineage queries
-- Large refactoring PRs that change multiple endpoints simultaneously
-- Performance issues with production-scale databases not caught in testing
+**Phase 1 (Database Optimization):**
+- MEDIUM confidence on index benefit without EXPLAIN analysis
+- Need to validate: which indexes actually help vs. create overhead
+- Research needed: Teradata-specific CTE optimization techniques
+- Flag: Path VARCHAR sizing needs validation on real deep graphs
 
-**Mitigation:**
-- Extract shared lineage traversal logic BEFORE implementing Impact Analysis
-- Write characterization tests for all endpoints BEFORE refactoring
-- Test with 1000+ table database before declaring Impact Analysis complete
+**Phase 2 (Frontend Optimization):**
+- MEDIUM confidence on ELKjs Web Worker implementation complexity
+- Need to validate: React Flow component memoization patterns specific to our graph structure
+- Research needed: Optimal virtualization threshold for our data (currently 50)
+- Flag: Layout computation time may still be bottleneck even with Web Workers
 
-### Phase 2: Exception Handling Migration
+**Phase 3 (Caching Layer):**
+- LOW confidence on optimal cache invalidation strategy for lineage data
+- Need to validate: Invalidation granularity (column-level vs table-level vs database-level)
+- Research needed: Redis memory requirements for full lineage cache
+- Flag: Cache stampede mitigation may require more than TTL jitter
 
-**Likely Issues:**
-- Error response JSON schema changes break frontend parsing
-- Exception context lost when replacing print statements with logging
-- Security risk from logging sensitive data in exceptions
-
-**Mitigation:**
-- Write contract tests for error responses BEFORE changing exception handlers
-- Use `logger.exception()` with correlation IDs, never `logger.error(str(e))`
-- Test error logging by triggering exceptions and verifying log output
-
-### Phase 3: SQL Parser Consolidation
-
-**Likely Issues:**
-- DBQL extraction silently fails after import path changes
-- Teradata-specific SQL syntax not supported by consolidated parser
-- Fixture-based tests pass but DBQL tests fail
-
-**Mitigation:**
-- Run DBQL extraction regression test before and after consolidation
-- Maintain Teradata dialect configuration separately from generic SQL parsing
-- Add DBQL integration tests using real query log samples
+**Phase 4 (Integration & Testing):**
+- HIGH confidence — existing test infrastructure (73 DB + 20 API + 260 frontend + 21 E2E)
+- Need to validate: Performance regression test suite for continuous monitoring
+- Flag: May need separate performance test environment to avoid false positives
 
 ## Sources
 
-### Data Lineage Best Practices
-- [OvalEdge: Data Lineage Best Practices for 2026](https://www.ovaledge.com/blog/data-lineage-best-practices)
-- [Atlan: Data Lineage & Impact Analysis Guide 2026](https://atlan.com/know/data-lineage-impact-analysis/)
-- [OvalEdge: Data Lineage Challenges](https://www.ovaledge.com/blog/data-lineage-challenges)
-- [Secoda: Challenges of Data Lineage Implementation](https://www.secoda.co/blog/challenges-of-data-lineage-implementation)
+**Teradata Recursive CTE Performance:**
+- [Mastering Recursive CTEs in SQL: A Comprehensive Guide - SQLPad.io](https://sqlpad.io/tutorial/mastering-recursive-ctes-in-sql-a-comprehensive-guide/)
+- [Teradata Recursive Queries Guide - DWH Pro](https://www.dwhpro.com/teradata-recursive-queries/)
+- [SQL Fundamentals - Teradata Vantage Recursive Queries](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Fundamentals/SQL-Data-Definition-Control-and-Manipulation/Recursive-Queries)
+- [Optimize Recursive CTE Query - Microsoft TechCommunity](https://techcommunity.microsoft.com/t5/datacat/optimize-recursive-cte-query/ba-p/305094)
 
-### Backend Refactoring
-- [freeCodeCamp: How to Refactor Complex Codebases](https://www.freecodecamp.org/news/how-to-refactor-complex-codebases)
-- [Tembo: Code Refactoring Best Practices](https://www.tembo.io/blog/code-refactoring)
-- [Stellar Code: Advanced API Development Best Practices 2026](https://stellarcode.io/blog/advanced-api-development-best-practices-2026/)
-- [Legacy Code: Refactoring at Scale](https://understandlegacycode.com/blog/key-points-of-refactoring-at-scale/)
+**React Flow Performance Optimization:**
+- [Performance - React Flow Official Docs](https://reactflow.dev/learn/advanced-use/performance)
+- [The Ultimate Guide to Optimize React Flow Project Performance - Synergy Codes](https://www.synergycodes.com/webbook/guide-to-optimize-react-flow-project-performance)
+- [The Ultimate Guide to Optimize React Flow Project Performance - Medium](https://medium.com/@lukasz.jazwa_32493/the-ultimate-guide-to-optimize-react-flow-project-performance-42f4297b2b7b)
+- [React Flow Performance Discussion - GitHub #4975](https://github.com/xyflow/xyflow/discussions/4975)
+- [Tuning Edge Animations in Reactflow - Liam ERD](https://liambx.com/blog/tuning-edge-animations-reactflow-optimal-performance)
 
-### Exception Handling
-- [OneUpTime: Handle Exceptions Properly in Python 2026](https://oneuptime.com/blog/post/2026-01-24-handle-exceptions-properly-python/view)
-- [APIFlask: Error Handling Documentation](https://apiflask.com/error-handling/)
-- [Medium: Why API Changes Break ML Pipelines](https://medium.com/@khayyam.h/why-did-a-simple-api-change-break-our-entire-ml-pipeline-870d16502f43)
+**Database Query Optimization:**
+- [Query Optimization Patterns - Medium](https://medium.com/@artemkhrenov/query-optimization-patterns-writing-efficient-sql-for-high-performance-applications-8143e5028443)
+- [Database Optimization Techniques for 2026 - CodeKrio](https://codekrio.tech/database-optimization-techniques/)
+- [Stop Optimizing the Wrong Things - Dagster](https://dagster.io/blog/when-and-when-not-to-optimize-data-pipelines)
+- [SQL Query Optimization - DataCamp](https://www.datacamp.com/blog/sql-query-optimization)
 
-### SQL Parsing & DBQL
-- [DataHub: SQL Parsing Documentation](https://docs.datahub.com/docs/lineage/sql_parsing)
-- [DataHub: Extracting Column-Level Lineage from SQL](https://datahub.com/blog/extracting-column-level-lineage-from-sql/)
-- [Medium: SQL Parsing using SQLGlot](https://medium.com/@anupkumarray/sql-parsing-using-sqlglot-ad8a3c7fac59)
+**Redis Caching Pitfalls:**
+- [Redis Caching Pitfalls: Invalidation, Testing & Best Practices - Medium](https://medium.com/@QuarkAndCode/redis-caching-pitfalls-invalidation-testing-best-practices-3950a0660f1a)
+- [How to Implement Cache Invalidation with Redis - OneUptime](https://oneuptime.com/blog/post/2026-01-25-redis-cache-invalidation/view)
+- [Cache Invalidation - Redis Glossary](https://redis.io/glossary/cache-invalidation/)
+- [Caching in 2026: Fundamentals, Invalidation - Medium](https://lukasniessen.medium.com/caching-in-2026-fundamentals-invalidation-and-why-it-matters-more-than-ever-867fee46e98b)
+- [Redis Anti-Patterns to Avoid - Redis Official](https://redis.io/tutorials/redis-anti-patterns-every-developer-should-avoid/)
 
-### Recursive CTEs & Cycle Detection
-- [SQL for Devs: Cycle Detection for Recursive Search](https://sqlfordevs.com/cycle-detection-recursive-query)
-- [MySQL: Why Recursive CTE Running Away](https://dev.mysql.com/blog-archive/a-new-simple-way-to-figure-out-why-your-recursive-cte-is-running-away/)
-- [PostgreSQL: WITH Queries Documentation](https://www.postgresql.org/docs/current/queries-with.html)
-- [VB Consulting: Recursion with PostgreSQL Part 3 - Cycle Detection](https://vb-consulting.github.io/blog/recursion-postgresql/part3-cycle-detection/)
+**ELKjs Layout Performance:**
+- [Overview - React Flow Layouting](https://reactflow.dev/learn/layouting/layouting)
+- [Elkjs Tree Example - React Flow](https://reactflow.dev/examples/layout/elkjs)
+- [Building Complex Graph Diagrams with React Flow, ELK.js - Medium](https://dtoyoda10.medium.com/building-complex-graph-diagrams-with-react-flow-elk-js-and-dagre-js-8832f6a461c5)
+
+**Performance Measurement Methodology:**
+- [Before and After Automation Metrics - Robotics & Automation News](https://roboticsandautomationnews.com/2026/01/14/before-and-after-automation-metrics-how-to-compare-results-without-fooling-yourself/98139/)
+- [Before and After Comparison - Lean 6 Sigma Hub](https://lean6sigmahub.com/before-and-after-comparison-how-to-document-improvement-results-effectively/)
+
+**Flask Performance Profiling:**
+- [Demystifying Python Performance: Profiling & Visualization - Naukri Engineering](https://medium.com/naukri-engineering/lets-profile-your-flask-app-70e25d149738)
+- [flask_profiler - PyPI](https://pypi.org/project/flask_profiler/)
+- [Best Python APM Tools in 2026 - Better Stack](https://betterstack.com/community/comparisons/python-application-monitoring-tools/)
+- [Performance Optimization in Flask - Medium](https://medium.com/@christopherthai/performance-optimization-in-flask-tips-and-tricks-for-making-flask-applications-faster-and-more-07b9327277b3)
+
+**Correctness Testing During Optimization:**
+- [Regression Testing Guide for 2026 - Leapwork](https://www.leapwork.com/blog/regression-testing)
+- [Regression Test Performance Best Practices - Speedscale](https://speedscale.com/blog/regression-test-performance/)
+- [Early Detection of Performance Regressions - arXiv](https://arxiv.org/html/2408.08148v1)
+
+**Project-Specific Sources:**
+- Existing `benchmark_cte.py` implementation with depth testing
+- `lineage_repository.py` recursive CTE patterns with cycle detection
+- `LineageGraph.tsx` virtualization threshold and React Flow usage
+- 73 database tests + 20 API tests + 260+ frontend tests + 21 E2E tests
 
 ---
-*Pitfalls research for: Teradata Column-Level Lineage Application - Impact Analysis & Refactoring Milestone*
-*Researched: 2026-02-13*
-*Focus: Subsequent milestone risks when adding features to existing production system*
+*Pitfalls research for: Performance Optimization (Database, Backend, Frontend, Caching)*
+*Researched: 2026-02-15*
+*Target: 60s → 2-4s load time across all graph types*
