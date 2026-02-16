@@ -1,0 +1,67 @@
+============================================================
+CTE CORRECTNESS VALIDATION TESTS (Phase 16)
+============================================================
+Validates graph algorithm behavior for complex patterns
+Uses POSITION(id IN path) cycle detection from openlineage_repo.go
+
+Connecting to test-sad3sstx4u4llczi.env.clearscape.teradata.com...
+Connected successfully!
+
+Test data found. Running correctness validation...
+
+============================================================
+1. CYCLE DETECTION TESTS (CORRECT-VAL-01)
+============================================================
+  [PASS] CYC-CYCLE_TEST: 2-node cycle (A <-> B) terminates correctly
+  [PASS] CYC-MCYCLE_TEST: 4-node cycle (A -> B -> C -> D -> A) terminates correctly
+  [PASS] CYC-CYCLE5_TEST: 5-node cycle (A -> B -> C -> D -> E -> A) terminates correct...
+
+============================================================
+2. DIAMOND DEDUPLICATION TESTS (CORRECT-VAL-02)
+============================================================
+  [PASS] DIA-DIAMOND: Simple diamond (A -> B,C -> D) - no duplicates
+  [PASS] DIA-NESTED_DIAMOND: Nested diamond (two diamonds in series) - no duplicates
+  [PASS] DIA-WIDE_DIAMOND: Wide diamond (A -> B,C,D,E -> F) - no duplicates
+
+============================================================
+3. FAN-OUT COMPLETENESS TESTS (CORRECT-VAL-03)
+============================================================
+  [PASS] FAN-OUT-FANOUT5_TEST: Fan-out 5 (1 source -> 5 targets) - all targets
+  [PASS] FAN-OUT-FANOUT10_TEST: Fan-out 10 (1 source -> 10 targets) - all targets
+
+============================================================
+4. FAN-IN COMPLETENESS TESTS (CORRECT-VAL-04)
+============================================================
+  [PASS] FAN-IN-FANIN5_TEST: Fan-in 5 (5 sources -> 1 target) - all sources
+  [PASS] FAN-IN-FANIN10_TEST: Fan-in 10 (10 sources -> 1 target) - all sources
+
+============================================================
+5. COMBINED PATTERN TESTS (CORRECT-VAL-05)
+============================================================
+  [PASS] COMB-COMBINED_CYCLE_DIAMOND: Combined cycle + diamond - correct count
+  [PASS] COMB-COMBINED_FAN: Combined fan-out + fan-in - correct count
+
+============================================================
+6. DEPTH LIMITING TESTS (CORRECT-VAL-06)
+============================================================
+  [PASS] DEPTH-01: Depth limit 1 restricts correctly
+  [PASS] DEPTH-02: Depth limit 2 restricts correctly
+  [PASS] DEPTH-10: Depth limit 10 includes all levels
+
+============================================================
+7. ACTIVE RECORD FILTERING TESTS (CORRECT-VAL-07)
+============================================================
+  [PASS] ACTIVE-01: Only active records traversed
+
+============================================================
+TEST SUMMARY
+============================================================
+  Total tests: 16
+  [PASS] Passed:  16
+  [FAIL] Failed:  0
+  [SKIP] Skipped: 0
+
+============================================================
+Pass rate (excluding skipped): 100.0%
+============================================================
+Exit code: 0
