@@ -12,7 +12,7 @@ Test configurations:
 
 Matches CTE patterns from openlineage_repo.go:
 - POSITION(lineage_id IN path) = 0 for cycle detection
-- VARCHAR(4000) for path column
+- VARCHAR(500) for path column (optimized from 4000 based on measurements)
 - is_active = 'Y' filtering
 """
 
@@ -126,7 +126,7 @@ def build_upstream_query(dataset: str, field: str, max_depth: int, count_only: b
                 l.lineage_id, l.source_dataset, l.source_field,
                 l.target_dataset, l.target_field,
                 1 AS depth,
-                CAST(l.lineage_id AS VARCHAR(4000)) AS path
+                CAST(l.lineage_id AS VARCHAR(500)) AS path
             FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.target_dataset = '{dataset}'
               AND l.target_field = '{field}'
@@ -176,7 +176,7 @@ def build_downstream_query(dataset: str, field: str, max_depth: int, count_only:
                 l.lineage_id, l.source_dataset, l.source_field,
                 l.target_dataset, l.target_field,
                 1 AS depth,
-                CAST(l.lineage_id AS VARCHAR(4000)) AS path
+                CAST(l.lineage_id AS VARCHAR(500)) AS path
             FROM {DATABASE}.OL_COLUMN_LINEAGE l
             WHERE l.source_dataset = '{dataset}'
               AND l.source_field = '{field}'

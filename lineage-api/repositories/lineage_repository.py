@@ -51,7 +51,7 @@ class LineageRepository(BaseRepository):
                         target_field,
                         transformation_type,
                         1 as depth,
-                        CAST(target_dataset || '.' || target_field || '->' || source_dataset || '.' || source_field AS VARCHAR(10000)) as path
+                        CAST(target_dataset || '.' || target_field || '->' || source_dataset || '.' || source_field AS VARCHAR(500)) as path
                     FROM OL_COLUMN_LINEAGE
                     WHERE TRIM(target_dataset) = TRIM(?)
                       AND UPPER(TRIM(target_field)) = UPPER(TRIM(?))
@@ -139,7 +139,7 @@ class LineageRepository(BaseRepository):
                         target_field,
                         transformation_type,
                         1 as depth,
-                        CAST(source_dataset || '.' || source_field || '->' || target_dataset || '.' || target_field AS VARCHAR(10000)) as path
+                        CAST(source_dataset || '.' || source_field || '->' || target_dataset || '.' || target_field AS VARCHAR(500)) as path
                     FROM OL_COLUMN_LINEAGE
                     WHERE TRIM(source_dataset) = TRIM(?)
                       AND UPPER(TRIM(source_field)) = UPPER(TRIM(?))
@@ -233,7 +233,7 @@ class LineageRepository(BaseRepository):
                     cl.transformation_type,
                     1 as depth,
                     CAST(cl.source_dataset || '.' || cl.source_field || '->' ||
-                         cl.target_dataset || '.' || cl.target_field AS VARCHAR(10000)) as path
+                         cl.target_dataset || '.' || cl.target_field AS VARCHAR(500)) as path
                 FROM OL_COLUMN_LINEAGE cl
                 WHERE cl.is_active = 'Y'
                   AND (TRIM(cl.source_dataset) IN ({placeholders})
