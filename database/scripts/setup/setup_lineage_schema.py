@@ -178,6 +178,13 @@ INDEX_STATEMENTS = [
     "CREATE INDEX idx_ol_lineage_tgt_field (target_field) ON {DATABASE}.OL_COLUMN_LINEAGE",
     "CREATE INDEX idx_ol_lineage_run (run_id) ON {DATABASE}.OL_COLUMN_LINEAGE",
     "CREATE INDEX idx_ol_lineage_type (transformation_type) ON {DATABASE}.OL_COLUMN_LINEAGE",
+
+    # Composite indexes for join pair optimization (Phase 04)
+    # Upstream traversal: l.target_dataset = lp.source_dataset AND l.target_field = lp.source_field
+    "CREATE INDEX idx_ol_lineage_tgt_composite (target_dataset, target_field) ON {DATABASE}.OL_COLUMN_LINEAGE",
+
+    # Downstream traversal: l.source_dataset = lp.target_dataset AND l.source_field = lp.target_field
+    "CREATE INDEX idx_ol_lineage_src_composite (source_dataset, source_field) ON {DATABASE}.OL_COLUMN_LINEAGE",
 ]
 
 
