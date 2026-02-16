@@ -17,7 +17,7 @@ export interface TableNodeData {
 
 const elk = new ELK();
 
-interface LayoutOptions {
+export interface LayoutOptions {
   direction?: 'RIGHT' | 'LEFT' | 'DOWN' | 'UP';
   nodeSpacing?: number;
   layerSpacing?: number;
