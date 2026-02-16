@@ -41,7 +41,9 @@ import teradatasql
 from db_config import CONFIG
 
 # Import SQL parser from canonical location (lineage-api/utils/)
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "lineage-api"))
+# Go up to project root: dbql_extractor.py -> populate -> scripts -> database -> project_root
+project_root = Path(__file__).resolve().parent.parent.parent.parent
+sys.path.insert(0, str(project_root / "lineage-api"))
 from utils.sql_parser import TeradataSQLParser
 
 
