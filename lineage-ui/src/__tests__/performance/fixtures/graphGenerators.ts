@@ -57,11 +57,16 @@ function createEdge(
   };
 }
 
+export interface GenerateOptions {
+  /** Maximum chain depth (number of layers) in the graph */
+  depth?: number;
+}
+
 /**
  * Generates a multi-table lineage graph with the specified total column count.
  *
  * Creates a layered graph structure where:
- * - Number of layers = sqrt(nodeCount)
+ * - Number of layers = sqrt(nodeCount) or options.depth if provided
  * - Columns per layer = nodeCount / layers
  * - Each column is in a separate table (cross-table edges)
  * - Edges connect each column to 1-2 columns in the next layer
@@ -69,14 +74,18 @@ function createEdge(
  * This structure tests both layout algorithm performance and edge routing.
  *
  * @param nodeCount - Total number of column nodes to create
+ * @param options - Optional configuration (depth control)
  * @returns Generated graph with nodes, edges, and counts
  */
-export function generateGraph(nodeCount: number): GeneratedGraph {
+export function generateGraph(nodeCount: number, options?: GenerateOptions): GeneratedGraph {
   const nodes: LineageNode[] = [];
   const edges: LineageEdge[] = [];
 
   // Calculate layer dimensions
-  const layerCount = Math.max(2, Math.floor(Math.sqrt(nodeCount)));
+  // If depth is specified, use it; otherwise calculate from sqrt(nodeCount)
+  const layerCount = options?.depth
+    ? Math.max(2, options.depth)
+    : Math.max(2, Math.floor(Math.sqrt(nodeCount)));
   const nodesPerLayer = Math.ceil(nodeCount / layerCount);
 
   let nodeIndex = 0;

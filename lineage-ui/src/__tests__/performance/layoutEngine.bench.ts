@@ -15,6 +15,8 @@ import { generateGraph } from './fixtures/graphGenerators';
 const graph50 = generateGraph(50);
 const graph100 = generateGraph(100);
 const graph200 = generateGraph(200);
+const graph400 = generateGraph(400);
+const graph600 = generateGraph(600);
 
 describe('ELK Layout Performance', () => {
   // Warm-up: Run one layout before benchmarks to initialize ELK WASM
@@ -55,6 +57,28 @@ describe('ELK Layout Performance', () => {
     },
     { time: 5000 }
   );
+
+  bench(
+    'layout 400 nodes',
+    async () => {
+      const result = await layoutGraph(graph400.nodes, graph400.edges);
+      if (result.nodes.length === 0 && graph400.nodes.length > 0) {
+        throw new Error('Layout produced no nodes');
+      }
+    },
+    { time: 10000 }
+  );
+
+  bench(
+    'layout 600 nodes',
+    async () => {
+      const result = await layoutGraph(graph600.nodes, graph600.edges);
+      if (result.nodes.length === 0 && graph600.nodes.length > 0) {
+        throw new Error('Layout produced no nodes');
+      }
+    },
+    { time: 15000 }
+  );
 });
 
 describe('ELK Layout Metrics', () => {
@@ -70,5 +94,21 @@ describe('ELK Layout Metrics', () => {
       }
     },
     { time: 3000 }
+  );
+});
+
+describe('ELK Layout Depth Benchmarks', () => {
+  // Generate a graph with 200 nodes at depth 20 (10 nodes per layer across 20 layers)
+  const deepGraph = generateGraph(200, { depth: 20 });
+
+  bench(
+    'layout 200 nodes depth 20',
+    async () => {
+      const result = await layoutGraph(deepGraph.nodes, deepGraph.edges);
+      if (result.nodes.length === 0) {
+        throw new Error('Layout produced no nodes');
+      }
+    },
+    { time: 10000 }
   );
 });
