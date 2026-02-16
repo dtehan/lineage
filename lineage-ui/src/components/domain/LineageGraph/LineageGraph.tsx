@@ -19,7 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useOpenLineageTableLineage } from '../../../api/hooks/useOpenLineage';
 import { openLineageApi } from '../../../api/client';
 import { useLineageStore } from '../../../stores/useLineageStore';
-import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
+import type { TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
@@ -38,6 +38,7 @@ import {
   useLineageExport,
   useSmartViewport,
   useFitToSelection,
+  useLayoutWorker,
 } from './hooks';
 
 /**
@@ -142,6 +143,9 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Use fit-to-selection hook for centering on highlighted path
   const { fitToSelection, hasSelection } = useFitToSelection();
 
+  // Use layout worker hook for off-thread layout computation
+  const { layoutGraph: workerLayoutGraph } = useLayoutWorker();
+
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
     // Get the set of node IDs that match the asset type filter
@@ -194,10 +198,13 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         data.graph.edges
       );
 
-      layoutGraph(legacyNodes, legacyEdges, {
-        onProgress: (layoutProgress) => setProgress(layoutProgress),
-      })
+      // Set progress manually since onProgress callback can't be passed to Worker
+      // (functions are not serializable via structured clone)
+      setProgress(35); // Entering layout stage
+
+      workerLayoutGraph(legacyNodes, legacyEdges, {})
         .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+          setProgress(70); // Layout complete
           setStage('rendering');
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
@@ -217,7 +224,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
           setStage('complete');
         });
     }
-  }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
+  }, [data, setNodes, setEdges, setGraph, setStage, setProgress, workerLayoutGraph]);
 
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
