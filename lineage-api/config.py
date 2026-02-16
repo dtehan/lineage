@@ -79,6 +79,10 @@ DB_CONFIG = {
     "database": os.environ.get("TERADATA_DATABASE") or os.environ.get("TD_DATABASE", "demo_user"),
 }
 
+# Redis cache configuration (optional - app gracefully degrades without Redis)
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+CACHE_TTL = int(os.environ.get("CACHE_TTL", "3600"))
+
 
 def get_db_connection():
     """Create a database connection."""

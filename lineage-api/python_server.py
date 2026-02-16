@@ -14,6 +14,7 @@ from flask_cors import CORS
 from loguru import logger
 
 from config import get_db_connection
+from cache import init_cache
 from repositories.lineage_repository import LineageRepository
 from repositories.dataset_repository import DatasetRepository
 from services.lineage_service import LineageService
@@ -60,6 +61,9 @@ def create_app():
 
     # Step 2: Initialize correlation ID middleware (after CORS, before routes)
     init_correlation_id_middleware(app)
+
+    # Step 2.5: Initialize cache (before repositories, after CORS)
+    init_cache(app)
 
     # Create database connection (shared across all repositories)
     connection = get_db_connection()

@@ -21,3 +21,11 @@ python-dotenv>=1.0.0
 # SQL parsing for column-level lineage extraction
 # Required for DBQL-based lineage extraction (Phase 3)
 sqlglot>=25.0.0
+
+# Redis caching (Phase 6)
+Flask-Caching>=2.3.0
+redis>=5.0.0
+python-redis-lock>=4.0.0
+
+# Testing - Redis mock
+fakeredis>=2.24.0
