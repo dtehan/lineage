@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-15)
 ## Current Position
 
 Phase: 5 of 7 (Frontend Rendering Optimization)
-Plan: 1 of 3
+Plan: 2 of 3
 Status: Complete
-Last activity: 2026-02-16 — Completed Phase 5 Plan 01: Web Worker for ELKjs Layout
+Last activity: 2026-02-16 — Completed Phase 5 Plan 02: React Profiler Instrumentation and CSS Transition Optimization
 
-Progress: [████░░░░░░] 57% (16 of 28 estimated plans complete across all milestones)
+Progress: [████░░░░░░] 61% (17 of 28 estimated plans complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16 (12 v1.0 + 4 v2.0)
-- Average duration: 7.3 min
-- Total execution time: 1.98 hours
+- Total plans completed: 17 (12 v1.0 + 5 v2.0)
+- Average duration: 6.9 min
+- Total execution time: 2.03 hours
 
 **By Phase:**
 
@@ -31,13 +31,14 @@ Progress: [████░░░░░░] 57% (16 of 28 estimated plans complet
 | 02    | 4     | 8.0 min  | 2.0 min   |
 | 03    | 2     | 4.9 min  | 2.5 min   |
 | 04    | 3     | 13.0 min | 4.3 min   |
-| 05    | 1     | 5.0 min  | 5.0 min   |
+| 05    | 2     | 8.0 min  | 4.0 min   |
 
 **Recent Trend:**
-- Last 6 plans: 03-02 (2.3 min), 02-04 (1.0 min), 04-01 (4.5 min), 04-02 (3.7 min), 04-03 (4.8 min), 05-01 (5.0 min)
+- Last 6 plans: 02-04 (1.0 min), 04-01 (4.5 min), 04-02 (3.7 min), 04-03 (4.8 min), 05-01 (5.0 min), 05-02 (3.0 min)
 - Trend: Fast autonomous plans (~1-5 min), checkpoint-heavy plans take longer (50+ min)
 
 *Updated after each plan completion*
+| Phase 05 P02 | 3 | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,10 @@ Recent decisions affecting v2.0 work:
 - [Phase 05]: Remove onProgress callback from Worker (functions not serializable via structured clone)
 - [Phase 05]: Use bundled ELK in Worker, not Worker-in-Worker pattern (Worker IS the offloaded thread)
 - [Phase 05]: Mock Worker and Comlink in tests (jsdom doesn't support Workers)
+- [Phase 05]: React Profiler logs re-renders in dev mode only (not production)
+- [Phase 05]: 200-node threshold for CSS transition disabling based on Phase 18 benchmarks
+- [Phase 05]: CSS transitions toggle via .no-transitions class (preserves React Flow transforms)
+- [Phase 05]: Transitions re-enabled on component unmount to prevent global state leakage
 
 ### Pending Todos
 
@@ -101,6 +106,9 @@ None yet.
 - useLayoutWorker hook wraps singleton Worker instance (created once at module level, not per-render)
 - Worker mock in tests calls real layoutGraph function (jsdom doesn't support Workers)
 - Production build bundles Worker as separate 1.4MB chunk (includes ELKjs)
+- React Profiler instrumentation active on LineageGraph for re-render measurement (Phase 05 Plan 02)
+- CSS transitions disabled for >200 node graphs via .no-transitions class (Phase 05 Plan 02)
+- Memoization audit confirmed: nodeTypes/edgeTypes stable, callbacks memoized, filteredNodesAndEdges memoized (Phase 05 Plan 02)
 
 ### Technical Decisions
 - Using DBC.ColumnsJQV (requires QVCI enabled) for complete view column metadata
@@ -116,12 +124,12 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-16 (Phase 05 Frontend Rendering Optimization)
-Stopped at: Completed 05-01-PLAN.md (Web Worker for ELKjs Layout)
+Stopped at: Completed 05-02-PLAN.md (React Profiler Instrumentation and CSS Transition Optimization)
 Resume file: None
 
 **Milestone v1.0 Complete:** 3 phases, 12 plans shipped (2026-02-15)
-**Milestone v2.0 In Progress:** Phase 05 started (1/3 plans complete)
+**Milestone v2.0 In Progress:** Phase 05 (2/3 plans complete)
 
 ---
 *State initialized: 2026-02-14*
-*Last updated: 2026-02-16 (Phase 05-01 complete - Web Worker for ELKjs Layout)*
+*Last updated: 2026-02-16 (Phase 05-02 complete - React Profiler Instrumentation and CSS Transition Optimization)*
