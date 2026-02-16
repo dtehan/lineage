@@ -96,6 +96,8 @@ Configuration values are resolved in the following order (highest precedence fir
 | `TERADATA_DATABASE` | Default database name | `demo_user` | No |
 | `TERADATA_PORT` | Teradata port number | `1025` | No |
 | `API_PORT` | HTTP server port | `8080` | No |
+| `REDIS_URL` | Redis connection URL (optional) | `redis://localhost:6379/0` | No |
+| `CACHE_TTL` | Cache expiration time in seconds | `3600` (1 hour) | No |
 
 ### Legacy Variables (Fallbacks)
 
@@ -208,6 +210,124 @@ This populates `OL_NAMESPACE`, `OL_DATASET`, and `OL_DATASET_FIELD` records for 
 
 ---
 
+## Redis Caching (Optional)
+
+The application includes an optional Redis caching layer that reduces lineage query response times from 2-4 seconds to under 100ms for repeated queries. The application works normally without Redis (gracefully degrades to in-memory caching).
+
+### 4.6 Redis Setup
+
+**Install Redis** (if not already available):
+
+```bash
+# macOS
+brew install redis
+
+# Ubuntu/Debian
+sudo apt-get install redis-server
+
+# RHEL/CentOS
+sudo yum install redis
+
+# Docker
+docker run -d -p 6379:6379 redis:7-alpine
+```
+
+**Start Redis server:**
+
+```bash
+# macOS (Homebrew)
+brew services start redis
+
+# Linux (systemd)
+sudo systemctl start redis
+
+# Docker (already running if using docker run above)
+
+# Manual start
+redis-server
+```
+
+**Verify Redis is running:**
+
+```bash
+redis-cli ping
+# Expected output: PONG
+```
+
+### 4.7 Cache Configuration
+
+Add Redis configuration to your `.env` file:
+
+```bash
+# Redis Cache Configuration (optional)
+REDIS_URL=redis://localhost:6379/0
+CACHE_TTL=3600  # Cache expiration in seconds (1 hour)
+```
+
+**If Redis is not configured or unavailable**, the application automatically falls back to in-memory SimpleCache. This provides graceful degradation but does not share cache across requests.
+
+### 4.8 Cache Behavior
+
+**With Redis:**
+- First query: 2-4 seconds (database CTE execution)
+- Repeated queries: <100ms (cache hit)
+- Cache entries expire after 1 hour (configurable via `CACHE_TTL`)
+- Cache shared across all application instances
+
+**Without Redis (fallback to SimpleCache):**
+- All queries hit the database (2-4 seconds each)
+- No cross-request caching
+- Application functions normally (no errors)
+
+### 4.9 Cache Management Endpoints
+
+The application provides REST API endpoints for cache management:
+
+**Invalidate cache entries** (used by ETL jobs after updating lineage data):
+
+```bash
+# Clear cache for a specific table/view
+curl -X POST http://localhost:8080/api/v2/cache/invalidate \
+  -H "Content-Type: application/json" \
+  -d '{"dataset_name": "demo_user.customer"}'
+
+# Clear cache for an entire database
+curl -X POST http://localhost:8080/api/v2/cache/invalidate \
+  -H "Content-Type: application/json" \
+  -d '{"database_name": "demo_user"}'
+
+# Clear all cache entries
+curl -X POST http://localhost:8080/api/v2/cache/invalidate \
+  -H "Content-Type: application/json" \
+  -d '{"all": true}'
+```
+
+**Monitor cache effectiveness:**
+
+```bash
+curl http://localhost:8080/api/v2/cache/stats
+```
+
+Response includes:
+- `hit_rate`: Percentage of cache hits (0-100)
+- `hits`: Total cache hits since Redis started
+- `misses`: Total cache misses
+- `total_keys`: Number of cached lineage graphs
+- `memory_used_mb`: Redis memory usage
+- `connected`: Redis connection status
+
+**Cache key structure:**
+
+The application uses hierarchical cache keys that enable pattern-based invalidation:
+
+- Column lineage: `lineage:graph:column:{database}.{table}:{column}:{direction}:{depth}`
+- Table lineage: `lineage:graph:table:{database}.{table}:{direction}:{depth}`
+- Database lineage: `lineage:graph:database:{database}:{depth}`
+
+This structure allows ETL jobs to invalidate all related cache entries when lineage data changes.
+
+---
+
 ## Running the Application
 
 ### 5.1 Start the Backend
@@ -262,8 +382,9 @@ A successful health check returns HTTP 200. The namespaces endpoint returns a JS
 Start components in the following order:
 
 1. **Teradata database** -- must already be running and accessible
-2. **Backend server** -- Python Flask
-3. **Frontend** -- development server or web server serving static files
+2. **Redis server** (optional) -- for caching; app works without it
+3. **Backend server** -- Python Flask
+4. **Frontend** -- development server or web server serving static files
 
 ---
 

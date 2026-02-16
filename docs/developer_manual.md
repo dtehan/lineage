@@ -89,7 +89,19 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-This installs six packages: `teradatasql` (Teradata driver), `flask` and `flask-cors` (Python backend), `requests` (HTTP client for testing), `python-dotenv` (environment variable loading), and `sqlglot` (SQL parsing for DBQL lineage extraction).
+**Core dependencies:**
+- `teradatasql` — Teradata driver
+- `flask`, `flask-cors` — Python backend
+- `requests` — HTTP client for testing
+- `python-dotenv` — Environment variable loading
+- `sqlglot` — SQL parsing for DBQL lineage extraction
+- `loguru` — Structured JSON logging
+
+**Caching dependencies (optional, Phase 6):**
+- `Flask-Caching` — Redis cache integration
+- `redis` — Python Redis client
+- `python-redis-lock` — Distributed locks for stampede prevention
+- `fakeredis` — Redis mock for testing
 
 The Python environment is required for both the backend server and the database setup scripts.
 
@@ -278,29 +290,79 @@ graph LR
 
 ### 5.1 Python Flask Backend
 
-The backend is a single-file Flask application (`lineage-api/python_server.py`) that implements all API endpoints. It queries Teradata directly using the `teradatasql` driver.
+The backend follows a layered architecture pattern with clear separation of concerns:
 
 ```
 lineage-api/
-├── python_server.py               # Flask server with all API endpoints
-├── README.md                      # Backend documentation
+├── python_server.py               # Application factory (77 lines, was 1454)
+├── config.py                      # Configuration management
+├── routes/                        # Flask Blueprints
+│   ├── health.py                  # Health check endpoints
+│   ├── openlineage.py            # OpenLineage v2 API routes
+│   └── cache.py                  # Cache management endpoints
+├── repositories/                  # Data access layer
+│   ├── base.py                   # Base repository with connection pooling
+│   ├── lineage_repository.py     # Lineage CTE queries with caching
+│   └── dataset_repository.py     # Dataset metadata queries
+├── cache/                        # Caching layer (optional, requires Redis)
+│   ├── __init__.py              # Flask-Caching with graceful degradation
+│   ├── keys.py                  # Hierarchical cache key generation
+│   ├── stampede.py              # Distributed lock for concurrent requests
+│   ├── invalidation.py          # Pattern-based cache invalidation
+│   └── metrics.py               # Cache hit rate monitoring
+├── middleware/                   # Request/response middleware
+│   ├── correlation_id.py        # UUID per request for tracing
+│   └── error_handlers.py        # Exception hierarchy and handlers
 └── tests/
-    └── run_api_tests.py           # 20 API integration tests
+    └── run_api_tests.py          # 20 API integration tests
 ```
 
 **Key characteristics:**
 
-- Single-file architecture -- all routes, queries, and response formatting in one file
-- Direct Teradata queries using `teradatasql` driver
-- CORS configured for localhost development (ports 3000 and 5173)
-- Environment variables loaded from `../.env` via `python-dotenv`
-- Implements both v1 and v2 API endpoints
+- **Application factory pattern:** `create_app()` enables testable app instances
+- **Repository pattern:** Data access layer abstracts Teradata queries
+- **Blueprint organization:** Routes grouped by feature (health, openlineage, cache)
+- **Structured logging:** Dual-sink JSON logs with correlation IDs (loguru)
+- **Exception hierarchy:** `LineageException` base class with specific errors
+- **Optional caching:** Redis cache-aside pattern with graceful degradation
 
-### 5.2 Key Patterns
+### 5.2 Layered Architecture
 
-- **Connection per request:** Each API call creates a fresh Teradata connection and closes it after the response is sent
-- **Recursive CTEs:** Lineage traversal uses recursive common table expressions in Teradata SQL
-- **OpenLineage alignment:** v2 API endpoints follow the OpenLineage spec for namespaces, datasets, and fields
+**Routes (Flask Blueprints)** → **Repositories (Data Access)** → **Teradata Database**
+
+- **Routes:** Handle HTTP requests, validate input, call repositories, format responses
+- **Repositories:** Execute database queries, apply caching, map results to domain objects
+- **Middleware:** Correlation IDs, error handling, CORS
+- **Cache layer:** Optional Redis caching (2-4s queries → <100ms cache hits)
+
+### 5.3 Performance Optimizations
+
+**Database Query Optimization (Phase 4):**
+- Composite indexes on `OL_COLUMN_LINEAGE` join pairs: `(target_dataset, target_field)`, `(source_dataset, source_field)`
+- Statistics collected on indexed columns for query optimizer
+- `LOCKING ROW FOR ACCESS` on all lineage queries for concurrent access
+- Path columns optimized to VARCHAR(500) based on baseline measurements
+
+**Caching Layer (Phase 6):**
+- Redis cache-aside pattern on all lineage CTE queries
+- Hierarchical cache keys enable pattern-based invalidation
+- Stampede prevention via distributed locks (concurrent misses → single DB query)
+- Graceful degradation to in-memory SimpleCache when Redis unavailable
+- 1-hour TTL (configurable via `CACHE_TTL` environment variable)
+- Cache management API: POST `/api/v2/cache/invalidate`, GET `/api/v2/cache/stats`
+
+**Expected performance:**
+- First query: 2-4 seconds (database CTE with optimized indexes)
+- Repeated queries: <100ms (Redis cache hit)
+- 600-node graphs: <15 seconds database, <100ms cached
+
+### 5.4 Key Patterns
+
+- **Repository pattern:** Encapsulates data access logic, enables testability
+- **Cache-aside with stampede prevention:** Check cache → acquire lock → double-check → query → cache
+- **Recursive CTEs:** Lineage traversal uses optimized recursive common table expressions with cycle detection
+- **Correlation IDs:** UUID per request enables distributed tracing across logs
+- **Graceful degradation:** Application works without Redis (falls back to in-memory cache)
 
 ---
 
@@ -389,7 +451,31 @@ Data flows through the frontend in a consistent pattern:
 - **TanStack Query for all server data.** Every API call goes through a TanStack Query hook, which provides automatic caching, background refetching, loading states, and error handling. Components never call the API directly.
 - **Zustand for client-only state.** UI state (sidebar open/closed, selected node, graph depth/direction) lives in Zustand stores. These stores have no server sync -- they are purely client-side.
 - **React Flow custom nodes.** The lineage graph renders tables as `TableNode` components containing `ColumnNode` children. Each column row is interactive (click to view lineage, hover to highlight).
-- **ELKjs for automatic layout.** Graph layout is computed by ELKjs using a hierarchical/layered algorithm. The layout engine runs in `utils/graph/layoutEngine.ts` and positions nodes before React Flow renders them.
+- **ELKjs in Web Worker (Phase 5).** Graph layout computation happens off the main thread using a Web Worker to prevent UI freezes. The worker is exposed via `useLayoutWorker` hook and communicates using Comlink for type-safe RPC. Large graphs (200+ nodes) automatically disable CSS transitions to prevent animation jank.
+- **React memoization.** `nodeTypes`, `edgeTypes`, and filtered node/edge arrays are memoized to prevent unnecessary re-renders. React Profiler instrumentation tracks re-render frequency in development mode.
+
+### 6.5 Performance Optimizations (Phase 5)
+
+**Web Worker for Layout:**
+- ELKjs layout computation runs in a separate thread (`layoutWorker.ts`)
+- Prevents 3-5 second UI freeze during graph layout for large graphs
+- Comlink provides type-safe communication via structured cloning
+- Singleton worker instance (created once at module level)
+
+**Memoization:**
+- `nodeTypes` and `edgeTypes` objects are stable references (prevent React Flow re-renders)
+- All callbacks passed to React Flow are memoized with `useCallback`
+- `filteredNodesAndEdges` memoized based on filter criteria
+
+**Large Graph Handling:**
+- CSS transitions automatically disabled for >200 node graphs
+- Transitions re-enabled on component unmount to prevent state leakage
+- Progressive loading states show database clusters → full graph
+
+**Expected performance:**
+- 50-node graphs: ~16ms layout time
+- 200-node graphs: ~65ms layout time
+- 600-node graphs: ~142ms layout time (near-linear scaling)
 
 ---
 
