@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 10 - View Lineage sourceType Propagation
+**Current focus:** Phase 10 - View Lineage - ViewLineageExtractor and --views flag
 
 ## Current Position
 
 Phase: 10 of 10 (View Lineage - show data flow through views to source tables)
-Plan: 1 of 1 (10-01 complete)
-Status: Complete
-Last activity: 2026-02-19 — Completed 10-01-PLAN.md (sourceType propagation in column/table lineage endpoints)
+Plan: 2 of 2 (10-02 Task 1 complete, stopped at Task 2 checkpoint: human-verify)
+Status: In Progress - awaiting human verification
+Last activity: 2026-02-19 — Task 1 complete: ViewLineageExtractor module + --views flag + 25 tests
 
-Progress: [██████████] 100% (Phase 10: Plan 1/1 complete)
+Progress: [█████████░] 90% (Phase 10: Plan 2 Task 1/2 complete, at checkpoint)
 
 ## Performance Metrics
 
@@ -33,9 +33,9 @@ Progress: [██████████] 100% (Phase 10: Plan 1/1 complete)
 | v3.0 Wildcard Expansion | 3 | 6 | Complete |
 
 **Recent Trend:**
-Phase 10 complete - sourceType now propagates through all three lineage endpoints (column, table, database)
+Phase 10 Plan 02 Task 1 complete - ViewLineageExtractor derives column-level lineage from view SQL definitions via SQLGlot
 
-*Updated after 10-01 completion*
+*Updated after 10-02 Task 1 completion*
 | Phase 07 P01 | 78s | 1 task | 1 file |
 | Phase 07 P02 | 181s | 2 tasks | 2 files |
 | Phase 07 P03 | 293s | 2 tasks | 3 files |
@@ -44,6 +44,7 @@ Phase 10 complete - sourceType now propagates through all three lineage endpoint
 | Phase 09 P01 | 239s | 2 tasks | 2 files |
 | Phase 09 P02 | 125s | 2 tasks | 2 files |
 | Phase 10 P01 | 140s | 2 tasks | 3 files |
+| Phase 10 P02 | ~240s | 1 task (checkpoint) | 3 files |
 
 ## Accumulated Context
 
@@ -56,6 +57,14 @@ Phase 10 complete - sourceType now propagates through all three lineage endpoint
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 10-02]: REPLACE VIEW -> CREATE VIEW normalization via regex before SQLGlot parse (Teradata stores definitions as REPLACE VIEW in RequestText)
+- [Phase 10-02]: Unqualified column with single source table: assign directly (no extra DB query)
+- [Phase 10-02]: Unqualified column with multiple source tables: probe OL_DATASET_FIELD, skip if still ambiguous
+- [Phase 10-02]: SELECT * with single source: map by name match first, then ordinal position fallback
+- [Phase 10-02]: SELECT * with multiple sources: skip with warning (ambiguous attribution, same policy as WildcardResolver)
+- [Phase 10-02]: --views flag sits outside mutually exclusive group so it can combine: --fixtures --views or --dbql --views
+- [Phase 10-02]: Duplicate key errors (2801) silently ignored on INSERT (same as fixtures pattern)
+- [Phase 10-02]: confidence_score: 0.90 DIRECT, 0.80 CALCULATION/expression, 0.70 SELECT * wildcard
 - [Phase 10-01]: source_type_cache pre-seeded with root dataset from get_dataset_with_namespace() to avoid N+1 queries for the most common node
 - [Phase 10-01]: _build_node() source_type param defaults to "TABLE" for graceful degradation when OL_DATASET has no entry
 - [Phase 10-01]: get_dataset_with_namespace() backward-compatible extension - callers ignoring source_type are unaffected
@@ -88,12 +97,12 @@ None.
 
 ### Blockers/Concerns
 
-None. v3.0 Wildcard Expansion milestone complete. All 65 tests pass across test_wildcard_resolver.py (33) and test_sql_parser_wildcards.py (32).
+Awaiting human verification (Task 2 checkpoint): run `--views` against Teradata DB and verify upstream lineage renders through views in the graph.
 
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 10-01-PLAN.md (sourceType propagation in column/table lineage endpoints)
+Stopped at: 10-02 Task 1 complete - at checkpoint Task 2 human-verify
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -108,3 +117,4 @@ Resume file: None
 | 09-01 | 239s | 2 | 2 | 2026-02-19 |
 | 09-02 | 125s | 2 | 2 | 2026-02-19 |
 | 10-01 | 140s | 2 | 3 | 2026-02-19 |
+| 10-02 | ~240s | 1 (checkpoint) | 3 | 2026-02-19 |
