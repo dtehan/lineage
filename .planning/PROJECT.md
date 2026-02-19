@@ -19,6 +19,18 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - **Maintainable Architecture:** Service/repository layers, 3 shared CTE functions, 77-line application factory (down from 1454 lines)
 - **Production Ready:** 374 tests passing (73 DB + 20 API + 260+ frontend + 21 E2E), graceful degradation patterns
 
+## Current Milestone: v3.0 Wildcard Expansion
+
+**Goal:** Enable complete column-level lineage capture for SQL queries using wildcard syntax.
+
+**Target features:**
+- Expand `*` wildcards to actual column names during DBQL extraction
+- Support INSERT INTO ... SELECT * patterns
+- Support CREATE TABLE AS with wildcards
+- Support qualified wildcards (t1.*) in joins
+- Support Teradata's SELECT * EXCEPT syntax
+- Generate DIRECT transformation lineage for matched column pairs
+
 ## Next Milestone Goals
 
 **Future considerations:**
@@ -63,7 +75,8 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 <!-- Current scope. Building toward these. -->
 
-(No active requirements - define in next milestone)
+**v3.0 Wildcard Expansion:**
+- To be defined in REQUIREMENTS.md
 
 ### Out of Scope
 
@@ -133,4 +146,4 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | Defer Phase 7 CI automation (v2.0) | Focus on delivering optimizations, defer regression detection automation | ✓ Good — Structural work complete, monitoring can be manual initially |
 
 ---
-*Last updated: 2026-02-16 after v2.0 milestone completion*
+*Last updated: 2026-02-18 after v3.0 milestone started*
