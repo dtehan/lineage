@@ -111,3 +111,12 @@ Phases execute in numeric order: 7 → 8 → 9
 | 7. Core Wildcard Expansion | v3.0 | 3/3 | Complete | 2026-02-19 |
 | 8. Qualified Wildcards | v3.0 | 2/2 | Complete | 2026-02-19 |
 | 9. View Expansion | v3.0 | 2/2 | Complete | 2026-02-19 |
+
+### Phase 10: View lineage - show data flow through views to source tables
+
+**Goal:** Surface views as visible intermediate nodes in lineage graphs by propagating sourceType through column and table lineage endpoints
+**Depends on:** Phase 9
+**Plans:** 1 plan
+
+Plans:
+- [ ] 10-01-PLAN.md -- Add sourceType propagation to column/table lineage endpoints + unit tests
