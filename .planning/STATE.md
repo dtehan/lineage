@@ -19,7 +19,7 @@ Progress: [██████████] 100% (Phase 8: Plan 2/2 complete)
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 24 (across v1.0, v2.0, and v3.0)
+- Total plans completed: 25 (across v1.0, v2.0, and v3.0)
 - v1.0: 12 plans over 2 days
 - v2.0: 8 plans over 18 days
 - v3.0: 5 plans (07-01: 78s, 07-02: 181s, 07-03: 293s, 08-01: 181s, 08-02: 195s)
@@ -30,7 +30,7 @@ Progress: [██████████] 100% (Phase 8: Plan 2/2 complete)
 |-----------|--------|-------|--------|
 | v1.0 Code Quality | 3 | 12 | Complete |
 | v2.0 Performance | 3 | 8 | Complete |
-| v3.0 Wildcard Expansion | 3 | 4 (of 9 planned) | In Progress |
+| v3.0 Wildcard Expansion | 3 | 5 (of 7+ planned) | In Progress |
 
 **Recent Trend:**
 v3.0 Phase 8 complete - 08-01 (181s) and 08-02 (195s) completed

@@ -76,8 +76,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md -- Qualified wildcard expansion + schema evolution detection
-- [ ] 08-02-PLAN.md -- Comprehensive tests for qualified wildcards + schema evolution (TDD)
+- [x] 08-01-PLAN.md -- Qualified wildcard expansion + schema evolution detection
+- [x] 08-02-PLAN.md -- Comprehensive tests for qualified wildcards + schema evolution (TDD)
 
 #### Phase 9: View Expansion
 **Goal**: Recursively expand wildcards in view definitions for transitive lineage
@@ -107,6 +107,6 @@ Phases execute in numeric order: 7 → 8 → 9
 | 4. Database Optimization | v2.0 | 3/3 | Complete | 2026-02-16 |
 | 5. Frontend Performance | v2.0 | 3/3 | Complete | 2026-02-16 |
 | 6. Redis Caching | v2.0 | 2/2 | Complete | 2026-02-16 |
-| 7. Core Wildcard Expansion | v3.0 | 0/3 | Planning complete | - |
-| 8. Qualified Wildcards | v3.0 | 0/2 | Planning complete | - |
+| 7. Core Wildcard Expansion | v3.0 | 3/3 | Complete | 2026-02-19 |
+| 8. Qualified Wildcards | v3.0 | 2/2 | Complete | 2026-02-19 |
 | 9. View Expansion | v3.0 | 0/TBD | Not started | - |
