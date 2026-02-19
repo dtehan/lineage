@@ -4,7 +4,7 @@
 
 - ✅ **v1.0 Code Quality & Missing Features** - Phases 1-3 (shipped 2026-02-15)
 - ✅ **v2.0 Performance Optimization** - Phases 4-6 (shipped 2026-02-16)
-- 🚧 **v3.0 Wildcard Expansion** - Phases 7-9 (in progress)
+- ✅ **v3.0 Wildcard Expansion** - Phases 7-9 (shipped 2026-02-19)
 
 ## Phases
 
@@ -42,7 +42,7 @@
 
 </details>
 
-### 🚧 v3.0 Wildcard Expansion (In Progress)
+### ✅ v3.0 Wildcard Expansion (Shipped 2026-02-19)
 
 **Milestone Goal:** Enable complete column-level lineage capture for SQL queries using wildcard syntax
 
@@ -92,8 +92,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- View detection, definition retrieval, recursive expansion in WildcardResolver
-- [ ] 09-02-PLAN.md -- Comprehensive tests for view expansion (TDD)
+- [x] 09-01-PLAN.md -- View detection, definition retrieval, recursive expansion in WildcardResolver
+- [x] 09-02-PLAN.md -- Comprehensive tests for view expansion (TDD)
 
 ## Progress
 
@@ -110,4 +110,4 @@ Phases execute in numeric order: 7 → 8 → 9
 | 6. Redis Caching | v2.0 | 2/2 | Complete | 2026-02-16 |
 | 7. Core Wildcard Expansion | v3.0 | 3/3 | Complete | 2026-02-19 |
 | 8. Qualified Wildcards | v3.0 | 2/2 | Complete | 2026-02-19 |
-| 9. View Expansion | v3.0 | 0/2 | Not started | - |
+| 9. View Expansion | v3.0 | 2/2 | Complete | 2026-02-19 |
