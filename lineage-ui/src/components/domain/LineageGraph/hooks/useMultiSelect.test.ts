@@ -2,6 +2,18 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useMultiSelect } from './useMultiSelect';
 
+// Mock useStoreApi from @xyflow/react (hook now calls useStoreApi internally)
+const mockSetState = vi.fn();
+const mockUnselectNodesAndEdges = vi.fn();
+vi.mock('@xyflow/react', () => ({
+  useStoreApi: vi.fn(() => ({
+    setState: mockSetState,
+    getState: vi.fn(() => ({
+      unselectNodesAndEdges: mockUnselectNodesAndEdges,
+    })),
+  })),
+}));
+
 // Mock the store module
 const mockClearHighlight = vi.fn();
 const mockClosePanel = vi.fn();
@@ -30,6 +42,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockIsMultiSelectMode = false;
   mockSelectedAssetId = null;
+  mockSetState.mockClear();
+  mockUnselectNodesAndEdges.mockClear();
 
   mockUseLineageStore.getState = vi.fn(() => ({
     selectedAssetId: mockSelectedAssetId,
