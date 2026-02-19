@@ -345,4 +345,53 @@ describe('Toolbar', () => {
       expect(onAssetTypeFilterChange).not.toHaveBeenCalled();
     });
   });
+
+  describe('multi-select toggle', () => {
+    it('renders multi-select toggle button when onToggleMultiSelectMode provided', () => {
+      const onToggleMultiSelectMode = vi.fn();
+      render(<Toolbar {...defaultProps} onToggleMultiSelectMode={onToggleMultiSelectMode} />);
+      expect(screen.getByTestId('multi-select-toggle')).toBeInTheDocument();
+    });
+
+    it('does not render multi-select toggle when onToggleMultiSelectMode not provided', () => {
+      render(<Toolbar {...defaultProps} />);
+      expect(screen.queryByTestId('multi-select-toggle')).not.toBeInTheDocument();
+    });
+
+    it('calls onToggleMultiSelectMode when clicked', () => {
+      const onToggleMultiSelectMode = vi.fn();
+      render(<Toolbar {...defaultProps} onToggleMultiSelectMode={onToggleMultiSelectMode} />);
+
+      fireEvent.click(screen.getByTestId('multi-select-toggle'));
+      expect(onToggleMultiSelectMode).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows active styling when isMultiSelectMode is true', () => {
+      const onToggleMultiSelectMode = vi.fn();
+      render(
+        <Toolbar
+          {...defaultProps}
+          isMultiSelectMode={true}
+          onToggleMultiSelectMode={onToggleMultiSelectMode}
+        />
+      );
+      const button = screen.getByTestId('multi-select-toggle');
+      expect(button).toHaveAttribute('aria-pressed', 'true');
+      expect(button).toHaveClass('bg-blue-100');
+    });
+
+    it('shows inactive styling when isMultiSelectMode is false', () => {
+      const onToggleMultiSelectMode = vi.fn();
+      render(
+        <Toolbar
+          {...defaultProps}
+          isMultiSelectMode={false}
+          onToggleMultiSelectMode={onToggleMultiSelectMode}
+        />
+      );
+      const button = screen.getByTestId('multi-select-toggle');
+      expect(button).toHaveAttribute('aria-pressed', 'false');
+      expect(button).not.toHaveClass('bg-blue-100');
+    });
+  });
 });
