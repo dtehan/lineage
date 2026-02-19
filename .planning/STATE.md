@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 8 - Qualified Wildcards + Schema Evolution
+**Current focus:** Phase 9 - View Expansion
 
 ## Current Position
 
-Phase: 8 of 9 (Qualified Wildcards + Schema Evolution)
-Plan: 2 of 2 (08-02 complete)
-Status: Complete
-Last activity: 2026-02-19 — Completed 08-02-PLAN.md (Qualified wildcard & schema evolution test suite)
+Phase: 9 of 9 (View Expansion)
+Plan: 1 of 2 (09-01 complete)
+Status: In Progress
+Last activity: 2026-02-19 — Completed 09-01-PLAN.md (View expansion core implementation)
 
-Progress: [██████████] 100% (Phase 8: Plan 2/2 complete)
+Progress: [█████████░] 90% (Phase 9: Plan 1/2 complete)
 
 ## Performance Metrics
 
@@ -33,14 +33,15 @@ Progress: [██████████] 100% (Phase 8: Plan 2/2 complete)
 | v3.0 Wildcard Expansion | 3 | 5 (of 7+ planned) | In Progress |
 
 **Recent Trend:**
-v3.0 Phase 8 complete - 08-01 (181s) and 08-02 (195s) completed
+v3.0 Phase 9 in progress - 09-01 (239s) completed
 
-*Updated after 08-02 completion*
+*Updated after 09-01 completion*
 | Phase 07 P01 | 78s | 1 task | 1 file |
 | Phase 07 P02 | 181s | 2 tasks | 2 files |
 | Phase 07 P03 | 293s | 2 tasks | 3 files |
 | Phase 08 P01 | 181s | 2 tasks | 2 files |
 | Phase 08 P02 | 195s | 2 tasks | 2 files |
+| Phase 09 P01 | 239s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -49,6 +50,10 @@ v3.0 Phase 8 complete - 08-01 (181s) and 08-02 (195s) completed
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 09-01]: MAX_VIEW_EXPANSION_DEPTH = 3 separate from CTE MAX_EXPANSION_DEPTH = 5 (different nesting expectations)
+- [Phase 09-01]: View expansion happens after table cache warming so proxy can find base table columns
+- [Phase 09-01]: Query-discriminating fetchall side_effect pattern for tests calling warm_cache() (prevents column rows from being misidentified as view refs)
+- [Phase 09-01]: _column_cache stores view-expanded columns alongside table columns - resolve_star() unchanged
 - [Phase 08-02]: Use self.assertLogs() for warning verification (more reliable than mocking logger)
 - [Phase 08-02]: Use tempfile.TemporaryDirectory() for baseline file tests (automatic cleanup)
 - [Phase 08-02]: Manually populate _column_cache for schema evolution tests (clearer than mocking fetchall)
@@ -71,12 +76,12 @@ None yet.
 
 ### Blockers/Concerns
 
-None. Phase 8 complete - qualified wildcard expansion and schema evolution detection implemented with comprehensive test coverage (47 tests passing: 26 wildcard parser + 21 WildcardResolver).
+None. Phase 9 Plan 01 complete - view detection, definition retrieval, recursive expansion, and cycle detection implemented. 21 WildcardResolver tests pass. Phase 9 Plan 02 (view expansion tests) is next.
 
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 08-02-PLAN.md (Qualified wildcard & schema evolution test suite)
+Stopped at: Completed 09-01-PLAN.md (View expansion core implementation)
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -88,3 +93,4 @@ Resume file: None
 | 07-03 | 293s | 2 | 3 | 2026-02-19 |
 | 08-01 | 181s | 2 | 2 | 2026-02-19 |
 | 08-02 | 195s | 2 | 2 | 2026-02-19 |
+| 09-01 | 239s | 2 | 2 | 2026-02-19 |
