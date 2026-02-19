@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-18)
 
 ## Current Position
 
-Phase: 10 of 10 (View Lineage - show data flow through views to source tables)
-Plan: 2 of 2 (complete)
-Status: Complete - Phase 10 fully done
-Last activity: 2026-02-19 — Plan 10-02 complete: ViewLineageExtractor + --views flag + human verification approved
+Phase: 11 of 11 (Sort columns alphabetically in lineage graph nodes)
+Plan: 1 of 1 (checkpoint pending human verification)
+Status: In Progress - Task 1 complete, awaiting human verify checkpoint
+Last activity: 2026-02-19 — Plan 11-01 Task 1 complete: alphabetical column sort in layoutEngine + DetailPanel + 3 new unit tests
 
-Progress: [██████████] 100% (Phase 10 complete: all 2 plans done)
+Progress: [██████████] (Phase 11 in progress: 1/1 plan at checkpoint)
 
 ## Performance Metrics
 
@@ -45,6 +45,7 @@ Phase 10 complete - ViewLineageExtractor derives column-level lineage from view 
 | Phase 09 P02 | 125s | 2 tasks | 2 files |
 | Phase 10 P01 | 140s | 2 tasks | 3 files |
 | Phase 10 P02 | ~300s | 2 tasks | 3 files |
+| Phase 11 P01 | 131s | 1 task (checkpoint) | 5 files |
 
 ## Accumulated Context
 
@@ -58,6 +59,9 @@ Phase 10 complete - ViewLineageExtractor derives column-level lineage from view 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 11-01]: Sort applied after .map() in transformToTableNodes so original columnNodes array is not mutated
+- [Phase 11-01]: Sort happens before createElkPorts so ELK port indices automatically match sorted display order
+- [Phase 11-01]: DetailPanel sort uses columnName field (ColumnDetail type) vs layoutEngine sort using name field (ColumnDefinition type)
 - [Phase 10-02]: REPLACE VIEW -> CREATE VIEW normalization via regex before SQLGlot parse (Teradata stores definitions as REPLACE VIEW in RequestText)
 - [Phase 10-02]: Unqualified column with single source table: assign directly (no extra DB query)
 - [Phase 10-02]: Unqualified column with multiple source tables: probe OL_DATASET_FIELD, skip if still ambiguous
@@ -103,7 +107,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Phase 10 complete (10-02 all tasks done)
+Stopped at: Phase 11 Plan 01 Task 2 checkpoint (human-verify) — awaiting human visual verification of alphabetical column sort
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -119,3 +123,4 @@ Resume file: None
 | 09-02 | 125s | 2 | 2 | 2026-02-19 |
 | 10-01 | 140s | 2 | 3 | 2026-02-19 |
 | 10-02 | ~300s | 2 | 3 | 2026-02-19 |
+| 11-01 | 131s | 1 (checkpoint) | 5 | 2026-02-19 |
