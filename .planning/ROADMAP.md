@@ -126,7 +126,7 @@ Plans:
 
 **Goal:** Display columns in alphabetical order within table and view nodes in the lineage graph, making it easier to locate and follow column-level lineage connections
 **Depends on:** Phase 10
-**Plans:** 0 plans
+**Plans:** 1 plan
 
 Plans:
-- [ ] TBD (run /gsd:plan-phase 11 to break down)
+- [ ] 11-01-PLAN.md -- Alphabetical column sorting in graph nodes, DetailPanel, and unit tests
