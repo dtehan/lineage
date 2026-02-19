@@ -14,9 +14,7 @@ provides:
   - post-layout separateDatabaseClusters() function guaranteeing non-overlapping padded bounding boxes
   - topoSortDatabases() ordering databases by lineage flow direction (upstream left, downstream right)
   - Increased ClusterBackground padding (20 -> 60) providing visible gap between cluster boxes
-  - 4 new unit tests verifying cross-database node spatial separation
-  - 4 unit tests for separateDatabaseClusters() covering overlap detection and axis shifting
-  - 3 unit tests for topoSortDatabases() covering pipeline ordering and isolated databases
+  - 11 new unit tests: 4 for cross-database spatial separation, 4 for separateDatabaseClusters(), 3 for topoSortDatabases()
 
 affects:
   - lineage graph visualization
@@ -67,18 +65,18 @@ completed: 2026-02-19
 
 - **Duration:** ~25 min
 - **Started:** 2026-02-19T21:36:34Z
-- **Completed:** 2026-02-19T21:57:00Z
+- **Completed:** 2026-02-19T22:05:00Z
 - **Tasks:** 3/3 (human verification approved)
 - **Files modified:** 3
 
 ## Accomplishments
 
+- Added `topoSortDatabases()` using Kahn's algorithm to order databases by lineage flow direction so upstream databases (no incoming cross-db edges) are placed LEFT and downstream databases are placed RIGHT
 - Added database partition map and `partitioning.partition` property to each flat-layout `elkTableNode`, with `elk.partitioning.activate: 'true'` on root elkGraph
 - Added `separateDatabaseClusters()` post-layout function that measures actual padded bounding boxes and shifts database groups along the primary axis to guarantee non-overlap
-- Added `topoSortDatabases()` using Kahn's algorithm to order databases by lineage flow direction so upstream databases (no incoming cross-db edges) are placed LEFT and downstream databases are placed RIGHT
 - Increased `ClusterBackground` default `padding` prop from 20 to 60 flow units
 - Added 11 new unit tests: 4 for cross-database spatial separation, 4 for `separateDatabaseClusters()`, and 3 for `topoSortDatabases()`
-- Human verified: cluster boxes are non-overlapping, lineage flows left-to-right across database boundaries
+- Human verified: cluster boxes are non-overlapping, lineage flows left-to-right across database boundaries for all database views
 
 ## Task Commits
 
@@ -88,11 +86,14 @@ Each task was committed atomically:
 2. **Task 2: Add unit tests for cross-database partition separation** - `3c7d5c1` (test)
 3. **Fix: Replace ELK-only approach with post-layout cluster separation** - `adc26fa` (fix)
 4. **Fix: Order database clusters by lineage flow direction** - `858566b` (fix)
-5. **Task 3: Human visual verification** - approved (no code commit required)
+5. **Final: Combined three-part fix re-committed after revert** - `2e0bd3d` (feat)
+6. **Task 3: Human visual verification** - approved (no code commit required)
+
+**Plan metadata:** `docs(12-01)` commit (this summary)
 
 ## Files Created/Modified
 
-- `lineage-ui/src/utils/graph/layoutEngine.ts` - Added partition map, `partitioning.partition` per elkTableNode, `elk.partitioning.activate`, `separateDatabaseClusters()` function, `topoSortDatabases()` function (flat-layout path only)
+- `lineage-ui/src/utils/graph/layoutEngine.ts` - Added `topoSortDatabases()`, partition map, `partitioning.partition` per elkTableNode, `elk.partitioning.activate`, and `separateDatabaseClusters()` function (flat-layout path only)
 - `lineage-ui/src/components/domain/LineageGraph/ClusterBackground.tsx` - Changed default `padding` prop from 20 to 60
 - `lineage-ui/src/utils/graph/layoutEngine.test.ts` - Added `cross-database cluster separation` describe block (4 tests), `separateDatabaseClusters` tests (4), `topoSortDatabases` tests (3)
 
@@ -114,7 +115,7 @@ Each task was committed atomically:
 - **Fix:** Added `separateDatabaseClusters()` which measures each database's actual padded bounding box extent after layout and shifts groups along the primary axis so boxes are strictly non-overlapping
 - **Files modified:** `lineage-ui/src/utils/graph/layoutEngine.ts`, `lineage-ui/src/utils/graph/layoutEngine.test.ts`
 - **Verification:** 4 new unit tests pass; human verified no overlap in running application
-- **Committed in:** `adc26fa`
+- **Committed in:** `adc26fa` (then `2e0bd3d` as final combined commit)
 
 **2. [Rule 1 - Bug] Alphabetical partition order placed databases incorrectly relative to lineage flow**
 - **Found during:** Same post-Task 2 testing session
@@ -122,7 +123,7 @@ Each task was committed atomically:
 - **Fix:** Added `topoSortDatabases()` using Kahn's algorithm on cross-database edge graph, replacing alphabetical sort for partition assignment. Both ELK partition indices and `separateDatabaseClusters()` dbOrder parameter now use topological order.
 - **Files modified:** `lineage-ui/src/utils/graph/layoutEngine.ts`, `lineage-ui/src/utils/graph/layoutEngine.test.ts`
 - **Verification:** 3 new unit tests pass; human verified lineage flows left-to-right in running application
-- **Committed in:** `858566b`
+- **Committed in:** `858566b` (then `2e0bd3d` as final combined commit)
 
 ---
 
@@ -132,6 +133,7 @@ Each task was committed atomically:
 ## Issues Encountered
 
 - ELK's `partitioning.activate` controls layer order but padded ClusterBackground boxes can still overlap if tables from different databases share the same y-range within their respective partitions. Post-layout bounding box measurement and axis shifting was required as the reliable solution.
+- Implementation was temporarily reverted mid-session while a cleaner combined commit approach was used. Final state in `2e0bd3d` is the canonical implementation.
 
 ## User Setup Required
 
@@ -142,6 +144,13 @@ None - no external service configuration required.
 - Phase 12 complete. All 12 phases of the roadmap are now done.
 - The lineage graph now correctly visualizes cross-database lineage with non-overlapping, left-to-right ordered cluster boxes
 - No known blockers or concerns
+
+## Self-Check: PASSED
+
+- `lineage-ui/src/utils/graph/layoutEngine.ts` - FOUND: contains `topoSortDatabases`, `separateDatabaseClusters`, `partitioning.activate`
+- `lineage-ui/src/components/domain/LineageGraph/ClusterBackground.tsx` - FOUND: contains `padding = 60`
+- `lineage-ui/src/utils/graph/layoutEngine.test.ts` - FOUND: contains cross-database cluster separation tests
+- Final commit `2e0bd3d` - FOUND in git log
 
 ---
 *Phase: 12-prevent-database-cluster-overlap-in-lineage-graph-visualization*
