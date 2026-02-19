@@ -92,7 +92,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   // Fetch database lineage using OpenLineage API
   const { data, isLoading, error } = useOpenLineageDatabaseLineage(databaseName, direction, maxDepth || 3);
 
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, baseOnNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Use the lineage highlight hook
@@ -208,7 +208,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     }
   }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
 
-  const { onSelectionChange, onSelectionDragStart } = useMultiSelect(hasUserInteractedRef);
+  const { onSelectionChange, onSelectionDragStart, onNodesChange } = useMultiSelect(hasUserInteractedRef, baseOnNodesChange, setNodes);
 
   // Handle node click for selection and path highlighting
   const onNodeClick = useCallback(
