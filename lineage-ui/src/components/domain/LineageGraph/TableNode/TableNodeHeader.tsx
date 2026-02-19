@@ -66,9 +66,6 @@ export const TableNodeHeader = memo(function TableNodeHeader({
   return (
     <div
       className={`flex items-center justify-between h-10 px-3 rounded-t-lg cursor-pointer transition-colors ${headerBgClass}`}
-      onClick={(e) => {
-        e.stopPropagation();
-      }}
       onDoubleClick={(e) => {
         e.stopPropagation();
         onNodeDoubleClick?.();
