@@ -112,7 +112,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   // Always use table lineage to show all columns
   const { data, isLoading, isFetching, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
 
-  const [nodes, setNodes, baseOnNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Use the lineage highlight hook
@@ -154,7 +154,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const { onRender } = useProfiler('LineageGraph');
 
   // Use multi-select hook for group selection and drag
-  const { isMultiSelectMode, onSelectionChange, onSelectionDragStart, onNodesChange } = useMultiSelect(hasUserInteractedRef, baseOnNodesChange, setNodes);
+  const { isMultiSelectMode, onSelectionChange, onSelectionDragStart } = useMultiSelect(hasUserInteractedRef);
 
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {

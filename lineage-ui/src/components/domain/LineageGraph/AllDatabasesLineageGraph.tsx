@@ -104,7 +104,7 @@ function AllDatabasesLineageGraphInner() {
     isFetchingNextPage,
   } = useAllDatabasesLineage({ direction, maxDepth: maxDepth || 1, pageSize: loadMoreCount, databases: databaseFilter });
 
-  const [nodes, setNodes, baseOnNodesChange] = useNodesState<Node>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // Merge all pages of data
@@ -233,7 +233,7 @@ function AllDatabasesLineageGraphInner() {
     }
   }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
 
-  const { onSelectionChange, onSelectionDragStart, onNodesChange } = useMultiSelect(hasUserInteractedRef, baseOnNodesChange, setNodes);
+  const { onSelectionChange, onSelectionDragStart } = useMultiSelect(hasUserInteractedRef);
 
   // Handle node click
   const onNodeClick = useCallback(
