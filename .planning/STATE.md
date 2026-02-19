@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-18)
 ## Current Position
 
 Phase: 13 of 13 (Multi-select and group move in lineage graph)
-Plan: 1 of 1 (complete)
+Plan: 2 of 2 (complete)
 Status: Complete - All 13 phases done
-Last activity: 2026-02-19 — Plan 13-01 complete, SUMMARY.md written, all 13 phases done
+Last activity: 2026-02-19 — Plan 13-02 complete, SUMMARY.md written, all 13 phases done
 
 Progress: [██████████] 100% complete (13/13 phases done)
 
@@ -48,6 +48,7 @@ Phase 13 complete - React Flow multi-select wired to Zustand store; Cmd+click or
 | Phase 11 P01 | ~2min | 2 tasks | 5 files | 2026-02-19 |
 | Phase 12 P01 | ~25min | 3 tasks + 2 fixes | 3 files | 2026-02-19 | Complete |
 | Phase 13 P01 | 210s | 2 tasks | 7 files | 2026-02-19 | Complete |
+| Phase 13 P02 | ~45min | 2 tasks + 5 fixes | 8 files | 2026-02-19 | Complete |
 
 ## Accumulated Context
 
@@ -68,6 +69,9 @@ Recent decisions affecting current work:
 - [Phase 13-01]: ring-blue-400 ring-offset-2 used for multi-select ring (lighter than border-blue-500 for column selection) to make them visually distinguishable
 - [Phase 13-01]: onNodeClick returns early on metaKey/ctrlKey/isMultiSelectMode to let React Flow manage selection natively
 - [Phase 13-01]: selectionOnDrag=false prevents accidental box-selection when panning
+- [Phase 13-02]: Double-click on table header opens detail panel; single click reserved for RF node selection ring (stopPropagation removed from header onClick)
+- [Phase 13-02]: useStoreApi().setState({ multiSelectionActive }) synced to isMultiSelectMode enables additive click-to-select and group drag in toolbar mode
+- [Phase 13-02]: All three graph components (LineageGraph, DatabaseLineageGraph, AllDatabasesLineageGraph) must receive multi-select props for consistent behavior
 - [Phase 12-01]: ELK partitioning applied only to hasCrossDatabaseEdges flat-layout branch; compound-node path unchanged
 - [Phase 12-01]: Post-layout separateDatabaseClusters() required because ELK partitioning alone cannot guarantee padded bounding boxes won't overlap at same y-range
 - [Phase 12-01]: topoSortDatabases() (Kahn's algorithm) replaces alphabetical sort - upstream databases assigned lower partition indices and placed LEFT
@@ -121,7 +125,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Phase 13 Plan 01 — SUMMARY.md written, plan 13-01 fully complete
+Stopped at: Phase 13 Plan 02 — SUMMARY.md written, plan 13-02 fully complete, all phases done
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -140,3 +144,4 @@ Resume file: None
 | 11-01 | 131s | 1 (checkpoint) | 5 | 2026-02-19 |
 | 12-01 | ~300s | 2 (checkpoint) | 3 | 2026-02-19 |
 | 13-01 | 210s | 2 | 7 | 2026-02-19 |
+| 13-02 | ~45min | 2 (checkpoint) | 8 | 2026-02-19 |
