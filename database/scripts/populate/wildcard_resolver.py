@@ -29,8 +29,11 @@ Teradata Conventions:
     - DBC.ColumnsJQV returns columns in ColumnId order (ordinal position)
 """
 
+import json
 import logging
 import time
+from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger('wildcard_resolver')
@@ -53,18 +56,54 @@ class WildcardResolver:
     # Batch size limit to prevent query explosion
     BATCH_SIZE = 100
 
-    def __init__(self, cursor, default_database: str):
+    def __init__(self, cursor, default_database: str, baseline_path: str = None):
         """Initialize the wildcard resolver.
 
         Args:
             cursor: Active Teradata database cursor
             default_database: Default database for unqualified table references
+            baseline_path: Path to schema baseline JSON file (None = no schema evolution detection)
         """
         self.cursor = cursor
         self.default_database = default_database.upper()  # Normalize to uppercase
         self._column_cache: Dict[Tuple[str, str], List[str]] = {}
         self._cache_hits: int = 0
         self._cache_misses: int = 0
+
+        # Phase 8: Schema evolution detection
+        self._baseline_path = Path(baseline_path) if baseline_path else None
+        self._baseline: Dict[Tuple[str, str], int] = self._load_baseline() if self._baseline_path else {}
+        self._schema_changes: List[Dict] = []  # Track detected changes for reporting
+
+    def _load_baseline(self) -> Dict[Tuple[str, str], int]:
+        """Load column count baseline from previous extraction run.
+
+        Returns:
+            Dict mapping (database, table) -> column_count from previous run.
+            Empty dict if no baseline exists (first run).
+        """
+        if not self._baseline_path or not self._baseline_path.exists():
+            logger.info("No schema baseline found, creating new baseline on save")
+            return {}
+
+        try:
+            with open(self._baseline_path) as f:
+                data = json.load(f)
+
+            baseline = {}
+            for key_str, count in data.items():
+                if '.' in key_str:
+                    db, tbl = key_str.split('.', 1)
+                    baseline[(db, tbl)] = count
+                else:
+                    logger.warning(f"Invalid baseline key format: {key_str}")
+
+            logger.info(f"Loaded schema baseline with {len(baseline)} tables")
+            return baseline
+
+        except Exception as e:
+            logger.warning(f"Failed to load schema baseline: {e}, starting fresh")
+            return {}
 
     def warm_cache(self, table_refs: Set[Tuple[str, str]]) -> None:
         """Batch-query metadata for all referenced tables in a single round-trip.
@@ -112,6 +151,11 @@ class WildcardResolver:
                 batch_refs = unique_refs[batch_start:batch_end]
 
                 self._warm_cache_batch(batch_refs)
+
+            # Phase 8: Schema evolution detection
+            if self._baseline_path:
+                self._detect_schema_changes()
+                self._save_baseline()
 
             elapsed_ms = int((time.time() - start_time) * 1000)
             total_columns = sum(len(cols) for cols in self._column_cache.values())
@@ -182,6 +226,70 @@ class WildcardResolver:
         if current_key is not None:
             self._column_cache[current_key] = current_cols
 
+    def _detect_schema_changes(self) -> None:
+        """Detect schema evolution by comparing column counts to baseline.
+
+        QUAL-03: Logs warnings when column counts change between extraction runs.
+        Compares current cache against saved baseline from previous run.
+        """
+        self._schema_changes = []
+
+        for (db, tbl), columns in self._column_cache.items():
+            key = (db, tbl)
+            current_count = len(columns)
+            baseline_count = self._baseline.get(key)
+
+            # Skip if no baseline (first run for this table)
+            if baseline_count is None:
+                continue
+
+            if current_count != baseline_count:
+                delta = current_count - baseline_count
+                change_info = {
+                    "table": f"{db}.{tbl}",
+                    "baseline_columns": baseline_count,
+                    "current_columns": current_count,
+                    "delta": delta,
+                    "timestamp": datetime.now().isoformat()
+                }
+                self._schema_changes.append(change_info)
+
+                logger.warning(
+                    "Schema evolution detected for %s.%s: %d -> %d columns (%+d)",
+                    db, tbl, baseline_count, current_count, delta
+                )
+
+        if self._schema_changes:
+            logger.info(
+                "Schema evolution: %d table(s) changed since last run",
+                len(self._schema_changes)
+            )
+
+    def _save_baseline(self) -> None:
+        """Save current column counts as baseline for next extraction run.
+
+        Writes atomically via temp file to prevent corruption on crash.
+        """
+        if not self._baseline_path:
+            return
+
+        try:
+            data = {
+                f"{db}.{tbl}": len(cols)
+                for (db, tbl), cols in self._column_cache.items()
+            }
+
+            # Atomic write via temp file
+            temp_path = self._baseline_path.with_suffix('.tmp')
+            with open(temp_path, 'w') as f:
+                json.dump(data, f, indent=2, sort_keys=True)
+            temp_path.replace(self._baseline_path)
+
+            logger.debug(f"Saved schema baseline with {len(data)} tables to {self._baseline_path}")
+
+        except Exception as e:
+            logger.warning(f"Failed to save schema baseline: {e}")
+
     def resolve_star(self, database: Optional[str], table: str) -> List[str]:
         """Return column names in ordinal position order from cache.
 
@@ -245,11 +353,19 @@ class WildcardResolver:
         else:
             return identifier.upper()
 
+    def get_schema_changes(self) -> List[Dict]:
+        """Return schema changes detected during cache warmup.
+
+        Returns:
+            List of dicts with keys: table, baseline_columns, current_columns, delta, timestamp
+        """
+        return self._schema_changes
+
     def get_stats(self) -> Dict[str, int]:
         """Return cache hit/miss statistics for logging.
 
         Returns:
-            Dictionary with keys: 'tables', 'columns', 'cache_hits', 'cache_misses', 'hit_rate_pct'
+            Dictionary with keys: 'tables', 'columns', 'cache_hits', 'cache_misses', 'hit_rate_pct', 'schema_changes'
 
         Example:
             stats = resolver.get_stats()
@@ -265,5 +381,6 @@ class WildcardResolver:
             'columns': total_columns,
             'cache_hits': self._cache_hits,
             'cache_misses': self._cache_misses,
-            'hit_rate_pct': round(hit_rate, 1)
+            'hit_rate_pct': round(hit_rate, 1),
+            'schema_changes': len(self._schema_changes) if hasattr(self, '_schema_changes') else 0
         }
