@@ -10,7 +10,11 @@ import {
   calculateTableNodeHeight,
   calculateTableNodeWidth,
   getEdgeStyleByConfidence,
+  topoSortDatabases,
+  separateDatabaseClusters,
 } from './layoutEngine';
+import type { Node } from '@xyflow/react';
+import type { TableNodeData } from './layoutEngine';
 import type { LineageNode, LineageEdge } from '../../types';
 
 // TC-UNIT-001: getNodeWidth Function
@@ -730,5 +734,163 @@ describe('TC-GRAPH-002 & TC-GRAPH-003: Layout Options', () => {
     const posT2 = nodePositions.get('db.t2')!;
 
     expect(posT1.x).toBeLessThan(posT2.x);
+  });
+});
+
+// topoSortDatabases unit tests
+describe('topoSortDatabases', () => {
+  function colToTable(pairs: [string, string][]): Map<string, string> {
+    return new Map(pairs);
+  }
+  function tableToDb(pairs: [string, string][]): Map<string, string> {
+    return new Map(pairs);
+  }
+
+  it('places upstream database before downstream (bronze → silver)', () => {
+    const c2t = colToTable([['c1', 'bronze.t1'], ['c2', 'silver.t2']]);
+    const t2d = tableToDb([['bronze.t1', 'bronze'], ['silver.t2', 'silver']]);
+    const order = topoSortDatabases(new Set(['bronze', 'silver']), [{ id: 'e1', source: 'c1', target: 'c2' }], c2t, t2d);
+    expect(order.indexOf('bronze')).toBeLessThan(order.indexOf('silver'));
+  });
+
+  it('orders a three-stage pipeline: bronze → silver → gold', () => {
+    const c2t = colToTable([['c1', 'bronze.t1'], ['c2', 'silver.t2'], ['c3', 'silver.t2'], ['c4', 'gold.t3']]);
+    const t2d = tableToDb([['bronze.t1', 'bronze'], ['silver.t2', 'silver'], ['gold.t3', 'gold']]);
+    const edges = [{ id: 'e1', source: 'c1', target: 'c2' }, { id: 'e2', source: 'c3', target: 'c4' }];
+    const order = topoSortDatabases(new Set(['bronze', 'silver', 'gold']), edges, c2t, t2d);
+    expect(order.indexOf('bronze')).toBeLessThan(order.indexOf('silver'));
+    expect(order.indexOf('silver')).toBeLessThan(order.indexOf('gold'));
+  });
+
+  it('includes all databases even isolated ones', () => {
+    const c2t = colToTable([['c1', 'a.t1'], ['c2', 'b.t2']]);
+    const t2d = tableToDb([['a.t1', 'a'], ['b.t2', 'b']]);
+    const order = topoSortDatabases(new Set(['a', 'b', 'isolated']), [{ id: 'e1', source: 'c1', target: 'c2' }], c2t, t2d);
+    expect(order).toHaveLength(3);
+    expect(order).toContain('isolated');
+  });
+});
+
+// separateDatabaseClusters unit tests
+describe('separateDatabaseClusters', () => {
+  function makeNode(id: string, x: number, y: number): Node {
+    return { id, type: 'tableNode', position: { x, y }, data: {} };
+  }
+  function makeTableData(id: string, db: string, tableName = 't'): TableNodeData {
+    return {
+      id, databaseName: db, tableName, columns: [
+        { id: 'c', name: 'col', dataType: 'INT', isPrimaryKey: false, isForeignKey: false, hasUpstreamLineage: false, hasDownstreamLineage: false },
+      ], isExpanded: true, assetType: 'table',
+    };
+  }
+
+  it('returns nodes unchanged when only one database', () => {
+    const nodes = [makeNode('db.t1', 100, 0), makeNode('db.t2', 400, 0)];
+    const td = [makeTableData('db.t1', 'db'), makeTableData('db.t2', 'db')];
+    const result = separateDatabaseClusters(nodes, td, 'RIGHT', 60, ['db']);
+    expect(result[0].position.x).toBe(100);
+    expect(result[1].position.x).toBe(400);
+  });
+
+  it('shifts later database right when bounding boxes overlap', () => {
+    // db_a node at x=0, db_b node at x=100 — boxes will overlap
+    const nodes = [makeNode('db_a.t1', 0, 0), makeNode('db_b.t1', 100, 0)];
+    const td = [makeTableData('db_a.t1', 'db_a'), makeTableData('db_b.t1', 'db_b')];
+    const result = separateDatabaseClusters(nodes, td, 'RIGHT', 60, ['db_a', 'db_b']);
+    const aNode = result.find(n => n.id === 'db_a.t1')!;
+    const bNode = result.find(n => n.id === 'db_b.t1')!;
+    // db_a stays in place; db_b must be shifted so padded boxes don't overlap
+    expect(bNode.position.x).toBeGreaterThan(aNode.position.x);
+    // db_b near box edge must be >= db_a far box edge
+    const aWidth = calculateTableNodeWidth('t', td[0].columns);
+    expect(bNode.position.x - 60).toBeGreaterThanOrEqual(aNode.position.x + aWidth + 60);
+  });
+
+  it('respects dbOrder: upstream stays left even if ELK placed it to the right', () => {
+    // ELK incorrectly placed db_b (upstream) to the right of db_a (downstream)
+    const nodes = [makeNode('db_a.t1', 500, 0), makeNode('db_b.t1', 0, 0)];
+    const td = [makeTableData('db_a.t1', 'db_a'), makeTableData('db_b.t1', 'db_b')];
+    // dbOrder says db_b is upstream (index 0), db_a is downstream (index 1)
+    const result = separateDatabaseClusters(nodes, td, 'RIGHT', 60, ['db_b', 'db_a']);
+    const aNode = result.find(n => n.id === 'db_a.t1')!;
+    const bNode = result.find(n => n.id === 'db_b.t1')!;
+    // After separation, upstream db_b should be left of downstream db_a
+    expect(bNode.position.x).toBeLessThan(aNode.position.x);
+  });
+
+  it('works along y-axis for DOWN direction', () => {
+    const nodes = [makeNode('db_a.t1', 0, 0), makeNode('db_b.t1', 0, 50)];
+    const td = [makeTableData('db_a.t1', 'db_a'), makeTableData('db_b.t1', 'db_b')];
+    const result = separateDatabaseClusters(nodes, td, 'DOWN', 60, ['db_a', 'db_b']);
+    const aNode = result.find(n => n.id === 'db_a.t1')!;
+    const bNode = result.find(n => n.id === 'db_b.t1')!;
+    expect(aNode.position.x).toBe(0); // x unchanged
+    expect(bNode.position.x).toBe(0); // x unchanged
+    const aHeight = calculateTableNodeHeight(1, true);
+    expect(bNode.position.y - 60).toBeGreaterThanOrEqual(aNode.position.y + aHeight + 60);
+  });
+});
+
+// Cross-database layout integration tests (via layoutGraph)
+describe('cross-database cluster layout', () => {
+  it('upstream database nodes land left of downstream nodes (direction=RIGHT)', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db_src', tableName: 't1', columnName: 'col1' },
+      { id: '2', type: 'column', databaseName: 'db_src', tableName: 't2', columnName: 'col2' },
+      { id: '3', type: 'column', databaseName: 'db_dst', tableName: 't3', columnName: 'col3' },
+    ];
+    const edges: LineageEdge[] = [{ id: 'e1', source: '1', target: '3' }];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    const srcNodes = result.nodes.filter(n => n.data.databaseName === 'db_src');
+    const dstNodes = result.nodes.filter(n => n.data.databaseName === 'db_dst');
+    expect(srcNodes.length).toBe(2);
+    expect(dstNodes.length).toBe(1);
+
+    const srcMaxX = Math.max(...srcNodes.map(n => n.position.x));
+    const dstMinX = Math.min(...dstNodes.map(n => n.position.x));
+    expect(srcMaxX).toBeLessThan(dstMinX);
+  });
+
+  it('three-stage pipeline flows left to right: src → mid → dst', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db_src', tableName: 't1', columnName: 'c1' },
+      { id: '2', type: 'column', databaseName: 'db_mid', tableName: 't2', columnName: 'c2' },
+      { id: '3', type: 'column', databaseName: 'db_dst', tableName: 't3', columnName: 'c3' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+      { id: 'e2', source: '2', target: '3' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    const srcNodes = result.nodes.filter(n => n.data.databaseName === 'db_src');
+    const midNodes = result.nodes.filter(n => n.data.databaseName === 'db_mid');
+    const dstNodes = result.nodes.filter(n => n.data.databaseName === 'db_dst');
+
+    const srcMaxX = Math.max(...srcNodes.map(n => n.position.x));
+    const midMinX = Math.min(...midNodes.map(n => n.position.x));
+    const midMaxX = Math.max(...midNodes.map(n => n.position.x));
+    const dstMinX = Math.min(...dstNodes.map(n => n.position.x));
+
+    expect(srcMaxX).toBeLessThan(midMinX);
+    expect(midMaxX).toBeLessThan(dstMinX);
+  });
+
+  it('single-database layout (compound path) is unaffected', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 't1', columnName: 'a' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 't2', columnName: 'b' },
+    ];
+    const edges: LineageEdge[] = [{ id: 'e1', source: '1', target: '2' }];
+
+    const result = await layoutGraph(nodes, edges);
+    expect(result.nodes).toHaveLength(2);
+    result.nodes.forEach(node => {
+      expect(Number.isFinite(node.position.x)).toBe(true);
+      expect(Number.isFinite(node.position.y)).toBe(true);
+    });
   });
 });

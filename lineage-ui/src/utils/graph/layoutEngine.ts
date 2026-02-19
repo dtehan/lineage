@@ -215,6 +215,156 @@ function transformToTableNodes(
 const DATABASE_CLUSTER_PADDING = 40;
 const DATABASE_CLUSTER_HEADER_HEIGHT = 50;
 
+// Must match the `padding` default in ClusterBackground so post-layout separation
+// leaves exactly enough room for the bounding box borders not to touch.
+const CLUSTER_BOX_PADDING = 60;
+
+/**
+ * Topologically sorts databases by lineage-flow direction.
+ * Databases with no upstream (pure sources) come first (index 0) and will be
+ * placed LEFT in a right-directed layout; downstream databases come later.
+ * Ties are broken alphabetically for determinism.
+ */
+export function topoSortDatabases(
+  allDatabases: Set<string>,
+  edges: LineageEdge[],
+  columnToTableMap: Map<string, string>,
+  tableToDatabase: Map<string, string>
+): string[] {
+  // Build database-level directed graph from column-level edges
+  const adj = new Map<string, Set<string>>();
+  allDatabases.forEach((db) => adj.set(db, new Set()));
+
+  edges.forEach((edge) => {
+    const srcKey = columnToTableMap.get(edge.source);
+    const tgtKey = columnToTableMap.get(edge.target);
+    if (!srcKey || !tgtKey) return;
+    const srcDb = tableToDatabase.get(srcKey);
+    const tgtDb = tableToDatabase.get(tgtKey);
+    if (!srcDb || !tgtDb || srcDb === tgtDb) return;
+    adj.get(srcDb)!.add(tgtDb);
+  });
+
+  // Kahn's algorithm for topological sort
+  const inDegree = new Map<string, number>();
+  allDatabases.forEach((db) => inDegree.set(db, 0));
+  adj.forEach((targets) =>
+    targets.forEach((t) => inDegree.set(t, (inDegree.get(t) || 0) + 1))
+  );
+
+  const queue = Array.from(allDatabases)
+    .filter((db) => inDegree.get(db) === 0)
+    .sort(); // alphabetical tie-break
+
+  const result: string[] = [];
+  while (queue.length > 0) {
+    queue.sort();
+    const db = queue.shift()!;
+    result.push(db);
+    adj.get(db)?.forEach((target) => {
+      const d = (inDegree.get(target) || 0) - 1;
+      inDegree.set(target, d);
+      if (d === 0) queue.push(target);
+    });
+  }
+
+  // Append cyclic or isolated databases
+  allDatabases.forEach((db) => {
+    if (!result.includes(db)) result.push(db);
+  });
+
+  return result;
+}
+
+/**
+ * Post-layout step that shifts each database's node group along the primary
+ * axis so that the padded cluster bounding boxes (drawn by ClusterBackground)
+ * are strictly non-overlapping and appear in lineage-flow order (upstream LEFT).
+ *
+ * This is needed because ELK's layered algorithm assigns layers by lineage depth,
+ * not by database — so nodes from different databases can land at the same x-range,
+ * causing their bounding boxes to overlap even when edges flow left-to-right.
+ */
+export function separateDatabaseClusters(
+  nodes: Node[],
+  tableNodeData: TableNodeData[],
+  direction: 'RIGHT' | 'LEFT' | 'UP' | 'DOWN',
+  clusterPadding: number,
+  dbOrder: string[]
+): Node[] {
+  if (nodes.length === 0) return nodes;
+
+  // Group nodes by database
+  const dbNodeMap = new Map<string, Node[]>();
+  nodes.forEach((node) => {
+    const td = tableNodeData.find((t) => t.id === node.id);
+    if (!td) return;
+    if (!dbNodeMap.has(td.databaseName)) dbNodeMap.set(td.databaseName, []);
+    dbNodeMap.get(td.databaseName)!.push(node);
+  });
+
+  if (dbNodeMap.size <= 1) return nodes;
+
+  const isHorizontal = direction === 'RIGHT' || direction === 'LEFT';
+
+  // Bounding extent along the primary axis (node position + node size)
+  const dbExtent = new Map<string, { lo: number; hi: number }>();
+  dbNodeMap.forEach((dbNodes, db) => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    dbNodes.forEach((node) => {
+      const td = tableNodeData.find((t) => t.id === node.id)!;
+      const size = isHorizontal
+        ? calculateTableNodeWidth(td.tableName, td.columns)
+        : calculateTableNodeHeight(td.columns.length, td.isExpanded);
+      const pos = isHorizontal ? node.position.x : node.position.y;
+      lo = Math.min(lo, pos);
+      hi = Math.max(hi, pos + size);
+    });
+    dbExtent.set(db, { lo, hi });
+  });
+
+  // Order databases by dbOrder (lineage flow); unknowns fall back to current position
+  const sortedDbs = Array.from(dbNodeMap.keys()).sort((a, b) => {
+    const ai = dbOrder.indexOf(a);
+    const bi = dbOrder.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return dbExtent.get(a)!.lo - dbExtent.get(b)!.lo;
+  });
+
+  // Place first database at its current position; stack each subsequent one
+  // so its padded box begins exactly where the previous padded box ends.
+  const offsets = new Map<string, number>();
+  offsets.set(sortedDbs[0], 0);
+  let cursor = dbExtent.get(sortedDbs[0])!.hi + clusterPadding;
+
+  for (let i = 1; i < sortedDbs.length; i++) {
+    const db = sortedDbs[i];
+    const { lo, hi } = dbExtent.get(db)!;
+    const nearEdge = lo - clusterPadding;
+    const shift = nearEdge < cursor ? cursor - nearEdge : 0;
+    offsets.set(db, shift);
+    cursor = hi + shift + clusterPadding;
+  }
+
+  // Apply offsets along the primary axis only
+  return nodes.map((node) => {
+    const td = tableNodeData.find((t) => t.id === node.id);
+    if (!td) return node;
+    const offset = offsets.get(td.databaseName) || 0;
+    if (offset === 0) return node;
+    return {
+      ...node,
+      position: {
+        x: isHorizontal ? node.position.x + offset : node.position.x,
+        y: isHorizontal ? node.position.y : node.position.y + offset,
+      },
+    };
+  });
+}
+
 /**
  * Groups table nodes by their database name
  */
@@ -311,9 +461,17 @@ export async function layoutGraph(
 
   
   // If there are cross-database edges, use flat layout (no compound nodes)
-  // This avoids ELK's limitation with cross-hierarchy edge routing
+  // This avoids ELK's limitation with cross-hierarchy edge routing.
   if (hasCrossDatabaseEdges) {
-    // Create flat table nodes (no database grouping)
+    // Sort databases by lineage-flow order: upstream (source) databases come first
+    // and map to lower ELK partition indices so they are placed LEFT in the layout.
+    const allDbs = new Set<string>(databaseGroups.keys());
+    const dbOrder = topoSortDatabases(allDbs, rawEdges, columnToTableMap, tableToDatabase);
+    const dbPartition = new Map<string, number>();
+    dbOrder.forEach((db, i) => dbPartition.set(db, i));
+
+    // Flat table nodes — each carries a partition index so ELK keeps databases
+    // in lineage order (partition 0 = upstream/left, partition N = downstream/right).
     const elkTableNodes: ElkNode[] = tableNodeData.map((tableNode) => {
       const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
       const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
@@ -324,6 +482,9 @@ export async function layoutGraph(
         height,
         ports: createElkPorts(tableNode.id, tableNode.columns),
         labels: [{ text: `${tableNode.databaseName}.${tableNode.tableName}` }],
+        properties: {
+          'partitioning.partition': String(dbPartition.get(tableNode.databaseName) ?? 0),
+        },
       };
     });
 
@@ -337,6 +498,9 @@ export async function layoutGraph(
         'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
         'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
         'elk.portConstraints': 'FIXED_ORDER',
+        // Activate partitioning: forces each database's nodes into layers that
+        // precede the next database's layers, matching lineage-flow direction.
+        'elk.partitioning.activate': 'true',
       },
       children: elkTableNodes,
       edges: allElkEdges,
@@ -404,6 +568,17 @@ export async function layoutGraph(
       })
       .filter((edge): edge is Edge => edge !== null);
 
+    // Post-layout: guarantee padded cluster bounding boxes are non-overlapping
+    // and appear in lineage-flow order. ELK partitioning alone cannot prevent
+    // box overlap when databases share the same y-range after layout.
+    const separatedNodes = separateDatabaseClusters(
+      layoutedNodes,
+      tableNodeData,
+      direction,
+      CLUSTER_BOX_PADDING,
+      dbOrder
+    );
+
     // Calculate and return metrics
     const endTime = collectMetrics ? performance.now() : 0;
     const metrics: LayoutMetrics | undefined = collectMetrics
@@ -415,7 +590,7 @@ export async function layoutGraph(
         }
       : undefined;
 
-    return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
+    return { nodes: separatedNodes, edges: layoutedEdges, metrics };
   }
 
   // No cross-database edges - use compound node layout for database clustering
