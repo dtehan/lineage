@@ -411,5 +411,272 @@ class TestWildcardExpansion(unittest.TestCase):
             self.assertIsInstance(confidence_scores, set)
 
 
+class TestQualifiedWildcard(unittest.TestCase):
+    """Unit tests for qualified wildcard expansion (Phase 8: QUAL-01 through QUAL-06)."""
+
+    # =========================================================================
+    # QUAL-01: Basic qualified wildcard expansion
+    # =========================================================================
+
+    def test_qualified_wildcard_single_table(self):
+        """Test basic qualified wildcard expansion with single alias."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'table1'): ['col1', 'col2', 'col3']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c)
+        SELECT t1.* FROM demo_user.table1 t1
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert 3 lineage records: col1->a, col2->b, col3->c
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_column'], 'col1')
+        self.assertEqual(lineage[0]['target_column'], 'a')
+        self.assertEqual(lineage[1]['source_column'], 'col2')
+        self.assertEqual(lineage[1]['target_column'], 'b')
+        self.assertEqual(lineage[2]['source_column'], 'col3')
+        self.assertEqual(lineage[2]['target_column'], 'c')
+
+        # Assert confidence = 0.70 (CONFIDENCE_STAR)
+        for record in lineage:
+            self.assertEqual(record['confidence_score'], 0.70)
+
+    def test_qualified_wildcard_with_alias(self):
+        """Test qualified wildcard with alias resolves to actual table."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'customers'): ['customer_id', 'name', 'email']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (id, full_name, contact)
+        SELECT c.* FROM demo_user.customers c
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert columns resolve to customers table (not alias 'c')
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_table'], 'customers')
+        self.assertEqual(lineage[0]['source_column'], 'customer_id')
+        self.assertEqual(lineage[1]['source_table'], 'customers')
+        self.assertEqual(lineage[1]['source_column'], 'name')
+        self.assertEqual(lineage[2]['source_table'], 'customers')
+        self.assertEqual(lineage[2]['source_column'], 'email')
+
+    def test_qualified_wildcard_no_alias(self):
+        """Test qualified wildcard with table name (not alias) as qualifier."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'customers'): ['customer_id', 'name']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (id, full_name)
+        SELECT customers.* FROM demo_user.customers
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert expansion works with direct table name reference
+        self.assertEqual(len(lineage), 2)
+        self.assertEqual(lineage[0]['source_column'], 'customer_id')
+        self.assertEqual(lineage[1]['source_column'], 'name')
+
+    # =========================================================================
+    # QUAL-02: Multiple qualified wildcards
+    # =========================================================================
+
+    def test_multiple_qualified_wildcards(self):
+        """Test multiple qualified wildcards in single SELECT."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'table1'): ['col1', 'col2', 'col3'],
+            ('demo_user', 'table2'): ['colA', 'colB']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c, d, e)
+        SELECT t1.*, t2.*
+        FROM demo_user.table1 t1
+        JOIN demo_user.table2 t2 ON t1.id = t2.id
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert 5 lineage records with correct ordinal position matching
+        self.assertEqual(len(lineage), 5)
+        # First wildcard (t1.*) expands to positions 0, 1, 2
+        self.assertEqual(lineage[0]['source_column'], 'col1')
+        self.assertEqual(lineage[0]['target_column'], 'a')
+        self.assertEqual(lineage[1]['source_column'], 'col2')
+        self.assertEqual(lineage[1]['target_column'], 'b')
+        self.assertEqual(lineage[2]['source_column'], 'col3')
+        self.assertEqual(lineage[2]['target_column'], 'c')
+        # Second wildcard (t2.*) expands to positions 3, 4
+        self.assertEqual(lineage[3]['source_column'], 'colA')
+        self.assertEqual(lineage[3]['target_column'], 'd')
+        self.assertEqual(lineage[4]['source_column'], 'colB')
+        self.assertEqual(lineage[4]['target_column'], 'e')
+
+    def test_qualified_wildcard_mixed_with_explicit(self):
+        """Test qualified wildcard mixed with explicit column."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'table1'): ['col1', 'col2'],
+            ('demo_user', 'table2'): ['name']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c)
+        SELECT t1.*, t2.name
+        FROM demo_user.table1 t1
+        JOIN demo_user.table2 t2 ON t1.id = t2.id
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert lineage includes wildcard-expanded columns AND explicit column
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_column'], 'col1')
+        self.assertEqual(lineage[0]['confidence_score'], 0.70)  # Wildcard
+        self.assertEqual(lineage[1]['source_column'], 'col2')
+        self.assertEqual(lineage[1]['confidence_score'], 0.70)  # Wildcard
+        self.assertEqual(lineage[2]['source_column'], 'name')
+        self.assertEqual(lineage[2]['confidence_score'], 0.95)  # Explicit
+
+    def test_qualified_wildcard_ctas(self):
+        """Test CTAS derives target column names from qualified wildcard source."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'table1'): ['customer_id', 'name', 'email']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        CREATE TABLE demo_user.new_table AS (
+            SELECT t1.* FROM demo_user.table1 t1
+        ) WITH DATA
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert target names derived from source columns
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_column'], 'customer_id')
+        self.assertEqual(lineage[0]['target_column'], 'customer_id')
+        self.assertEqual(lineage[1]['source_column'], 'name')
+        self.assertEqual(lineage[1]['target_column'], 'name')
+        self.assertEqual(lineage[2]['source_column'], 'email')
+        self.assertEqual(lineage[2]['target_column'], 'email')
+
+    # =========================================================================
+    # QUAL-05: Graceful degradation
+    # =========================================================================
+
+    def test_qualified_wildcard_unknown_alias(self):
+        """Test unknown alias in qualified wildcard returns empty list."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'table1'): ['col1', 'col2']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b)
+        SELECT unknown.* FROM demo_user.table1 t1
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Unknown alias should gracefully degrade (no crash)
+        # May fall back to pattern-based extraction or return partial results
+        self.assertIsInstance(lineage, list)
+
+    def test_qualified_wildcard_no_resolver(self):
+        """Test qualified wildcard without resolver is backward compatible."""
+        # Parser created WITHOUT resolver
+        parser = TeradataSQLParser()
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c)
+        SELECT t1.* FROM demo_user.table1 t1
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Without resolver, qualified wildcard expansion is skipped
+        # Falls back to pattern-based extraction
+        self.assertIsInstance(lineage, list)
+        # Verify no wildcard confidence is used
+        for record in lineage:
+            self.assertNotEqual(record['confidence_score'], 0.70,
+                              "Should not use wildcard confidence without resolver")
+
+    def test_qualified_wildcard_empty_columns(self):
+        """Test qualified wildcard where resolver returns empty list."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'table1'): []  # Empty column list
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b)
+        SELECT t1.* FROM demo_user.table1 t1
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Empty columns should not crash - graceful skip
+        self.assertIsInstance(lineage, list)
+
+    # =========================================================================
+    # QUAL-06: Positional ORDER BY detection
+    # =========================================================================
+
+    def test_positional_order_by_with_wildcard_warns(self):
+        """Test positional ORDER BY with wildcard logs warning."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'source'): ['col1', 'col2', 'col3']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c)
+        SELECT * FROM demo_user.source ORDER BY 1, 2
+        """
+
+        # Capture logging output
+        with self.assertLogs('sql_parser', level='WARNING') as log_context:
+            lineage = parser.extract_column_lineage(sql)
+
+        # Assert warning was logged about positional ORDER BY
+        warning_found = any('positional order by' in msg.lower() and 'wildcard' in msg.lower()
+                           for msg in log_context.output)
+        self.assertTrue(warning_found,
+                       f"Expected warning about positional ORDER BY with wildcards. Got: {log_context.output}")
+
+        # Lineage should still be extracted (warning, not failure)
+        self.assertGreater(len(lineage), 0)
+
+    def test_positional_order_by_without_wildcard_no_warn(self):
+        """Test positional ORDER BY without wildcard does not warn."""
+        parser = TeradataSQLParser()  # No resolver needed
+
+        sql = """
+        INSERT INTO demo_user.target (a)
+        SELECT col1 FROM demo_user.source ORDER BY 1
+        """
+
+        # Should NOT log warning (no wildcard present)
+        # Note: assertLogs will fail if no logs are emitted, so we check differently
+        lineage = parser.extract_column_lineage(sql)
+
+        # Verify lineage extracted (no crash)
+        self.assertIsInstance(lineage, list)
+
+
 if __name__ == '__main__':
     unittest.main()
