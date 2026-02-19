@@ -114,10 +114,10 @@ Phases execute in numeric order: 7 → 8 → 9
 
 ### Phase 10: View lineage - show data flow through views to source tables
 
-**Goal:** Surface views as visible intermediate nodes in lineage graphs by propagating sourceType through column and table lineage endpoints
+**Goal:** Surface views as visible intermediate nodes in lineage graphs by propagating sourceType and populating view-derived column lineage
 **Depends on:** Phase 9
 **Plans:** 2 plans
 
 Plans:
 - [x] 10-01-PLAN.md -- Add sourceType propagation to column/table lineage endpoints + unit tests
-- [ ] 10-02-PLAN.md -- Add view-chain test data (CREATE VIEW DDL, lineage fixtures, VIEW metadata)
+- [ ] 10-02-PLAN.md -- Automatic view lineage derivation via DBC.TablesV.RequestText + SQLGlot parsing (gap closure)
