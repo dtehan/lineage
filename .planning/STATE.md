@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 9 - View Expansion (COMPLETE)
+**Current focus:** Phase 10 - View Lineage sourceType Propagation
 
 ## Current Position
 
-Phase: 9 of 9 (View Expansion)
-Plan: 2 of 2 (09-02 complete)
+Phase: 10 of 10 (View Lineage - show data flow through views to source tables)
+Plan: 1 of 1 (10-01 complete)
 Status: Complete
-Last activity: 2026-02-19 — Completed 09-02-PLAN.md (View expansion test suite)
+Last activity: 2026-02-19 — Completed 10-01-PLAN.md (sourceType propagation in column/table lineage endpoints)
 
-Progress: [██████████] 100% (Phase 9: Plan 2/2 complete)
+Progress: [██████████] 100% (Phase 10: Plan 1/1 complete)
 
 ## Performance Metrics
 
@@ -33,9 +33,9 @@ Progress: [██████████] 100% (Phase 9: Plan 2/2 complete)
 | v3.0 Wildcard Expansion | 3 | 6 | Complete |
 
 **Recent Trend:**
-v3.0 Phase 9 complete - all VIEW requirements implemented and tested
+Phase 10 complete - sourceType now propagates through all three lineage endpoints (column, table, database)
 
-*Updated after 09-02 completion*
+*Updated after 10-01 completion*
 | Phase 07 P01 | 78s | 1 task | 1 file |
 | Phase 07 P02 | 181s | 2 tasks | 2 files |
 | Phase 07 P03 | 293s | 2 tasks | 3 files |
@@ -43,14 +43,22 @@ v3.0 Phase 9 complete - all VIEW requirements implemented and tested
 | Phase 08 P02 | 195s | 2 tasks | 2 files |
 | Phase 09 P01 | 239s | 2 tasks | 2 files |
 | Phase 09 P02 | 125s | 2 tasks | 2 files |
+| Phase 10 P01 | 140s | 2 tasks | 3 files |
 
 ## Accumulated Context
+
+### Roadmap Evolution
+
+- Phase 10 added: View lineage - show data flow through views to source tables
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 10-01]: source_type_cache pre-seeded with root dataset from get_dataset_with_namespace() to avoid N+1 queries for the most common node
+- [Phase 10-01]: _build_node() source_type param defaults to "TABLE" for graceful degradation when OL_DATASET has no entry
+- [Phase 10-01]: get_dataset_with_namespace() backward-compatible extension - callers ignoring source_type are unaffected
 - [Phase 09-02]: _configure_cursor helper uses _last_query instance variable via execute side_effect to discriminate query types (TablesV vs ColumnsJQV vs RequestText)
 - [Phase 09-02]: test_warm_cache_with_views_integration uses three-way fetchall discriminator to simulate complete warm_cache() flow
 - [Phase 09-02]: Integration tests simulate view expansion via MockWildcardResolver pre-populated with view columns (resolve_star() is shared interface)
@@ -85,7 +93,7 @@ None. v3.0 Wildcard Expansion milestone complete. All 65 tests pass across test_
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed 09-02-PLAN.md (View expansion test suite)
+Stopped at: Completed 10-01-PLAN.md (sourceType propagation in column/table lineage endpoints)
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -99,3 +107,4 @@ Resume file: None
 | 08-02 | 195s | 2 | 2 | 2026-02-19 |
 | 09-01 | 239s | 2 | 2 | 2026-02-19 |
 | 09-02 | 125s | 2 | 2 | 2026-02-19 |
+| 10-01 | 140s | 2 | 3 | 2026-02-19 |
