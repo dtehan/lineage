@@ -56,10 +56,12 @@
   3. CREATE TABLE AS SELECT * statements derive target column names from source expressions
   4. Metadata queries execute once per unique table (batch mode), not once per query occurrence
   5. Wildcard-expanded lineage records display confidence score 0.70 (vs 0.95 for explicit columns)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 07-01: [Plan not yet created]
+- [ ] 07-01-PLAN.md -- WildcardResolver module with batch metadata caching
+- [ ] 07-02-PLAN.md -- SQL parser wildcard expansion + DBQLExtractor integration
+- [ ] 07-03-PLAN.md -- Comprehensive tests for wildcard expansion (TDD)
 
 #### Phase 8: Qualified Wildcards + Schema Evolution
 **Goal**: Handle qualified wildcards in multi-table queries with schema change detection
@@ -104,6 +106,6 @@ Phases execute in numeric order: 7 → 8 → 9
 | 4. Database Optimization | v2.0 | 3/3 | Complete | 2026-02-16 |
 | 5. Frontend Performance | v2.0 | 3/3 | Complete | 2026-02-16 |
 | 6. Redis Caching | v2.0 | 2/2 | Complete | 2026-02-16 |
-| 7. Core Wildcard Expansion | v3.0 | 0/TBD | Not started | - |
+| 7. Core Wildcard Expansion | v3.0 | 0/3 | Planning complete | - |
 | 8. Qualified Wildcards | v3.0 | 0/TBD | Not started | - |
 | 9. View Expansion | v3.0 | 0/TBD | Not started | - |
