@@ -183,7 +183,17 @@ class TeradataSQLParser:
 
         # Get target columns (if specified)
         target_columns = []
-        if hasattr(stmt, 'columns') and stmt.columns:
+        # Columns are in Schema.expressions when INSERT has column list
+        if isinstance(target_table, exp.Schema) and hasattr(target_table, 'expressions'):
+            for col in target_table.expressions:
+                if isinstance(col, exp.Identifier):
+                    target_columns.append(col.name)
+                elif isinstance(col, exp.Column):
+                    target_columns.append(col.name)
+                elif hasattr(col, 'name'):
+                    target_columns.append(col.name)
+        # Fallback: check for columns attribute on statement
+        elif hasattr(stmt, 'columns') and stmt.columns:
             for col in stmt.columns:
                 if isinstance(col, exp.Column):
                     target_columns.append(col.name)
@@ -301,8 +311,10 @@ class TeradataSQLParser:
 
         target_db, target_tbl = self._resolve_table(target_table)
 
-        # Get SELECT clause
+        # Get SELECT clause (unwrap Subquery if needed)
         select_expr = stmt.expression
+        if isinstance(select_expr, exp.Subquery):
+            select_expr = select_expr.this
         if not isinstance(select_expr, exp.Select):
             return []
 
