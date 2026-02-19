@@ -116,7 +116,8 @@ Phases execute in numeric order: 7 → 8 → 9
 
 **Goal:** Surface views as visible intermediate nodes in lineage graphs by propagating sourceType through column and table lineage endpoints
 **Depends on:** Phase 9
-**Plans:** 1 plan
+**Plans:** 2 plans
 
 Plans:
-- [ ] 10-01-PLAN.md -- Add sourceType propagation to column/table lineage endpoints + unit tests
+- [x] 10-01-PLAN.md -- Add sourceType propagation to column/table lineage endpoints + unit tests
+- [ ] 10-02-PLAN.md -- Add view-chain test data (CREATE VIEW DDL, lineage fixtures, VIEW metadata)
