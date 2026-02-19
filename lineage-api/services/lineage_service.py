@@ -52,13 +52,17 @@ class LineageService:
         Raises:
             ValueError: If dataset not found
         """
-        # Look up dataset name and namespace
+        # Look up dataset name, namespace, and source type
         dataset_info = self.dataset_repo.get_dataset_with_namespace(dataset_id)
         if not dataset_info:
             raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
 
         dataset_name = dataset_info["name"]
         namespace_uri = dataset_info["namespace_uri"]
+        source_type = dataset_info.get("source_type", "TABLE")
+
+        # Pre-seed cache with root dataset to avoid redundant lookups
+        source_type_cache = {dataset_name: source_type}
 
         nodes = {}
         edges = []
@@ -68,20 +72,20 @@ class LineageService:
             upstream_records = self.lineage_repo.get_upstream_lineage(
                 dataset_name, field_name, max_depth
             )
-            self._add_lineage_results(upstream_records, nodes, edges)
+            self._add_lineage_results(upstream_records, nodes, edges, source_type_cache)
 
         # Get downstream lineage if requested
         if direction in ("downstream", "both"):
             downstream_records = self.lineage_repo.get_downstream_lineage(
                 dataset_name, field_name, max_depth
             )
-            self._add_lineage_results(downstream_records, nodes, edges)
+            self._add_lineage_results(downstream_records, nodes, edges, source_type_cache)
 
         # Add the root field node if not already present
         root_key = f"{dataset_name}.{field_name}"
         if root_key not in nodes:
             nodes[root_key] = self._build_node(
-                root_key, field_name, dataset_name, namespace_uri
+                root_key, field_name, dataset_name, namespace_uri, source_type
             )
 
         return {
@@ -114,13 +118,14 @@ class LineageService:
         Raises:
             ValueError: If dataset not found or has no fields
         """
-        # Look up dataset name and namespace
+        # Look up dataset name, namespace, and source type
         dataset_info = self.dataset_repo.get_dataset_with_namespace(dataset_id)
         if not dataset_info:
             raise DatasetNotFoundError(f"Dataset not found: {dataset_id}")
 
         dataset_name = dataset_info["name"]
         namespace_uri = dataset_info["namespace_uri"]
+        source_type = dataset_info.get("source_type", "TABLE")
 
         # Get all fields for this dataset
         fields = self.dataset_repo.get_dataset_fields(dataset_id)
@@ -130,13 +135,16 @@ class LineageService:
         nodes = {}
         edges = []
 
+        # Pre-seed cache with root dataset to avoid redundant lookups
+        source_type_cache = {dataset_name: source_type}
+
         # For each field, get its lineage
         for field_name in fields:
             # Add the field as a root node
             root_key = f"{dataset_name}.{field_name}"
             if root_key not in nodes:
                 nodes[root_key] = self._build_node(
-                    root_key, field_name, dataset_name, namespace_uri
+                    root_key, field_name, dataset_name, namespace_uri, source_type
                 )
 
             # Get upstream lineage if requested
@@ -144,14 +152,14 @@ class LineageService:
                 upstream_records = self.lineage_repo.get_upstream_lineage(
                     dataset_name, field_name, max_depth
                 )
-                self._add_lineage_results(upstream_records, nodes, edges)
+                self._add_lineage_results(upstream_records, nodes, edges, source_type_cache)
 
             # Get downstream lineage if requested
             if direction in ("downstream", "both"):
                 downstream_records = self.lineage_repo.get_downstream_lineage(
                     dataset_name, field_name, max_depth
                 )
-                self._add_lineage_results(downstream_records, nodes, edges)
+                self._add_lineage_results(downstream_records, nodes, edges, source_type_cache)
 
         return {
             "datasetId": dataset_id,
@@ -352,7 +360,7 @@ class LineageService:
             }
         }
 
-    def _build_node(self, key: str, field_name: str, dataset_name: str, namespace: str) -> dict:
+    def _build_node(self, key: str, field_name: str, dataset_name: str, namespace: str, source_type: str = "TABLE") -> dict:
         """
         Build a node dictionary.
 
@@ -361,6 +369,7 @@ class LineageService:
             field_name: Field name
             dataset_name: Dataset name
             namespace: Namespace URI
+            source_type: Dataset source type ("TABLE" or "VIEW"), defaults to "TABLE"
 
         Returns:
             dict: Node dictionary
@@ -371,9 +380,26 @@ class LineageService:
             "name": field_name,
             "dataset": {
                 "name": dataset_name,
-                "namespace": namespace
+                "namespace": namespace,
+                "sourceType": source_type
             }
         }
+
+    def _get_source_type(self, dataset_name: str, cache: dict) -> str:
+        """
+        Get the source type for a dataset, using a cache to avoid repeated lookups.
+
+        Args:
+            dataset_name: Fully qualified dataset name
+            cache: Dict mapping dataset name to source type string
+
+        Returns:
+            str: "VIEW" or "TABLE" (defaults to "TABLE" if not found)
+        """
+        if dataset_name not in cache:
+            meta = self.dataset_repo.get_dataset_metadata(dataset_name)
+            cache[dataset_name] = meta["sourceType"] if meta else "TABLE"
+        return cache[dataset_name]
 
     def _build_edge(self, source_key: str, target_key: str, transformation_type: str) -> dict:
         """
@@ -395,7 +421,7 @@ class LineageService:
             "transformationType": transformation_type
         }
 
-    def _add_lineage_results(self, records: list, nodes: dict, edges: list):
+    def _add_lineage_results(self, records: list, nodes: dict, edges: list, source_type_cache: dict = None):
         """
         Process lineage records and add nodes/edges to the graph.
 
@@ -405,27 +431,37 @@ class LineageService:
             records: List of lineage records from repository
             nodes: Dict of nodes to update (in-place)
             edges: List of edges to update (in-place)
+            source_type_cache: Dict mapping dataset name to source type (optional).
+                               If None, a new empty cache is created. Pre-seeding
+                               this cache avoids redundant lookups for the root dataset.
         """
+        if source_type_cache is None:
+            source_type_cache = {}
+
         for record in records:
             source_key = f"{record['source_dataset']}.{record['source_field']}"
             target_key = f"{record['target_dataset']}.{record['target_field']}"
 
             # Add source node
             if source_key not in nodes:
+                source_type = self._get_source_type(record["source_dataset"], source_type_cache)
                 nodes[source_key] = self._build_node(
                     source_key,
                     record["source_field"],
                     record["source_dataset"],
-                    record["source_namespace"]
+                    record["source_namespace"],
+                    source_type
                 )
 
             # Add target node
             if target_key not in nodes:
+                target_type = self._get_source_type(record["target_dataset"], source_type_cache)
                 nodes[target_key] = self._build_node(
                     target_key,
                     record["target_field"],
                     record["target_dataset"],
-                    record["target_namespace"]
+                    record["target_namespace"],
+                    target_type
                 )
 
             # Add edge

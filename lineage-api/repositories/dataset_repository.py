@@ -634,7 +634,7 @@ class DatasetRepository(BaseRepository):
 
     def get_dataset_with_namespace(self, dataset_id: str):
         """
-        Get dataset name and namespace URI by ID.
+        Get dataset name, namespace URI, and source type by ID.
 
         Used by lineage endpoints to retrieve dataset metadata.
 
@@ -642,11 +642,11 @@ class DatasetRepository(BaseRepository):
             dataset_id: Dataset identifier
 
         Returns:
-            dict or None: Contains name and namespace_uri. None if not found.
+            dict or None: Contains name, namespace_uri, and source_type. None if not found.
         """
         with self.connection.cursor() as cur:
             cur.execute("""
-                SELECT d."name", n.namespace_uri
+                SELECT d."name", n.namespace_uri, d.source_type
                 FROM OL_DATASET d
                 JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
                 WHERE d.dataset_id = ?
@@ -656,7 +656,8 @@ class DatasetRepository(BaseRepository):
                 return None
             return {
                 "name": self._strip(row[0]) if row[0] else "",
-                "namespace_uri": self._strip(row[1]) if row[1] else ""
+                "namespace_uri": self._strip(row[1]) if row[1] else "",
+                "source_type": self._strip(row[2]) if row[2] else "TABLE"
             }
 
     def get_field_metadata(self, dataset_name: str, field_name: str):
