@@ -11,6 +11,7 @@ import {
   calculateTableNodeWidth,
   getEdgeStyleByConfidence,
   separateDatabaseClusters,
+  topoSortDatabases,
 } from './layoutEngine';
 import type { Node } from '@xyflow/react';
 import type { TableNodeData } from './layoutEngine';
@@ -740,6 +741,47 @@ describe('separateDatabaseClusters', () => {
     const aBoxFarEdge = aNode.position.y + aHeight + 60;
     const bBoxNearEdge = bNode.position.y - 60;
     expect(bBoxNearEdge).toBeGreaterThanOrEqual(aBoxFarEdge);
+  });
+});
+
+// Unit tests for topoSortDatabases
+describe('topoSortDatabases', () => {
+  function makeMap(pairs: [string, string][]): Map<string, string> {
+    return new Map(pairs);
+  }
+
+  it('places upstream database before downstream database', () => {
+    // bronze → silver (bronze feeds silver)
+    const columnToTable = makeMap([['c1', 'bronze.t1'], ['c2', 'silver.t2']]);
+    const tableToDb = makeMap([['bronze.t1', 'bronze'], ['silver.t2', 'silver']]);
+    const edges = [{ id: 'e1', source: 'c1', target: 'c2' }];
+    const order = topoSortDatabases(new Set(['bronze', 'silver']), edges, columnToTable, tableToDb);
+    expect(order.indexOf('bronze')).toBeLessThan(order.indexOf('silver'));
+  });
+
+  it('orders a three-stage pipeline correctly (bronze → silver → gold)', () => {
+    const columnToTable = makeMap([
+      ['c1', 'bronze.t1'], ['c2', 'silver.t2'], ['c3', 'silver.t2'], ['c4', 'gold.t3'],
+    ]);
+    const tableToDb = makeMap([
+      ['bronze.t1', 'bronze'], ['silver.t2', 'silver'], ['gold.t3', 'gold'],
+    ]);
+    const edges = [
+      { id: 'e1', source: 'c1', target: 'c2' },
+      { id: 'e2', source: 'c3', target: 'c4' },
+    ];
+    const order = topoSortDatabases(new Set(['bronze', 'silver', 'gold']), edges, columnToTable, tableToDb);
+    expect(order.indexOf('bronze')).toBeLessThan(order.indexOf('silver'));
+    expect(order.indexOf('silver')).toBeLessThan(order.indexOf('gold'));
+  });
+
+  it('returns all databases even when some have no cross-db edges', () => {
+    const columnToTable = makeMap([['c1', 'a.t1'], ['c2', 'b.t2']]);
+    const tableToDb = makeMap([['a.t1', 'a'], ['b.t2', 'b']]);
+    const edges = [{ id: 'e1', source: 'c1', target: 'c2' }];
+    const order = topoSortDatabases(new Set(['a', 'b', 'isolated']), edges, columnToTable, tableToDb);
+    expect(order).toHaveLength(3);
+    expect(order).toContain('isolated');
   });
 });
 

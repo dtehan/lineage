@@ -219,17 +219,85 @@ const DATABASE_CLUSTER_HEADER_HEIGHT = 50;
 const CLUSTER_SEPARATION_PADDING = 60;
 
 /**
+ * Topologically sorts database names based on lineage edge flow.
+ * Upstream databases (no incoming cross-db edges) come first (index 0 = leftmost).
+ * Ties are broken alphabetically for determinism.
+ *
+ * @param allDatabases - all database names present in the graph
+ * @param edges - raw lineage edges
+ * @param columnToTableMap - maps column id → "db.table" key
+ * @param tableToDatabase - maps "db.table" key → database name
+ */
+export function topoSortDatabases(
+  allDatabases: Set<string>,
+  edges: LineageEdge[],
+  columnToTableMap: Map<string, string>,
+  tableToDatabase: Map<string, string>
+): string[] {
+  // Build database-level directed graph: sourceDb → Set<targetDb>
+  const dbGraph = new Map<string, Set<string>>();
+  allDatabases.forEach((db) => dbGraph.set(db, new Set()));
+
+  edges.forEach((edge) => {
+    const sourceKey = columnToTableMap.get(edge.source);
+    const targetKey = columnToTableMap.get(edge.target);
+    if (!sourceKey || !targetKey) return;
+    const sourceDb = tableToDatabase.get(sourceKey);
+    const targetDb = tableToDatabase.get(targetKey);
+    if (!sourceDb || !targetDb || sourceDb === targetDb) return;
+    dbGraph.get(sourceDb)!.add(targetDb);
+  });
+
+  // Kahn's algorithm for topological sort
+  const inDegree = new Map<string, number>();
+  allDatabases.forEach((db) => inDegree.set(db, 0));
+  dbGraph.forEach((targets) => {
+    targets.forEach((target) => {
+      inDegree.set(target, (inDegree.get(target) || 0) + 1);
+    });
+  });
+
+  // Queue starts with all roots (in-degree 0), sorted alphabetically for determinism
+  const queue: string[] = Array.from(allDatabases)
+    .filter((db) => inDegree.get(db) === 0)
+    .sort();
+
+  const order: string[] = [];
+  while (queue.length > 0) {
+    queue.sort(); // keep alphabetical tie-breaking stable
+    const db = queue.shift()!;
+    order.push(db);
+    dbGraph.get(db)?.forEach((target) => {
+      const newDegree = (inDegree.get(target) || 0) - 1;
+      inDegree.set(target, newDegree);
+      if (newDegree === 0) queue.push(target);
+    });
+  }
+
+  // Append any remaining databases (cycles or isolated)
+  allDatabases.forEach((db) => {
+    if (!order.includes(db)) order.push(db);
+  });
+
+  return order;
+}
+
+/**
  * Post-layout step to prevent database cluster bounding boxes from overlapping.
  * ELK partitioning controls layer order but cannot guarantee that padded bounding
  * boxes (used by ClusterBackground) won't overlap when databases share y-ranges.
  * This function shifts each database group along the primary axis so the padded
- * bounding boxes are strictly non-overlapping.
+ * bounding boxes are strictly non-overlapping, respecting the provided lineage order.
+ *
+ * @param dbOrder - databases in lineage-flow order (upstream first). When provided,
+ *   groups are placed in this order rather than sorted by current x/y position.
  */
 export function separateDatabaseClusters(
   nodes: Node[],
   tableNodeData: TableNodeData[],
   direction: 'RIGHT' | 'LEFT' | 'UP' | 'DOWN',
-  clusterPadding: number
+  clusterPadding: number,
+  dbOrder?: string[]
 ): Node[] {
   if (nodes.length === 0) return nodes;
 
@@ -264,34 +332,46 @@ export function separateDatabaseClusters(
     dbExtent.set(db, { lo, hi });
   });
 
-  // Sort databases by their lo (near) position in the primary axis
-  const sortedDbs = Array.from(dbExtent.keys()).sort(
-    (a, b) => dbExtent.get(a)!.lo - dbExtent.get(b)!.lo
-  );
+  // Determine the ordering of databases.
+  // When dbOrder is provided (topological/lineage order), use it directly.
+  // Fallback: sort by current lo position (preserves whatever ELK decided).
+  const sortedDbs = dbOrder
+    ? Array.from(dbNodeMap.keys()).sort((a, b) => {
+        const ai = dbOrder.indexOf(a);
+        const bi = dbOrder.indexOf(b);
+        if (ai === -1 && bi === -1) return 0;
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      })
+    : Array.from(dbExtent.keys()).sort(
+        (a, b) => dbExtent.get(a)!.lo - dbExtent.get(b)!.lo
+      );
 
-  // Calculate cumulative offsets to eliminate bounding-box overlap.
-  // Each cluster box occupies [lo - clusterPadding, hi + clusterPadding] in the primary axis.
+  // Place the first database at its current position, then stack subsequent ones
+  // so their padded boxes begin exactly where the previous one ends.
+  // Each cluster box occupies [lo - clusterPadding, hi + clusterPadding].
   const offsets = new Map<string, number>();
   offsets.set(sortedDbs[0], 0);
 
-  for (let i = 1; i < sortedDbs.length; i++) {
-    const prevDb = sortedDbs[i - 1];
-    const currDb = sortedDbs[i];
-    const prevExtent = dbExtent.get(prevDb)!;
-    const currExtent = dbExtent.get(currDb)!;
-    const prevOffset = offsets.get(prevDb)!;
+  // Cursor = far edge of the most recently placed cluster box
+  let cursor = dbExtent.get(sortedDbs[0])!.hi + clusterPadding;
 
-    // Far edge of previous cluster box after applying its accumulated offset
-    const prevBoxFarEdge = prevExtent.hi + prevOffset + clusterPadding;
-    // Near edge of current cluster box (before any offset)
+  for (let i = 1; i < sortedDbs.length; i++) {
+    const currDb = sortedDbs[i];
+    const currExtent = dbExtent.get(currDb)!;
+
+    // Near edge of current cluster box (with padding, before any offset)
     const currBoxNearEdge = currExtent.lo - clusterPadding;
 
-    if (currBoxNearEdge < prevBoxFarEdge) {
-      // Overlap: push currDb far enough that its box begins right after prevDb's box
-      offsets.set(currDb, prevBoxFarEdge - currBoxNearEdge);
+    if (currBoxNearEdge < cursor) {
+      // Overlap (or insufficient gap): push currDb right so its box starts at cursor
+      offsets.set(currDb, cursor - currBoxNearEdge);
     } else {
       offsets.set(currDb, 0);
     }
+
+    cursor = currExtent.hi + (offsets.get(currDb) || 0) + clusterPadding;
   }
 
   // Apply offsets — only shift along the primary axis
@@ -409,10 +489,12 @@ export async function layoutGraph(
   // If there are cross-database edges, use flat layout (no compound nodes)
   // This avoids ELK's limitation with cross-hierarchy edge routing
   if (hasCrossDatabaseEdges) {
-    // Build database -> partition index map (alphabetical order)
-    const databaseNames = Array.from(databaseGroups.keys()).sort();
+    // Build database -> partition index map using LINEAGE-FLOW ORDER (topological sort).
+    // Upstream databases (pure sources) receive lower indices → placed LEFT in RIGHT-direction layout.
+    const allDatabases = new Set<string>(databaseGroups.keys());
+    const dbTopoOrder = topoSortDatabases(allDatabases, rawEdges, columnToTableMap, tableToDatabase);
     const databasePartitionMap = new Map<string, number>();
-    databaseNames.forEach((dbName, index) => {
+    dbTopoOrder.forEach((dbName, index) => {
       databasePartitionMap.set(dbName, index);
     });
 
@@ -511,14 +593,14 @@ export async function layoutGraph(
       })
       .filter((edge): edge is Edge => edge !== null);
 
-    // Post-layout: shift database groups so their padded bounding boxes don't overlap.
-    // ELK partitioning controls layer order but can't prevent box overlap when databases
-    // share the same y-range. separateDatabaseClusters guarantees strict separation.
+    // Post-layout: shift database groups so their padded bounding boxes don't overlap,
+    // and ensure they appear in lineage-flow order (upstream LEFT, downstream RIGHT).
     const separatedNodes = separateDatabaseClusters(
       layoutedNodes,
       tableNodeData,
       direction,
-      CLUSTER_SEPARATION_PADDING
+      CLUSTER_SEPARATION_PADDING,
+      dbTopoOrder
     );
 
     // Calculate and return metrics
