@@ -10,7 +10,10 @@ import {
   calculateTableNodeHeight,
   calculateTableNodeWidth,
   getEdgeStyleByConfidence,
+  separateDatabaseClusters,
 } from './layoutEngine';
+import type { Node } from '@xyflow/react';
+import type { TableNodeData } from './layoutEngine';
 import type { LineageNode, LineageEdge } from '../../types';
 
 // TC-UNIT-001: getNodeWidth Function
@@ -673,9 +676,76 @@ describe('column sorting', () => {
   });
 });
 
-// Cross-database cluster separation tests
+// Unit tests for separateDatabaseClusters post-layout function
+describe('separateDatabaseClusters', () => {
+  // Helper to build a minimal Node for testing
+  function makeNode(id: string, x: number, y: number): Node {
+    return { id, type: 'tableNode', position: { x, y }, data: {} };
+  }
+
+  // Helper to build TableNodeData with a known width/height
+  function makeTableData(id: string, db: string, tableName: string): TableNodeData {
+    return {
+      id,
+      databaseName: db,
+      tableName,
+      columns: [{ id: 'c1', name: 'col', dataType: 'INT', isPrimaryKey: false, isForeignKey: false, hasUpstreamLineage: false, hasDownstreamLineage: false }],
+      isExpanded: true,
+      assetType: 'table',
+    };
+  }
+
+  it('returns nodes unchanged when there is only one database', () => {
+    const nodes = [makeNode('db.t1', 100, 0), makeNode('db.t2', 400, 0)];
+    const tableData = [makeTableData('db.t1', 'db', 't1'), makeTableData('db.t2', 'db', 't2')];
+    const result = separateDatabaseClusters(nodes, tableData, 'RIGHT', 60);
+    expect(result[0].position.x).toBe(100);
+    expect(result[1].position.x).toBe(400);
+  });
+
+  it('does not shift nodes when bounding boxes already have sufficient gap', () => {
+    // db_a nodes at x=0-280, db_b nodes at x=700 — gap > 2*60=120
+    const nodes = [makeNode('db_a.t1', 0, 0), makeNode('db_b.t1', 700, 0)];
+    const tableData = [makeTableData('db_a.t1', 'db_a', 't1'), makeTableData('db_b.t1', 'db_b', 't1')];
+    const result = separateDatabaseClusters(nodes, tableData, 'RIGHT', 60);
+    // db_b box starts at 700-60=640, db_a box ends at ~280+60=340; no overlap
+    expect(result.find(n => n.id === 'db_b.t1')!.position.x).toBe(700);
+  });
+
+  it('shifts the later database right when bounding boxes overlap (direction=RIGHT)', () => {
+    // db_a node at x=0 (width ~280), db_b node at x=200 — boxes overlap
+    const nodes = [makeNode('db_a.t1', 0, 0), makeNode('db_b.t1', 200, 0)];
+    const tableData = [makeTableData('db_a.t1', 'db_a', 't1'), makeTableData('db_b.t1', 'db_b', 't1')];
+    const result = separateDatabaseClusters(nodes, tableData, 'RIGHT', 60);
+    const aNode = result.find(n => n.id === 'db_a.t1')!;
+    const bNode = result.find(n => n.id === 'db_b.t1')!;
+    // After separation, db_b box near edge >= db_a box far edge
+    const aWidth = calculateTableNodeWidth('t1', tableData[0].columns);
+    const aBoxFarEdge = aNode.position.x + aWidth + 60;
+    const bBoxNearEdge = bNode.position.x - 60;
+    expect(bBoxNearEdge).toBeGreaterThanOrEqual(aBoxFarEdge);
+  });
+
+  it('shifts along y-axis when direction=DOWN', () => {
+    // db_a at y=0, db_b at y=50 — boxes overlap in y
+    const nodes = [makeNode('db_a.t1', 0, 0), makeNode('db_b.t1', 0, 50)];
+    const tableData = [makeTableData('db_a.t1', 'db_a', 't1'), makeTableData('db_b.t1', 'db_b', 't1')];
+    const result = separateDatabaseClusters(nodes, tableData, 'DOWN', 60);
+    const aNode = result.find(n => n.id === 'db_a.t1')!;
+    const bNode = result.find(n => n.id === 'db_b.t1')!;
+    // x unchanged — only y shifted
+    expect(aNode.position.x).toBe(0);
+    expect(bNode.position.x).toBe(0);
+    const aHeight = calculateTableNodeHeight(1, true);
+    const aBoxFarEdge = aNode.position.y + aHeight + 60;
+    const bBoxNearEdge = bNode.position.y - 60;
+    expect(bBoxNearEdge).toBeGreaterThanOrEqual(aBoxFarEdge);
+  });
+});
+
+// Cross-database cluster separation integration tests (via layoutGraph)
 describe('cross-database cluster separation', () => {
-  it('separates databases spatially with partitioning (direction=RIGHT)', async () => {
+  it('separates databases spatially (direction=RIGHT)', async () => {
     const nodes: LineageNode[] = [
       { id: '1', type: 'column', databaseName: 'db_alpha', tableName: 't1', columnName: 'col1' },
       { id: '2', type: 'column', databaseName: 'db_alpha', tableName: 't2', columnName: 'col2' },
@@ -701,7 +771,7 @@ describe('cross-database cluster separation', () => {
     expect(alphaMaxX).toBeLessThan(betaMinX);
   });
 
-  it('separates databases spatially with partitioning (direction=DOWN)', async () => {
+  it('separates databases spatially (direction=DOWN)', async () => {
     const nodes: LineageNode[] = [
       { id: '1', type: 'column', databaseName: 'db_alpha', tableName: 't1', columnName: 'col1' },
       { id: '2', type: 'column', databaseName: 'db_beta', tableName: 't2', columnName: 'col2' },

@@ -215,6 +215,102 @@ function transformToTableNodes(
 const DATABASE_CLUSTER_PADDING = 40;
 const DATABASE_CLUSTER_HEADER_HEIGHT = 50;
 
+// Padding used by ClusterBackground — must stay in sync with ClusterBackground default
+const CLUSTER_SEPARATION_PADDING = 60;
+
+/**
+ * Post-layout step to prevent database cluster bounding boxes from overlapping.
+ * ELK partitioning controls layer order but cannot guarantee that padded bounding
+ * boxes (used by ClusterBackground) won't overlap when databases share y-ranges.
+ * This function shifts each database group along the primary axis so the padded
+ * bounding boxes are strictly non-overlapping.
+ */
+export function separateDatabaseClusters(
+  nodes: Node[],
+  tableNodeData: TableNodeData[],
+  direction: 'RIGHT' | 'LEFT' | 'UP' | 'DOWN',
+  clusterPadding: number
+): Node[] {
+  if (nodes.length === 0) return nodes;
+
+  // Group nodes by database
+  const dbNodeMap = new Map<string, Node[]>();
+  nodes.forEach((node) => {
+    const tableNode = tableNodeData.find((t) => t.id === node.id);
+    if (!tableNode) return;
+    const db = tableNode.databaseName;
+    if (!dbNodeMap.has(db)) dbNodeMap.set(db, []);
+    dbNodeMap.get(db)!.push(node);
+  });
+
+  if (dbNodeMap.size <= 1) return nodes;
+
+  const isHorizontal = direction === 'RIGHT' || direction === 'LEFT';
+
+  // For each database, compute bounding extent along the primary axis (position + node size)
+  const dbExtent = new Map<string, { lo: number; hi: number }>();
+  dbNodeMap.forEach((dbNodes, db) => {
+    let lo = Infinity;
+    let hi = -Infinity;
+    dbNodes.forEach((node) => {
+      const td = tableNodeData.find((t) => t.id === node.id)!;
+      const width = calculateTableNodeWidth(td.tableName, td.columns);
+      const height = calculateTableNodeHeight(td.columns.length, td.isExpanded);
+      const primary = isHorizontal ? node.position.x : node.position.y;
+      const size = isHorizontal ? width : height;
+      lo = Math.min(lo, primary);
+      hi = Math.max(hi, primary + size);
+    });
+    dbExtent.set(db, { lo, hi });
+  });
+
+  // Sort databases by their lo (near) position in the primary axis
+  const sortedDbs = Array.from(dbExtent.keys()).sort(
+    (a, b) => dbExtent.get(a)!.lo - dbExtent.get(b)!.lo
+  );
+
+  // Calculate cumulative offsets to eliminate bounding-box overlap.
+  // Each cluster box occupies [lo - clusterPadding, hi + clusterPadding] in the primary axis.
+  const offsets = new Map<string, number>();
+  offsets.set(sortedDbs[0], 0);
+
+  for (let i = 1; i < sortedDbs.length; i++) {
+    const prevDb = sortedDbs[i - 1];
+    const currDb = sortedDbs[i];
+    const prevExtent = dbExtent.get(prevDb)!;
+    const currExtent = dbExtent.get(currDb)!;
+    const prevOffset = offsets.get(prevDb)!;
+
+    // Far edge of previous cluster box after applying its accumulated offset
+    const prevBoxFarEdge = prevExtent.hi + prevOffset + clusterPadding;
+    // Near edge of current cluster box (before any offset)
+    const currBoxNearEdge = currExtent.lo - clusterPadding;
+
+    if (currBoxNearEdge < prevBoxFarEdge) {
+      // Overlap: push currDb far enough that its box begins right after prevDb's box
+      offsets.set(currDb, prevBoxFarEdge - currBoxNearEdge);
+    } else {
+      offsets.set(currDb, 0);
+    }
+  }
+
+  // Apply offsets — only shift along the primary axis
+  return nodes.map((node) => {
+    const tableNode = tableNodeData.find((t) => t.id === node.id);
+    if (!tableNode) return node;
+    const offset = offsets.get(tableNode.databaseName) || 0;
+    if (offset === 0) return node;
+
+    return {
+      ...node,
+      position: {
+        x: isHorizontal ? node.position.x + offset : node.position.x,
+        y: isHorizontal ? node.position.y : node.position.y + offset,
+      },
+    };
+  });
+}
+
 /**
  * Groups table nodes by their database name
  */
@@ -415,6 +511,16 @@ export async function layoutGraph(
       })
       .filter((edge): edge is Edge => edge !== null);
 
+    // Post-layout: shift database groups so their padded bounding boxes don't overlap.
+    // ELK partitioning controls layer order but can't prevent box overlap when databases
+    // share the same y-range. separateDatabaseClusters guarantees strict separation.
+    const separatedNodes = separateDatabaseClusters(
+      layoutedNodes,
+      tableNodeData,
+      direction,
+      CLUSTER_SEPARATION_PADDING
+    );
+
     // Calculate and return metrics
     const endTime = collectMetrics ? performance.now() : 0;
     const metrics: LayoutMetrics | undefined = collectMetrics
@@ -426,7 +532,7 @@ export async function layoutGraph(
         }
       : undefined;
 
-    return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
+    return { nodes: separatedNodes, edges: layoutedEdges, metrics };
   }
 
   // No cross-database edges - use compound node layout for database clustering
