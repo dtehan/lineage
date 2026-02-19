@@ -89,10 +89,11 @@ Plans:
   3. Wildcards in view definitions recursively expanded up to depth limit (3 levels)
   4. Expanded view schemas cached for reuse across multiple query extractions
   5. Circular view references detected and logged as errors (no infinite recursion)
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 09-01: [Plan not yet created]
+- [ ] 09-01-PLAN.md -- View detection, definition retrieval, recursive expansion in WildcardResolver
+- [ ] 09-02-PLAN.md -- Comprehensive tests for view expansion (TDD)
 
 ## Progress
 
@@ -109,4 +110,4 @@ Phases execute in numeric order: 7 → 8 → 9
 | 6. Redis Caching | v2.0 | 2/2 | Complete | 2026-02-16 |
 | 7. Core Wildcard Expansion | v3.0 | 3/3 | Complete | 2026-02-19 |
 | 8. Qualified Wildcards | v3.0 | 2/2 | Complete | 2026-02-19 |
-| 9. View Expansion | v3.0 | 0/TBD | Not started | - |
+| 9. View Expansion | v3.0 | 0/2 | Not started | - |
