@@ -205,6 +205,20 @@ class TeradataSQLParser:
         if not isinstance(select_expr, exp.Select):
             return []
 
+        # QUAL-06: Detect positional ORDER BY with wildcards
+        if self._has_positional_order_by(stmt):
+            has_wildcards = any(
+                isinstance(expr, exp.Star) or
+                (isinstance(expr, exp.Column) and expr.name == '*')
+                for expr in select_expr.expressions
+            )
+            if has_wildcards:
+                import logging
+                logging.getLogger('sql_parser').warning(
+                    "Positional ORDER BY detected with wildcard expansion - "
+                    "ORDER BY positions may not match expanded column order"
+                )
+
         # Build table aliases from FROM clause
         self._build_table_aliases(select_expr)
 
@@ -317,6 +331,20 @@ class TeradataSQLParser:
             select_expr = select_expr.this
         if not isinstance(select_expr, exp.Select):
             return []
+
+        # QUAL-06: Detect positional ORDER BY with wildcards
+        if self._has_positional_order_by(stmt):
+            has_wildcards = any(
+                isinstance(expr, exp.Star) or
+                (isinstance(expr, exp.Column) and expr.name == '*')
+                for expr in select_expr.expressions
+            )
+            if has_wildcards:
+                import logging
+                logging.getLogger('sql_parser').warning(
+                    "Positional ORDER BY detected with wildcard expansion - "
+                    "ORDER BY positions may not match expanded column order"
+                )
 
         # Build table aliases from FROM clause
         self._build_table_aliases(select_expr)
@@ -483,6 +511,13 @@ class TeradataSQLParser:
                 # If no resolver, skip wildcard (existing behavior)
                 continue
 
+            # Phase 8: Qualified wildcard (SELECT t1.*, alias.*)
+            if isinstance(expr, exp.Column) and expr.name == '*':
+                if self.wildcard_resolver:
+                    expanded = self._expand_qualified_wildcard(expr)
+                    columns.extend(expanded)
+                continue
+
             alias = expr.alias if hasattr(expr, 'alias') else None
 
             if isinstance(expr, exp.Column):
@@ -588,6 +623,13 @@ class TeradataSQLParser:
         if not columns:
             return []
 
+        # QUAL-04: Audit log for unqualified wildcard too
+        import logging
+        logging.getLogger('sql_parser').info(
+            "Expanded unqualified wildcard * -> %s.%s (%d columns)",
+            db, tbl, len(columns)
+        )
+
         # Create ColumnReference for each expanded column
         return [
             ColumnReference(
@@ -600,6 +642,85 @@ class TeradataSQLParser:
             )
             for col in columns
         ]
+
+    def _expand_qualified_wildcard(self, column: exp.Column) -> List[ColumnReference]:
+        """Expand qualified wildcard (t1.* or alias.*) to column list.
+
+        QUAL-01: Resolves qualified wildcards using table alias mapping.
+        QUAL-02: Each qualified wildcard resolves independently (supports multiple).
+        QUAL-04: Logs expansion details for audit trail.
+        QUAL-05: Unknown aliases gracefully return empty list.
+        """
+        import logging
+        from datetime import datetime
+
+        logger = logging.getLogger('sql_parser')
+
+        table_or_alias = column.table
+        if not table_or_alias:
+            logger.warning("Qualified wildcard missing table/alias reference")
+            return []
+
+        # Resolve alias to actual (database, table) via _table_aliases
+        key = table_or_alias.lower()
+        if key not in self._table_aliases:
+            logger.warning(
+                "Skipping qualified wildcard %s.* - unknown table/alias "
+                "(not found in FROM/JOIN clause)",
+                table_or_alias
+            )
+            return []
+
+        database, table = self._table_aliases[key]
+
+        # Check if this is a CTE reference
+        cte_key = table.upper()
+        if cte_key in self._cte_definitions:
+            return self._expand_cte_wildcard(cte_key, database)
+
+        # Resolve from metadata
+        columns = self.wildcard_resolver.resolve_star(database, table)
+        if not columns:
+            logger.warning(
+                "Skipping qualified wildcard %s.* - no metadata for %s.%s",
+                table_or_alias, database, table
+            )
+            return []
+
+        # QUAL-04: Audit log
+        logger.info(
+            "Expanded qualified wildcard %s.* -> %s.%s (%d columns)",
+            table_or_alias, database, table, len(columns)
+        )
+
+        return [
+            ColumnReference(
+                database=database,
+                table=table,
+                column=col,
+                alias=None,
+                is_expression=False,
+                from_wildcard=True,
+            )
+            for col in columns
+        ]
+
+    def _has_positional_order_by(self, stmt) -> bool:
+        """Check if statement has positional ORDER BY references (ORDER BY 1, 2).
+
+        QUAL-06: Positional ORDER BY with wildcards is ambiguous.
+        """
+        order_by = stmt.find(exp.Order)
+        if not order_by:
+            return False
+
+        for ordered_expr in order_by.expressions:
+            if isinstance(ordered_expr, exp.Ordered):
+                inner = ordered_expr.this
+                if isinstance(inner, exp.Literal) and inner.is_int:
+                    return True
+
+        return False
 
     def _expand_cte_wildcard(self, cte_name: str, default_db: str) -> List[ColumnReference]:
         """Expand wildcard from CTE definition, respecting depth limit."""
