@@ -1,5 +1,5 @@
 ---
-status: complete
+status: diagnosed
 phase: 10-view-lineage-show-data-flow-through-views-to-source-tables
 source: 10-01-SUMMARY.md
 started: 2026-02-19T17:00:00Z
@@ -49,7 +49,18 @@ skipped: 0
   reason: "User reported: we are only seeing the lineage downstream of the view, we are not seeing the lineage upstream of the view"
   severity: major
   test: 4
-  root_cause: ""     # Filled by diagnosis
-  artifacts: []      # Filled by diagnosis
-  missing: []        # Filled by diagnosis
-  debug_session: ""  # Filled by diagnosis
+  root_cause: "OL_COLUMN_LINEAGE contains zero records for view-chain edges. The CTE traversal logic and frontend adapter are both correct. The test data setup (fixtures and insert_cte_test_data.py) only has TABLE→TABLE flows — no view datasets exist in OL_DATASET with source_type='VIEW' and no view-chain lineage records exist in OL_COLUMN_LINEAGE. Views V_REGIONAL_PERFORMANCE and V_SALES_SUMMARY are dropped in setup_test_data.py but never re-created with CREATE VIEW DDL."
+  artifacts:
+    - path: "database/fixtures/lineage_mappings.py"
+      issue: "Zero view-involving entries; all flows are TABLE→TABLE"
+    - path: "database/scripts/setup/setup_test_data.py"
+      issue: "V_REGIONAL_PERFORMANCE and V_SALES_SUMMARY dropped but no CREATE VIEW statements exist"
+    - path: "database/scripts/utils/insert_cte_test_data.py"
+      issue: "All test datasets use TABLE type; no view-chain lineage patterns"
+    - path: "database/scripts/populate/populate_test_metadata.py"
+      issue: "All test datasets inserted with source_type='TABLE'"
+  missing:
+    - "Add CREATE VIEW DDL for at least one view chain in setup_test_data.py (e.g. V_SALES_SUMMARY → STG_SALES, V_REGIONAL_PERFORMANCE → V_SALES_SUMMARY)"
+    - "Insert view-chain lineage records into OL_COLUMN_LINEAGE via fixtures/lineage_mappings.py or insert_cte_test_data.py"
+    - "Register view datasets in OL_DATASET with source_type='VIEW' via populate_test_metadata.py"
+  debug_session: ".planning/debug/view-chain-upstream-lineage-not-visible.md"
