@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 12 - Prevent database cluster overlap in lineage graph visualization (COMPLETE)
+**Current focus:** Phase 13 - Multi-select and group move in lineage graph (COMPLETE)
 
 ## Current Position
 
-Phase: 12 of 12 (Prevent database cluster overlap in lineage graph visualization)
+Phase: 13 of 13 (Multi-select and group move in lineage graph)
 Plan: 1 of 1 (complete)
-Status: Complete - All 12 phases done
-Last activity: 2026-02-19 — Plan 12-01 complete, SUMMARY.md written, all 12 phases done
+Status: Complete - All 13 phases done
+Last activity: 2026-02-19 — Plan 13-01 complete, SUMMARY.md written, all 13 phases done
 
-Progress: [██████████] 100% complete (12/12 phases done)
+Progress: [██████████] 100% complete (13/13 phases done)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26 (across v1.0, v2.0, and v3.0)
+- Total plans completed: 27 (across v1.0, v2.0, and v3.0)
 - v1.0: 12 plans over 2 days
 - v2.0: 8 plans over 18 days
-- v3.0: 6 plans (07-01: 78s, 07-02: 181s, 07-03: 293s, 08-01: 181s, 08-02: 195s, 09-01: 239s, 09-02: 125s)
+- v3.0: 7 plans (07-01: 78s, 07-02: 181s, 07-03: 293s, 08-01: 181s, 08-02: 195s, 09-01: 239s, 09-02: 125s)
 
 **By Milestone:**
 
@@ -33,9 +33,9 @@ Progress: [██████████] 100% complete (12/12 phases done)
 | v3.0 Wildcard Expansion | 3 | 6 | Complete |
 
 **Recent Trend:**
-Phase 12 complete - ELK partitioning + post-layout separateDatabaseClusters() + topoSortDatabases(); cluster boxes non-overlapping, lineage flows left-to-right; human verified
+Phase 13 complete - React Flow multi-select wired to Zustand store; Cmd+click or toolbar toggle selects table nodes with blue ring, group drag moves them together, Escape exits cleanly
 
-*Updated after 12-01 full completion*
+*Updated after 13-01 full completion*
 | Phase 07 P01 | 78s | 1 task | 1 file |
 | Phase 07 P02 | 181s | 2 tasks | 2 files |
 | Phase 07 P03 | 293s | 2 tasks | 3 files |
@@ -47,6 +47,7 @@ Phase 12 complete - ELK partitioning + post-layout separateDatabaseClusters() + 
 | Phase 10 P02 | ~300s | 2 tasks | 3 files |
 | Phase 11 P01 | ~2min | 2 tasks | 5 files | 2026-02-19 |
 | Phase 12 P01 | ~25min | 3 tasks + 2 fixes | 3 files | 2026-02-19 | Complete |
+| Phase 13 P01 | 210s | 2 tasks | 7 files | 2026-02-19 | Complete |
 
 ## Accumulated Context
 
@@ -55,12 +56,18 @@ Phase 12 complete - ELK partitioning + post-layout separateDatabaseClusters() + 
 - Phase 10 added: View lineage - show data flow through views to source tables
 - Phase 11 added: Sort columns alphabetically in lineage graph nodes
 - Phase 12 added: Prevent database cluster overlap in lineage graph visualization
+- Phase 13 added: Multi-select and group move in lineage graph
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 13-01]: multiSelectionKeyCode=null when isMultiSelectMode active so RF treats every click as selection toggle (no modifier required)
+- [Phase 13-01]: Entering multi-select mode clears all highlight/selection state atomically to prevent dimming interfering with ring visibility
+- [Phase 13-01]: ring-blue-400 ring-offset-2 used for multi-select ring (lighter than border-blue-500 for column selection) to make them visually distinguishable
+- [Phase 13-01]: onNodeClick returns early on metaKey/ctrlKey/isMultiSelectMode to let React Flow manage selection natively
+- [Phase 13-01]: selectionOnDrag=false prevents accidental box-selection when panning
 - [Phase 12-01]: ELK partitioning applied only to hasCrossDatabaseEdges flat-layout branch; compound-node path unchanged
 - [Phase 12-01]: Post-layout separateDatabaseClusters() required because ELK partitioning alone cannot guarantee padded bounding boxes won't overlap at same y-range
 - [Phase 12-01]: topoSortDatabases() (Kahn's algorithm) replaces alphabetical sort - upstream databases assigned lower partition indices and placed LEFT
@@ -114,7 +121,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Phase 12 Plan 01 — SUMMARY.md written, VERIFICATION.md deleted, plan 12-01 fully complete
+Stopped at: Phase 13 Plan 01 — SUMMARY.md written, plan 13-01 fully complete
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -132,3 +139,4 @@ Resume file: None
 | 10-02 | ~300s | 2 | 3 | 2026-02-19 |
 | 11-01 | 131s | 1 (checkpoint) | 5 | 2026-02-19 |
 | 12-01 | ~300s | 2 (checkpoint) | 3 | 2026-02-19 |
+| 13-01 | 210s | 2 | 7 | 2026-02-19 |
