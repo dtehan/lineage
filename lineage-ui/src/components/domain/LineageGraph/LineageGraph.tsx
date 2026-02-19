@@ -40,6 +40,7 @@ import {
   useFitToSelection,
   useLayoutWorker,
   useProfiler,
+  useMultiSelect,
 } from './hooks';
 import { toggleTransitions, shouldDisableTransitions } from '../../../utils/graph/disableTransitions';
 
@@ -105,6 +106,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     assetTypeFilter,
     setAssetTypeFilter,
     isTableSelection,
+    toggleMultiSelectMode,
   } = useLineageStore();
 
   // Always use table lineage to show all columns
@@ -150,6 +152,9 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Use profiler hook for measuring re-render frequency (FRONTEND-02)
   const { onRender } = useProfiler('LineageGraph');
+
+  // Use multi-select hook for group selection and drag
+  const { isMultiSelectMode, onSelectionChange, onSelectionDragStart } = useMultiSelect(hasUserInteractedRef);
 
   // Filter nodes and edges based on asset type filter
   const filteredNodesAndEdges = useMemo(() => {
@@ -300,14 +305,16 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Handle node click for selection and path highlighting
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
+    (event: React.MouseEvent, node: Node) => {
+      // If multi-select modifier is held or multi-select mode active, let RF handle selection
+      if (event.metaKey || event.ctrlKey || isMultiSelectMode) return;
       // For table nodes, column selection is handled by ColumnRow
       // This handler is for non-table nodes (fallback)
       if (node.type !== 'tableNode') {
         setSelectedAssetId(node.id);
       }
     },
-    [setSelectedAssetId]
+    [setSelectedAssetId, isMultiSelectMode]
   );
 
   // Handle edge click
@@ -604,6 +611,8 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         isFetching={isFetching && !isLoading}
         assetTypeFilter={assetTypeFilter}
         onAssetTypeFilterChange={setAssetTypeFilter}
+        isMultiSelectMode={isMultiSelectMode}
+        onToggleMultiSelectMode={toggleMultiSelectMode}
       />
 
       {/* Large Graph Warning */}
@@ -636,6 +645,10 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
             maxZoom={2}
             onlyRenderVisibleElements={filteredNodesAndEdges.filteredNodes.length > VIRTUALIZATION_THRESHOLD}
             proOptions={{ hideAttribution: true }}
+            multiSelectionKeyCode={isMultiSelectMode ? null : 'Meta'}
+            selectionOnDrag={false}
+            onSelectionChange={onSelectionChange}
+            onSelectionDragStart={onSelectionDragStart}
           >
             {/* Database cluster backgrounds - rendered with viewport transform */}
             {showDatabaseClusters && (

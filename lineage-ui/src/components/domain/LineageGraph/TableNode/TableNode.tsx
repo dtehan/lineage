@@ -17,9 +17,10 @@ export interface TableNodeData {
 export interface TableNodeProps {
   id: string;
   data: TableNodeData;
+  selected?: boolean;
 }
 
-export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
+export const TableNode = memo(function TableNode({ id, data, selected }: TableNodeProps) {
   const {
     selectedAssetId,
     highlightedNodeIds,
@@ -75,6 +76,9 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
     return getDefaultBorderColor();
   };
 
+  // Multi-select ring: shown when React Flow has selected this node
+  const multiSelectRing = selected ? 'ring-2 ring-blue-400 ring-offset-2' : '';
+
   const handleToggleExpand = useCallback(() => {
     toggleTableExpanded(id, data.isExpanded);
   }, [id, data.isExpanded, toggleTableExpanded]);
@@ -105,6 +109,7 @@ export const TableNode = memo(function TableNode({ id, data }: TableNodeProps) {
         transition-opacity duration-200 ease-out motion-reduce:transition-none
         ${getBorderColor()}
         ${isTableDimmed ? 'opacity-20' : 'opacity-100'}
+        ${multiSelectRing}
       `}
       data-testid={`table-node-${id}`}
     >

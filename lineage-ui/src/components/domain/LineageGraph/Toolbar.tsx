@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair, RefreshCw } from 'lucide-react';
+import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair, RefreshCw, MousePointerClick } from 'lucide-react';
 import { Tooltip } from '../../common/Tooltip';
 
 export type ViewMode = 'graph' | 'table';
@@ -27,6 +27,8 @@ export interface ToolbarProps {
   isFetching?: boolean;
   assetTypeFilter?: AssetTypeFilter[];
   onAssetTypeFilterChange?: (types: AssetTypeFilter[]) => void;
+  isMultiSelectMode?: boolean;
+  onToggleMultiSelectMode?: () => void;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -50,6 +52,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   isFetching = false,
   assetTypeFilter = ['table', 'view', 'materialized_view'],
   onAssetTypeFilterChange,
+  isMultiSelectMode = false,
+  onToggleMultiSelectMode,
 }) => {
   const [showAssetTypeDropdown, setShowAssetTypeDropdown] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -249,6 +253,24 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1 ml-auto">
+        {onToggleMultiSelectMode && (
+          <Tooltip content={isMultiSelectMode ? "Exit multi-select mode (Esc)" : "Multi-select mode: click nodes to select, drag to move group"} position="bottom">
+            <button
+              onClick={onToggleMultiSelectMode}
+              className={`p-2 rounded-lg transition-colors ${
+                isMultiSelectMode
+                  ? 'bg-blue-100 text-blue-600 hover:bg-blue-200'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              aria-label="Toggle multi-select mode"
+              aria-pressed={isMultiSelectMode}
+              data-testid="multi-select-toggle"
+            >
+              <MousePointerClick className="w-4 h-4" />
+            </button>
+          </Tooltip>
+        )}
+
         {onRefresh && (
           <Tooltip content="Refresh data (bypass cache)" position="bottom">
             <button
