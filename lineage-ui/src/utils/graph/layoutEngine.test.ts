@@ -673,6 +673,105 @@ describe('column sorting', () => {
   });
 });
 
+// Cross-database cluster separation tests
+describe('cross-database cluster separation', () => {
+  it('separates databases spatially with partitioning (direction=RIGHT)', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db_alpha', tableName: 't1', columnName: 'col1' },
+      { id: '2', type: 'column', databaseName: 'db_alpha', tableName: 't2', columnName: 'col2' },
+      { id: '3', type: 'column', databaseName: 'db_beta', tableName: 't3', columnName: 'col3' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '3' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    // Find nodes by database
+    const alphaNodes = result.nodes.filter(n => n.data.databaseName === 'db_alpha');
+    const betaNodes = result.nodes.filter(n => n.data.databaseName === 'db_beta');
+
+    expect(alphaNodes.length).toBe(2);
+    expect(betaNodes.length).toBe(1);
+
+    // All alpha nodes should be to the left of all beta nodes (alphabetical partition: alpha=0, beta=1)
+    const alphaMaxX = Math.max(...alphaNodes.map(n => n.position.x));
+    const betaMinX = Math.min(...betaNodes.map(n => n.position.x));
+
+    expect(alphaMaxX).toBeLessThan(betaMinX);
+  });
+
+  it('separates databases spatially with partitioning (direction=DOWN)', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db_alpha', tableName: 't1', columnName: 'col1' },
+      { id: '2', type: 'column', databaseName: 'db_beta', tableName: 't2', columnName: 'col2' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'DOWN' });
+
+    const alphaNodes = result.nodes.filter(n => n.data.databaseName === 'db_alpha');
+    const betaNodes = result.nodes.filter(n => n.data.databaseName === 'db_beta');
+
+    // In DOWN direction, alpha (partition 0) should be above beta (partition 1)
+    const alphaMaxY = Math.max(...alphaNodes.map(n => n.position.y));
+    const betaMinY = Math.min(...betaNodes.map(n => n.position.y));
+
+    expect(alphaMaxY).toBeLessThan(betaMinY);
+  });
+
+  it('single-database layout (compound path) is unaffected', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 't1', columnName: 'a' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 't2', columnName: 'b' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 't3', columnName: 'c' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+      { id: 'e2', source: '2', target: '3' },
+    ];
+
+    const result = await layoutGraph(nodes, edges);
+
+    expect(result.nodes).toHaveLength(3);
+    result.nodes.forEach(node => {
+      expect(node.position.x).toBeDefined();
+      expect(node.position.y).toBeDefined();
+      expect(Number.isFinite(node.position.x)).toBe(true);
+      expect(Number.isFinite(node.position.y)).toBe(true);
+    });
+  });
+
+  it('separates three databases into distinct spatial regions', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db_a', tableName: 't1', columnName: 'c1' },
+      { id: '2', type: 'column', databaseName: 'db_b', tableName: 't2', columnName: 'c2' },
+      { id: '3', type: 'column', databaseName: 'db_c', tableName: 't3', columnName: 'c3' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+      { id: 'e2', source: '2', target: '3' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    const dbANodes = result.nodes.filter(n => n.data.databaseName === 'db_a');
+    const dbBNodes = result.nodes.filter(n => n.data.databaseName === 'db_b');
+    const dbCNodes = result.nodes.filter(n => n.data.databaseName === 'db_c');
+
+    // With alphabetical partitioning and RIGHT direction: db_a < db_b < db_c
+    const aMaxX = Math.max(...dbANodes.map(n => n.position.x));
+    const bMinX = Math.min(...dbBNodes.map(n => n.position.x));
+    const bMaxX = Math.max(...dbBNodes.map(n => n.position.x));
+    const cMinX = Math.min(...dbCNodes.map(n => n.position.x));
+
+    expect(aMaxX).toBeLessThan(bMinX);
+    expect(bMaxX).toBeLessThan(cMinX);
+  });
+});
+
 // TC-GRAPH-002 & TC-GRAPH-003: Layout Options Tests
 describe('TC-GRAPH-002 & TC-GRAPH-003: Layout Options', () => {
   it('respects direction option (DOWN)', async () => {
