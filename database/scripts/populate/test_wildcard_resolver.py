@@ -529,5 +529,268 @@ class TestSchemaEvolution(unittest.TestCase):
         self.assertEqual(stats['columns'], 7)  # 4 + 3
 
 
+class TestViewExpansion(unittest.TestCase):
+    """Unit tests for view expansion functionality (Phase 9: VIEW-01 through VIEW-05).
+
+    All tests use mocks - no database connection required.
+    """
+
+    def setUp(self):
+        """Set up mock cursor for each test."""
+        self.mock_cursor = MagicMock()
+        self.resolver = WildcardResolver(self.mock_cursor, default_database='demo_user')
+
+    def _configure_cursor(self, view_rows=None, column_rows=None, request_text_rows=None):
+        """Configure mock cursor to return different results based on query.
+
+        Discriminates between DBC.TablesV (TableKind/RequestText) queries and
+        DBC.ColumnsJQV queries by inspecting the last executed query string.
+        """
+        def mock_execute(query, *args):
+            self._last_query = query
+
+        self.mock_cursor.execute.side_effect = mock_execute
+
+        def mock_fetchall():
+            if hasattr(self, '_last_query'):
+                if 'TableKind' in self._last_query and 'RequestText' not in self._last_query:
+                    return view_rows or []
+                elif 'RequestText' in self._last_query:
+                    return request_text_rows or []
+                elif 'ColumnsJQV' in self._last_query:
+                    return column_rows or []
+            return []
+
+        self.mock_cursor.fetchall.side_effect = mock_fetchall
+
+    # =========================================================================
+    # VIEW-01: View detection via DBC.TablesV TableKind='V'
+    # =========================================================================
+
+    def test_identify_views_detects_view(self):
+        """Test _identify_views correctly identifies view refs from TableKind='V'."""
+        # Configure cursor to return view identification rows
+        self.mock_cursor.fetchall.return_value = [
+            ('DEMO_USER', 'MY_VIEW'),
+        ]
+
+        table_refs = [('DEMO_USER', 'MY_VIEW'), ('DEMO_USER', 'BASE_TABLE')]
+        views = self.resolver._identify_views(table_refs)
+
+        # Assert view ref is returned, table ref is not
+        self.assertIn(('DEMO_USER', 'MY_VIEW'), views)
+        self.assertNotIn(('DEMO_USER', 'BASE_TABLE'), views)
+
+    def test_identify_views_empty_input(self):
+        """Test _identify_views([]) returns empty set without querying database."""
+        views = self.resolver._identify_views([])
+
+        # Assert cursor.execute NOT called (no DB interaction needed)
+        self.mock_cursor.execute.assert_not_called()
+        self.assertEqual(views, set())
+
+    # =========================================================================
+    # VIEW-02: View definition retrieval with overflow detection
+    # =========================================================================
+
+    def test_fetch_view_definitions_with_overflow(self):
+        """Test truncated view definition (RequestTxtOverFlow='Y') returns None."""
+        # Configure cursor to return rows where one view has overflow
+        self.mock_cursor.fetchall.return_value = [
+            ('DEMO_USER', 'BIG_VIEW', None, 'Y'),      # truncated
+            ('DEMO_USER', 'SMALL_VIEW', 'CREATE VIEW DEMO_USER.SMALL_VIEW AS SELECT id FROM t', 'N'),
+        ]
+
+        view_refs = {('DEMO_USER', 'BIG_VIEW'), ('DEMO_USER', 'SMALL_VIEW')}
+        definitions = self.resolver._fetch_view_definitions(view_refs)
+
+        # Truncated view returns None (signals SHOW VIEW fallback needed)
+        self.assertIsNone(definitions.get(('DEMO_USER', 'BIG_VIEW')))
+        # Non-truncated view returns the SQL text
+        self.assertIsNotNone(definitions.get(('DEMO_USER', 'SMALL_VIEW')))
+
+    def test_fetch_view_definitions_no_overflow_column(self):
+        """Test fallback to length-based truncation detection when RequestTxtOverFlow missing."""
+        # First call (with RequestTxtOverFlow) raises Exception
+        # Second call (without RequestTxtOverFlow) returns rows
+        short_text = 'CREATE VIEW DEMO_USER.MY_VIEW AS SELECT id FROM t'
+        long_text = 'X' * 12500  # at truncation threshold
+
+        call_count = [0]
+
+        def execute_side_effect(query, *args):
+            self._last_query = query
+            call_count[0] += 1
+            if call_count[0] == 1 and 'RequestTxtOverFlow' in query:
+                raise Exception("Column 'RequestTxtOverFlow' does not exist")
+
+        def fetchall_side_effect():
+            if call_count[0] == 1:
+                return []  # not reached (exception thrown before fetchall)
+            # Fallback query (no overflow column)
+            return [
+                ('DEMO_USER', 'SHORT_VIEW', short_text),
+                ('DEMO_USER', 'LONG_VIEW', long_text),
+            ]
+
+        self.mock_cursor.execute.side_effect = execute_side_effect
+        self.mock_cursor.fetchall.side_effect = fetchall_side_effect
+
+        view_refs = {('DEMO_USER', 'SHORT_VIEW'), ('DEMO_USER', 'LONG_VIEW')}
+        definitions = self.resolver._fetch_view_definitions(view_refs)
+
+        # Short view should have its definition
+        self.assertIsNotNone(definitions.get(('DEMO_USER', 'SHORT_VIEW')))
+        # Long view (>= 12500 chars) should be marked truncated (None)
+        self.assertIsNone(definitions.get(('DEMO_USER', 'LONG_VIEW')))
+
+    def test_show_view_fallback(self):
+        """Test _fetch_view_definition_show_view returns joined text from result rows."""
+        self.mock_cursor.fetchall.return_value = [
+            ('CREATE VIEW DEMO_USER.MY_VIEW AS',),
+            ('SELECT id, name FROM base_table',),
+        ]
+
+        result = self.resolver._fetch_view_definition_show_view('DEMO_USER', 'MY_VIEW')
+
+        # Assert returns joined text
+        self.assertIsNotNone(result)
+        self.assertIn('CREATE VIEW', result)
+        self.assertIn('SELECT id, name', result)
+
+    def test_show_view_fallback_failure(self):
+        """Test _fetch_view_definition_show_view returns None on exception."""
+        self.mock_cursor.execute.side_effect = Exception('SHOW VIEW failed')
+
+        result = self.resolver._fetch_view_definition_show_view('DEMO_USER', 'MY_VIEW')
+
+        # Assert graceful degradation (returns None, no exception raised)
+        self.assertIsNone(result)
+
+    # =========================================================================
+    # VIEW-03: Recursive view expansion
+    # =========================================================================
+
+    def test_expand_view_simple(self):
+        """Test simple view expansion: CREATE VIEW v AS SELECT * FROM base_table."""
+        # Pre-populate cache with base table columns so the proxy can find them
+        self.resolver._column_cache[('DEMO_USER', 'BASE_TABLE')] = ['col_a', 'col_b', 'col_c']
+
+        view_sql = 'CREATE VIEW DEMO_USER.MY_VIEW AS SELECT * FROM DEMO_USER.BASE_TABLE'
+        columns = self.resolver._expand_view_columns('DEMO_USER', 'MY_VIEW', view_sql, {})
+
+        # Assert view expands to base table's columns
+        self.assertEqual(columns, ['col_a', 'col_b', 'col_c'])
+
+    def test_expand_view_depth_limit(self):
+        """Test depth limit: stops expansion when MAX_VIEW_EXPANSION_DEPTH reached."""
+        # Set depth counter at limit
+        self.resolver._view_expansion_depth = self.resolver.MAX_VIEW_EXPANSION_DEPTH
+
+        view_sql = 'CREATE VIEW DEMO_USER.DEEP_VIEW AS SELECT * FROM DEMO_USER.BASE_TABLE'
+
+        # Should stop and log warning
+        with self.assertLogs('wildcard_resolver', level='WARNING') as log_context:
+            columns = self.resolver._expand_view_columns('DEMO_USER', 'DEEP_VIEW', view_sql, {})
+
+        # Assert returns empty list
+        self.assertEqual(columns, [])
+        # Assert depth limit warning logged
+        warning_found = any('depth limit' in msg.lower() for msg in log_context.output)
+        self.assertTrue(warning_found, f"Expected depth limit warning. Got: {log_context.output}")
+
+    def test_expand_view_circular_detection(self):
+        """Test circular reference detection: VIEW_A -> VIEW_A logs ERROR."""
+        # Simulate VIEW_A is already in the expansion path
+        self.resolver._view_expansion_path = {('DEMO_USER', 'VIEW_A')}
+
+        view_sql = 'CREATE VIEW DEMO_USER.VIEW_A AS SELECT * FROM DEMO_USER.VIEW_A'
+
+        # Should detect cycle and log error
+        with self.assertLogs('wildcard_resolver', level='ERROR') as log_context:
+            columns = self.resolver._expand_view_columns('DEMO_USER', 'VIEW_A', view_sql, {})
+
+        # Assert returns empty list
+        self.assertEqual(columns, [])
+        # Assert circular reference error logged
+        error_found = any('circular' in msg.lower() for msg in log_context.output)
+        self.assertTrue(error_found, f"Expected circular reference error. Got: {log_context.output}")
+
+    def test_replace_view_normalization(self):
+        """Test REPLACE VIEW is normalized to CREATE VIEW before parsing."""
+        # Pre-populate cache with base table columns
+        self.resolver._column_cache[('DEMO_USER', 'BASE_TABLE')] = ['id', 'name']
+
+        # Teradata stores view definitions as REPLACE VIEW
+        view_sql = 'REPLACE VIEW DEMO_USER.MY_VIEW AS SELECT * FROM DEMO_USER.BASE_TABLE'
+        columns = self.resolver._expand_view_columns('DEMO_USER', 'MY_VIEW', view_sql, {})
+
+        # Assert normalization works: view expands to base table columns
+        self.assertEqual(columns, ['id', 'name'])
+
+    # =========================================================================
+    # VIEW-04: View expansion caching
+    # =========================================================================
+
+    def test_expand_view_cached_result(self):
+        """Test cached expansion result is returned without re-parsing."""
+        # Pre-populate expansion cache
+        self.resolver._view_expansion_cache[('DEMO_USER', 'MY_VIEW')] = ['col1', 'col2']
+
+        view_sql = 'CREATE VIEW DEMO_USER.MY_VIEW AS SELECT * FROM DEMO_USER.BASE_TABLE'
+        columns = self.resolver._expand_view_columns('DEMO_USER', 'MY_VIEW', view_sql, {})
+
+        # Assert cached result returned
+        self.assertEqual(columns, ['col1', 'col2'])
+        # Assert no cursor interaction (no DB query needed for cached result)
+        self.mock_cursor.execute.assert_not_called()
+
+    def test_warm_cache_with_views_integration(self):
+        """Test warm_cache() correctly processes views alongside tables."""
+        # Configure: one view in refs, one table
+        # Step 1 - _identify_views (TablesV with TableKind): returns view ref
+        # Step 2 - _warm_cache_batch (ColumnsJQV): returns table columns
+        # Step 3 - _fetch_view_definitions (TablesV with RequestText): returns view SQL
+
+        table_col_rows = [('DEMO_USER', 'BASE_TABLE', 'id', 1), ('DEMO_USER', 'BASE_TABLE', 'name', 2)]
+
+        call_count = [0]
+
+        def execute_side_effect(query, *args):
+            self._last_query = query
+            call_count[0] += 1
+
+        def fetchall_side_effect():
+            q = getattr(self, '_last_query', '')
+            # _identify_views: TablesV with TableKind (no RequestText)
+            if 'TablesV' in q and 'TableKind' in q and 'RequestText' not in q:
+                return [('DEMO_USER', 'MY_VIEW')]
+            # _warm_cache_batch: ColumnsJQV for the table
+            elif 'ColumnsJQV' in q:
+                return table_col_rows
+            # _fetch_view_definitions: TablesV with RequestText
+            elif 'TablesV' in q and 'RequestText' in q:
+                return [
+                    ('DEMO_USER', 'MY_VIEW',
+                     'CREATE VIEW DEMO_USER.MY_VIEW AS SELECT * FROM DEMO_USER.BASE_TABLE', 'N')
+                ]
+            return []
+
+        self.mock_cursor.execute.side_effect = execute_side_effect
+        self.mock_cursor.fetchall.side_effect = fetchall_side_effect
+
+        # Warm cache with both a table and a view ref
+        table_refs = {('DEMO_USER', 'BASE_TABLE'), ('DEMO_USER', 'MY_VIEW')}
+        self.resolver.warm_cache(table_refs)
+
+        # Assert cache has entries for the base table
+        base_cols = self.resolver.resolve_star('DEMO_USER', 'BASE_TABLE')
+        self.assertEqual(base_cols, ['id', 'name'])
+
+        # Assert resolve_star works for the view (via expansion)
+        view_cols = self.resolver.resolve_star('DEMO_USER', 'MY_VIEW')
+        self.assertEqual(view_cols, ['id', 'name'])
+
+
 if __name__ == '__main__':
     unittest.main()
