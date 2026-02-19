@@ -131,11 +131,11 @@ Plans:
 Plans:
 - [ ] 11-01-PLAN.md -- Alphabetical column sorting in graph nodes, DetailPanel, and unit tests
 
-### Phase 12: Prevent database cluster overlap in lineage graph visualization
+### ✅ Phase 12: Prevent database cluster overlap in lineage graph visualization (Complete 2026-02-19)
 
 **Goal:** Ensure database cluster bounding boxes in the lineage graph do not visually overlap by adding ELK partitioning to the flat-layout path and increasing cluster padding
 **Depends on:** Phase 11
 **Plans:** 1 plan
 
 Plans:
-- [ ] 12-01-PLAN.md -- ELK partitioning on flat-layout path + ClusterBackground padding increase + unit tests
+- [x] 12-01-PLAN.md -- ELK partitioning on flat-layout path + ClusterBackground padding increase + unit tests
