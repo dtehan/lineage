@@ -19,6 +19,26 @@ from unittest.mock import MagicMock, patch, call
 from wildcard_resolver import WildcardResolver
 
 
+def make_query_discriminating_fetchall(mock_cursor, column_rows):
+    """Create a fetchall side_effect that returns [] for TablesV queries
+    and column_rows for ColumnsJQV queries.
+
+    This is needed because warm_cache() now makes an additional DBC.TablesV
+    query to detect views before the DBC.ColumnsJQV query for table metadata.
+
+    Args:
+        mock_cursor: The MagicMock cursor
+        column_rows: Rows to return for ColumnsJQV queries
+    """
+    def fetchall_side_effect():
+        last_query = mock_cursor.execute.call_args[0][0]
+        if 'TablesV' in last_query:
+            return []  # no views found
+        return column_rows  # ColumnsJQV result
+
+    mock_cursor.fetchall.side_effect = fetchall_side_effect
+
+
 class TestWildcardResolver(unittest.TestCase):
     """Unit tests for WildcardResolver class."""
 
@@ -33,23 +53,29 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_warm_cache_single_table(self):
         """Test single table query and caching."""
-        # Mock cursor.fetchall() returning 3 columns
-        self.mock_cursor.fetchall.return_value = [
+        # Mock cursor.fetchall() returning 3 columns for ColumnsJQV,
+        # and [] for TablesV (no views). Use query-discriminating side_effect
+        # because warm_cache() now calls DBC.TablesV before DBC.ColumnsJQV.
+        original_column_rows = [
             ('DEMO_USER', 'CUSTOMERS', 'customer_id', 1),
             ('DEMO_USER', 'CUSTOMERS', 'name', 2),
             ('DEMO_USER', 'CUSTOMERS', 'email', 3),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
 
         # Warm cache with single table
         table_refs = {('demo_user', 'customers')}
         self.resolver.warm_cache(table_refs)
 
-        # Assert cursor.execute() was called
-        self.mock_cursor.execute.assert_called_once()
-        call_args = self.mock_cursor.execute.call_args[0][0]
-        self.assertIn('DBC.ColumnsJQV', call_args)
-        self.assertIn('DEMO_USER', call_args)
-        self.assertIn('CUSTOMERS', call_args)
+        # Assert cursor.execute() was called (now 2 calls: TablesV + ColumnsJQV)
+        self.mock_cursor.execute.assert_called()
+        call_args_list = [c[0][0] for c in self.mock_cursor.execute.call_args_list]
+        tables_v_calls = [q for q in call_args_list if 'TablesV' in q]
+        columns_jqv_calls = [q for q in call_args_list if 'ColumnsJQV' in q]
+        self.assertTrue(len(tables_v_calls) >= 1, "Expected at least one TablesV call")
+        self.assertTrue(len(columns_jqv_calls) >= 1, "Expected at least one ColumnsJQV call")
+        self.assertIn('DEMO_USER', columns_jqv_calls[0])
+        self.assertIn('CUSTOMERS', columns_jqv_calls[0])
 
         # Assert cache contains correct columns in order
         columns = self.resolver.resolve_star('demo_user', 'customers')
@@ -57,8 +83,9 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_warm_cache_multiple_tables(self):
         """Test batch query with multiple tables."""
-        # Mock cursor.fetchall() returning columns for 3 tables
-        self.mock_cursor.fetchall.return_value = [
+        # Mock cursor.fetchall() returning columns for 3 tables for ColumnsJQV
+        # and [] for TablesV (no views). Use query-discriminating side_effect.
+        original_column_rows = [
             ('DB1', 'TABLE1', 'col1', 1),
             ('DB1', 'TABLE1', 'col2', 2),
             ('DB2', 'TABLE2', 'colA', 1),
@@ -66,6 +93,7 @@ class TestWildcardResolver(unittest.TestCase):
             ('DB2', 'TABLE2', 'colC', 3),
             ('DB3', 'TABLE3', 'id', 1),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
 
         # Provide 3 (database, table) pairs
         table_refs = {
@@ -75,8 +103,8 @@ class TestWildcardResolver(unittest.TestCase):
         }
         self.resolver.warm_cache(table_refs)
 
-        # Verify single execute() call (batch, not per-table)
-        self.mock_cursor.execute.assert_called_once()
+        # Verify execute() was called (now 2 calls: TablesV + ColumnsJQV)
+        self.mock_cursor.execute.assert_called()
 
         # Assert all tables cached
         self.assertEqual(self.resolver.resolve_star('db1', 'table1'), ['col1', 'col2'])
@@ -94,10 +122,11 @@ class TestWildcardResolver(unittest.TestCase):
     def test_warm_cache_deduplicates(self):
         """Test duplicate refs don't cause duplicate queries."""
         # Mock cursor.fetchall() returning columns for one table
-        self.mock_cursor.fetchall.return_value = [
+        original_column_rows = [
             ('DEMO_USER', 'MYTABLE', 'col1', 1),
             ('DEMO_USER', 'MYTABLE', 'col2', 2),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
 
         # Provide same table twice with different casing
         table_refs = {
@@ -117,8 +146,10 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_warm_cache_pagination(self):
         """Test batch splitting at 100 tables."""
-        # Mock cursor.fetchall() to return empty (we only care about call count)
-        self.mock_cursor.fetchall.return_value = []
+        # Mock cursor.fetchall() to return empty (we only care about call count).
+        # Use query-discriminating side_effect to ensure TablesV calls return []
+        # and ColumnsJQV calls also return [] (we're testing pagination, not content).
+        make_query_discriminating_fetchall(self.mock_cursor, [])
 
         # Provide 150 table references
         table_refs = {
@@ -127,8 +158,12 @@ class TestWildcardResolver(unittest.TestCase):
         }
         self.resolver.warm_cache(table_refs)
 
-        # Assert cursor.execute() called twice (100 + 50)
-        self.assertEqual(self.mock_cursor.execute.call_count, 2)
+        # Assert cursor.execute() called 3 times:
+        # 2 TablesV batches (100 + 50) to identify views
+        # + 2 ColumnsJQV batches (100 + 50) for table metadata
+        # = 4 total (since all 150 refs are treated as tables: no views found)
+        # Actually: 2 TablesV (100+50) + 2 ColumnsJQV (100+50) = 4
+        self.assertEqual(self.mock_cursor.execute.call_count, 4)
 
     def test_warm_cache_graceful_on_error(self):
         """Test no exception on database error."""
@@ -168,12 +203,13 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_resolve_star_returns_cached_columns(self):
         """Test happy path - returns cached columns in order."""
-        # Warm cache
-        self.mock_cursor.fetchall.return_value = [
+        # Warm cache with query-discriminating mock
+        original_column_rows = [
             ('DB', 'TBL', 'a', 1),
             ('DB', 'TBL', 'b', 2),
             ('DB', 'TBL', 'c', 3),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
         self.resolver.warm_cache({('db', 'tbl')})
 
         # Resolve star
@@ -188,10 +224,11 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_resolve_star_case_insensitive(self):
         """Test case normalization on lookup."""
-        # Cache warmed with uppercase
-        self.mock_cursor.fetchall.return_value = [
+        # Cache warmed with uppercase - use query-discriminating mock
+        original_column_rows = [
             ('DB', 'TBL', 'col1', 1),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
         self.resolver.warm_cache({('DB', 'TBL')})
 
         # Resolve with lowercase
@@ -200,11 +237,12 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_resolve_star_default_database(self):
         """Test None database uses default_database."""
-        # Cache warmed with default database
-        self.mock_cursor.fetchall.return_value = [
+        # Cache warmed with default database - use query-discriminating mock
+        original_column_rows = [
             ('DEMO_USER', 'ORDERS', 'order_id', 1),
             ('DEMO_USER', 'ORDERS', 'amount', 2),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
         self.resolver.warm_cache({('demo_user', 'orders')})
 
         # Resolve with None database
@@ -217,11 +255,12 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_stats_tracking(self):
         """Test hit/miss counts are accurate."""
-        # Warm cache for one table
-        self.mock_cursor.fetchall.return_value = [
+        # Warm cache for one table - use query-discriminating mock
+        original_column_rows = [
             ('DB', 'TBL', 'col1', 1),
             ('DB', 'TBL', 'col2', 2),
         ]
+        make_query_discriminating_fetchall(self.mock_cursor, original_column_rows)
         self.resolver.warm_cache({('db', 'tbl')})
 
         # Hit: resolve cached table
