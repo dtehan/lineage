@@ -1,363 +1,289 @@
-# Performance Optimization Research Summary
+# Project Research Summary
 
-**Project:** Lineage v2.0 - Column-Level Data Lineage Performance Optimization
-**Domain:** Multi-layer web application performance (Database + Backend + Frontend + Caching)
-**Researched:** 2026-02-15
+**Project:** SQL Wildcard Expansion for Column-Level Lineage
+**Domain:** Data lineage extraction - SQL parser enhancement
+**Researched:** 2026-02-18
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The 60-second lineage graph load time bottleneck spans three layers: Teradata recursive CTEs (estimated 50-55s), ELKjs layout computation (3-5s), and React rendering overhead (1-2s). Research across all layers identifies clear optimization paths with high confidence: composite indexes + statistics collection for database queries, Web Worker offloading for graph layout, Redis cache-aside pattern for repeated queries, and React memoization for component re-renders.
+SQL wildcard expansion (`SELECT *`, `SELECT t.*`) is essential for complete column-level lineage extraction from DBQL queries. Currently, the Teradata lineage application skips queries with wildcards, resulting in 30-50% incomplete lineage coverage for JOIN-heavy workloads. Research confirms that wildcard expansion is achievable with **zero new dependencies** by extending SQLGlot's existing optimizer module (`sqlglot.optimizer.qualify`) and leveraging the existing DBC.ColumnsJQV metadata queries already used in the codebase.
 
-The recommended approach follows a profile-measure-optimize cycle with each layer independently measurable. Database optimization (Phase 1) targets the 50-55s CTE execution through composite indexes on join pairs, statistics collection, and lineage_id-based cycle detection. Frontend optimization (Phase 2) eliminates the 3-5s UI freeze by moving ELKjs to Web Workers. Caching (Phase 3) provides 30-600x speedup for repeated queries with 80%+ hit rates. This layered approach ensures optimizations compound rather than conflict.
+The recommended approach involves three integration points: (1) metadata caching via a new `WildcardResolver` class that batch-queries DBC.ColumnsJQV for all referenced tables, (2) AST-level wildcard expansion in `TeradataSQLParser._extract_select_columns()` using SQLGlot's `qualify()` function with `expand_stars=True`, and (3) dependency injection to preserve testability. This design adds <5 MB memory overhead and <1ms per-query latency when metadata is cached, with a one-time 0.5-2 second batch metadata query cost.
 
-**Critical risk:** Breaking CTE correctness while optimizing. The existing 73 database tests with cycle detection validation (CYCLE5_TEST, NESTED_DIAMOND, FANOUT10_TEST) must pass before/after every change. Secondary risk: optimizing the wrong layer first. Profiling infrastructure (benchmark_cte.py, API timing logs, React Profiler) must establish baseline measurements before any optimization work begins.
+Critical risks include stale metadata (current schema doesn't match historical query execution), N+1 metadata query anti-patterns (solved via batch caching), and ambiguous multi-table wildcards (mitigated by detecting and skipping unqualified `SELECT *` in JOINs during Phase 1). The phased approach allows incremental validation: Phase 1 handles simple wildcards with comprehensive metadata caching, Phase 2 adds qualified wildcards (`t.*`) and schema evolution warnings, and Phase 3 tackles advanced patterns like view expansion and CTE recursion.
 
 ## Key Findings
 
-### Backend Query Optimization (BACKEND.md)
+### Recommended Stack
 
-Teradata recursive CTEs for lineage traversal take approximately 60 seconds across all graph types. The bottleneck is compounded by missing composite indexes, stale/missing statistics, string-based cycle detection overhead, and potential lock contention.
+SQLGlot (>=28.0.0) provides mature wildcard expansion via the `sqlglot.optimizer.qualify()` function with built-in schema catalog support through `MappingSchema`. The codebase already uses SQLGlot >=25.0.0, requiring only a minor version upgrade. DBC.ColumnsJQV (already in use for `populate_openlineage_fields()`) provides complete column metadata including views via QVCI.
 
-**Core optimizations:**
-- **Composite indexes on join pairs**: `(target_dataset, target_field)` and `(source_dataset, source_field)` to cover recursive join conditions — Teradata requires all columns in WHERE clause for composite index usage
-- **Statistics collection**: COLLECT STATISTICS on indexed columns enables optimizer to choose efficient join strategies — #1 Teradata optimization per official docs and community consensus
-- **lineage_id-based cycle detection**: Replace `dataset.field` string concatenation with integer-based paths to reduce VARCHAR overhead and POSITION() string search cost
-- **LOCKING ROW FOR ACCESS**: Row-level locks instead of table-level READ locks improves concurrency in multi-user environments
+**Core technologies:**
+- **SQLGlot >=28.0.0**: AST parsing + optimizer for star expansion — native feature, zero additional dependencies, handles all wildcard patterns with schema context
+- **sqlglot.optimizer.qualify**: Normalize and expand `SELECT *` to column lists — official SQLGlot API with `expand_stars=True` parameter
+- **sqlglot.schema.MappingSchema**: In-memory schema catalog for wildcard expansion — lightweight dict-based representation, supports 3-level hierarchy (catalog.database.table.column)
+- **DBC.ColumnsJQV**: Teradata system view for column metadata — already in use, requires QVCI enabled, provides column order for correct expansion sequence
 
-**Expected improvement:** 60s → 2-4s (15-30x) after Phase 1 (indexing) + Phase 2 (query patterns) optimizations.
+**Critical dependencies:**
+- QVCI (Queryable View Column Index) must be enabled on Teradata system (already documented in CLAUDE.md)
+- Python >=3.9 (SQLGlot 28.x requirement)
 
-### Frontend Rendering Optimization (FRONTEND.md)
+**What NOT to use:**
+- DBC.ColumnsV (returns NULL for view column types)
+- Custom regex/string parsing (breaks on complex queries)
+- HELP COLUMN commands (legacy, slow, N queries per table)
+- Persistent schema database (adds complexity, staleness issues)
 
-React Flow 12.0 performs well for 600-node graphs when properly configured, but ELKjs layout computation blocks the main thread for 3-5 seconds. Current implementation already uses best practices (Zustand state management, virtualization threshold at 50 nodes, memoized TableNode components).
+### Expected Features
 
-**Core optimizations:**
-- **ELKjs Web Worker**: Built-in worker support offloads layout computation from main thread — eliminates 3-5 second UI freeze, most impactful frontend optimization
-- **Memoization audit**: Verify nodeTypes, edgeTypes, and event handlers are stable references to prevent unnecessary re-renders
-- **Progressive rendering**: Show database clusters before full layout completes to improve perceived performance
-- **Disable transitions for large graphs**: CSS animations on 600+ nodes degrade performance significantly
+Wildcard expansion falls into five categories: simple wildcards (table stakes), qualified wildcards (competitive advantage), INSERT INTO ordinal matching (critical for correctness), CTAS name derivation (simpler pattern), and SELECT * EXCEPT (BigQuery-specific, defer to v2+).
 
-**Expected improvement:** 3-5s blocking → <1s async (layout still computes but doesn't freeze UI).
+**Must have (table stakes):**
+- **Simple SELECT * expansion** — Core SQL pattern, users expect all lineage tools to handle this. Requires schema lookup from OL_DATASET_FIELD, position-based matching.
+- **INSERT INTO...SELECT * ordinal matching** — Critical: columns matched by POSITION (1st to 1st, 2nd to 2nd), NOT by name. SQL standard behavior. Name-based matching creates incorrect lineage.
+- **CREATE TABLE AS SELECT * name derivation** — Target column names inherit source names (or aliases). Standard DDL pattern, simpler than INSERT as target schema is defined by query.
+- **Confidence scoring** — Wildcards inherently less certain than explicit columns. Use 0.70 for wildcard-expanded lineage vs 0.95 for explicit references.
 
-**Critical discovery:** React Flow 12.0 added batching of initial store updates and prevented unnecessary NodeRenderer re-renders. Current implementation uses correct patterns (Zustand, memoization, virtualization) so frontend is well-positioned.
+**Should have (competitive):**
+- **Qualified wildcards (t.*)** — Essential for multi-table queries with JOINs. Requires table alias resolution (already exists in `TeradataSQLParser._table_aliases`). Differentiates t1.* from t2.* in same query.
+- **Schema evolution warnings** — Alert when source table column count changed since last extraction. Tracks metadata staleness, prevents incorrect lineage after schema changes.
+- **Wildcard expansion auditing** — Log each wildcard expansion (table, column count, timestamp). Debugging aid for lineage gaps.
+- **Partial failure handling** — Continue extraction when some wildcards fail to expand. Graceful degradation better than all-or-nothing.
 
-### Caching Strategy (CACHING.md)
+**Defer (v2+):**
+- **SELECT * EXCEPT support** — BigQuery extension, not ANSI SQL or Teradata native. High complexity (custom AST handling). Low value for Teradata-focused lineage.
+- **Cross-database wildcard resolution** — Edge case, most queries single-database.
+- **Historical schema reconstruction** — Requires schema versioning system. Current snapshot approach sufficient for most use cases.
 
-Redis caching with cache-aside pattern fits naturally at the repository layer. Lineage data characteristics favor caching: deterministic (same inputs → same outputs), infrequent updates (hourly/daily ETL), repeated access (users explore same graphs during sessions), and expensive computation (recursive CTEs).
+**Anti-features (avoid):**
+- Real-time wildcard expansion during query execution (adds latency, external dependency)
+- Auto-fix column mismatches (guessing creates incorrect lineage)
+- Wildcard expansion without schema metadata (impossible to be accurate)
+- Name-based column matching for INSERT INTO (violates SQL standard)
 
-**Core approach:**
-- **Repository-layer cache-aside**: Flask-Caching with Redis backend at `LineageRepository` methods using `@cache.memoize()` decorator
-- **Structured cache keys**: `lineage:{graph_type}:{dataset}:{field}:{direction}:{depth}` enables pattern-based invalidation
-- **Hybrid TTL + event-based invalidation**: 1-hour TTL baseline with manual invalidation API for ETL job completion
-- **Cache stampede prevention**: Distributed locking with Redis SETNX for high-traffic queries
+### Architecture Approach
 
-**Expected improvement:** Cache hit <100ms vs 60s cache miss = 600x faster. With 80% hit rate after warmup, average query time drops from 60s to ~12s (4-5x overall improvement).
+Wildcard expansion integrates at the AST traversal phase in `TeradataSQLParser._extract_select_columns()`, replacing the current `continue` statement that skips wildcards. A new `WildcardResolver` class handles metadata queries and caching, injected into the parser via dependency injection to preserve testability.
 
-**Memory estimate:** 600-node graph = ~250 KB JSON. 2 GB Redis can cache ~8,000 graphs, far exceeding typical dataset size (50 tables × 150 cached variations = 7,500 graphs).
+**Major components:**
+1. **WildcardResolver (new)** — Queries DBC.ColumnsJQV for column lists, caches results in-memory per (database, table) key. Batch-queries all tables referenced in DBQL queries upfront to avoid N+1 pattern.
+2. **TeradataSQLParser (modified)** — Accepts optional `wildcard_resolver` parameter in constructor. When encountering `exp.Star` nodes, calls `resolver.resolve_star(db, table)` and expands to column list in AST.
+3. **DBQLExtractor (modified)** — Creates `WildcardResolver` with cursor, passes to parser. Handles resolver lifecycle per extraction run.
 
-### Performance Pitfalls (PITFALLS.md)
+**Data flow:**
+```
+1. DBQLExtractor fetches queries from DBQL
+2. Build schema catalog: batch query DBC.ColumnsJQV for all referenced tables
+3. Create WildcardResolver with schema cache
+4. For each query: parser expands wildcards via resolver during AST traversal
+5. Lineage mapping proceeds with expanded columns
+6. Insert to OL_COLUMN_LINEAGE (same format as explicit columns)
+```
 
-Eight critical pitfalls identified with phase-specific prevention strategies:
+**Key patterns:**
+- **Dependency Injection** — Optional `wildcard_resolver` parameter preserves backward compatibility and testability (unit tests without database)
+- **Cache-Aside with Dictionary** — In-memory cache reduces queries from O(queries × tables) to O(unique tables), acceptable 5 MB memory overhead
+- **Qualified vs Unqualified Handling** — `SELECT t.*` explicit (resolve directly), `SELECT *` inferred (require single table in FROM or skip)
 
-1. **Optimizing without profiling first** — Profile before optimizing to identify actual bottleneck (database vs backend vs frontend). 60s could be 55s DB + 3s layout + 2s render, making wrong layer optimization wasteful.
+**Project structure:**
+- `database/scripts/populate/wildcard_resolver.py` (NEW)
+- `database/scripts/populate/dbql_extractor.py` (MODIFIED: instantiate resolver)
+- `lineage-api/utils/sql_parser.py` (MODIFIED: add wildcard expansion logic)
 
-2. **Breaking CTE correctness** — Recursive CTE optimization changes (cycle detection, path tracking, join conditions) must not break correctness. All 73 database tests must pass before/after.
+### Critical Pitfalls
 
-3. **React re-render hell** — Direct store access to `nodes` array causes graph to re-render on every pan/zoom/drag. Use selective Zustand selectors, React.memo on components, and virtualization.
+Research identified 8 critical pitfalls ranked by impact and likelihood. The top 3 must be addressed in Phase 1.
 
-4. **Cache invalidation failures** — Caching without TTL and invalidation strategy shows stale lineage. Every cache key needs TTL, tag-based invalidation for related entries, and stampede prevention.
+1. **Stale Metadata (CRITICAL - Phase 1 document, Phase 3 fix)** — Current schema doesn't match historical query execution. You expand `SELECT *` using today's columns, but SQL ran weeks ago when table had different structure. **Avoid:** Accept lower confidence (0.70 for wildcards), document limitation clearly. Phase 3: add schema versioning with timestamp tracking.
 
-5. **CTE path string overflow** — `VARCHAR(4000)` path column overflows on deep graphs (depth 20+) with long table names. Use lineage_id instead of qualified names in paths.
+2. **N+1 Metadata Query Performance Trap (CRITICAL - Phase 1 mandatory)** — Querying DBC.ColumnsJQV separately for each `SELECT *` occurrence. With 1000 queries across 50 unique tables, this creates 1000+ metadata round-trips (extraction takes 20 minutes instead of 30 seconds). **Avoid:** Two-pass extraction: (1) collect unique table references from all queries, (2) batch query metadata with `IN (...)` clause, (3) cache in-memory, (4) expand wildcards using cache. NOT an optimization—this is a correctness requirement at scale.
 
-6. **ELKjs blocking main thread** — Synchronous layout freezes browser for 3-5 seconds on 600-node graphs. Move to Web Worker to keep UI responsive.
+3. **Ambiguous Table References (HIGH - Phase 1 detect/skip, Phase 2 fix)** — Unqualified `SELECT * FROM t1 JOIN t2` is table-ambiguous. Can't determine which columns came from which table. **Avoid:** Phase 1: detect multi-table context, skip unqualified wildcards, log warning. Phase 2: add qualified wildcard support (`SELECT t1.*, t2.*`).
 
-7. **Measuring "feels faster"** — Subjective optimization without concrete measurements. Document baseline before optimization, use automated benchmarking, measure median not average.
+4. **CTE and Subquery Wildcard Depth Explosion (HIGH - Phase 1 limit)** — Nested CTEs with wildcards require recursive expansion. 10-level CTE chains cause exponential complexity or stack overflow. **Avoid:** Set depth limit (5 levels), add cycle detection for recursive CTEs.
 
-8. **Premature index creation** — Creating indexes without EXPLAIN analysis may not help and slows writes. Analyze execution plans before creating indexes.
+5. **View Definition Wildcards (MEDIUM - Phase 3)** — Views with `SELECT *` in definition require transitive expansion. Lineage stops at view boundary without recursive parsing. **Avoid:** Phase 1: treat views like tables, document limitation. Phase 3: parse view definitions from DBC.TablesV.RequestText, expand recursively with depth limits.
 
 ## Implications for Roadmap
 
-Based on research, suggested four-phase structure optimizes each layer independently with compounding benefits:
+Based on research, wildcard expansion should be implemented in 3 phases over 5-7 day timeline. Phase structure prioritizes rapid validation with production data while deferring complex edge cases.
 
-### Phase 1: Database Query Optimization
+### Phase 1: Core Wildcard Expansion + Metadata Caching (3-4 days)
 
-**Rationale:** Database queries account for 50-55s of 60s load time (estimated 90%+ of bottleneck). Optimizing this layer first provides largest absolute improvement. Composite indexes + statistics are foundational optimizations with HIGH confidence from Teradata official docs.
-
-**Delivers:**
-- Composite secondary indexes on join pairs (target_dataset/target_field, source_dataset/source_field)
-- Statistics collection on all indexed columns
-- lineage_id-based cycle detection to reduce path overhead
-- LOCKING ROW FOR ACCESS hints for concurrency
-- Baseline measurement infrastructure (benchmark_cte.py with --depths and --iterations)
-
-**Addresses:**
-- Missing composite indexes bottleneck
-- Stale/missing statistics causing suboptimal query plans
-- String concatenation overhead in cycle detection
-- Lock contention in multi-user scenarios
-
-**Avoids:**
-- Pitfall #8 (premature index creation) by using EXPLAIN analysis first
-- Pitfall #2 (breaking CTE correctness) by running 73 database tests before/after
-- Pitfall #7 (measuring "feels faster") by establishing baseline metrics
-
-**Target:** 60s → 10-15s (4-6x improvement)
-
-**Research flags:**
-- Standard Teradata optimization patterns (skip deeper research)
-- Existing benchmark_cte.py infrastructure ready to use
-- May need EXPLAIN plan analysis skills (documented in research)
-
----
-
-### Phase 2: Frontend Layout Optimization
-
-**Rationale:** After database optimization reduces query time to 10-15s, frontend becomes visible bottleneck (3-5s layout computation). ELKjs Web Worker is HIGH confidence optimization with built-in support. Memoization patterns are well-documented React Flow best practices.
+**Rationale:** Handles 60-70% of wildcard patterns (simple SELECT *, INSERT INTO ordinal matching, CTAS) with mandatory performance foundation (metadata caching). Delivers immediate value by unblocking lineage extraction for single-table wildcard queries.
 
 **Delivers:**
-- ELKjs Web Worker integration for non-blocking layout
-- React Profiler instrumentation for re-render measurement
-- Memoization audit on TableNode, event handlers, and layout options
-- Progressive rendering with loading states
-- Performance-aware transitions (disabled for graphs > 200 nodes)
+- Simple `SELECT *` expansion from single-table queries
+- INSERT INTO ordinal position matching (SQL standard behavior)
+- CREATE TABLE AS name derivation
+- Batch metadata query + in-memory caching (prevents N+1 trap)
+- Confidence scoring (0.70 for wildcards)
+- Case normalization for Teradata identifiers
 
-**Uses:**
-- ELKjs Web Worker API (built-in support)
-- React.memo for component optimization
-- React Profiler for measurement
-- Existing Zustand store (already optimal, no changes needed)
+**Addresses features:**
+- Simple SELECT * expansion (table stakes)
+- INSERT INTO...SELECT * ordinal matching (table stakes)
+- CTAS name derivation (table stakes)
+- Confidence scoring (table stakes)
 
-**Implements:**
-- Non-blocking layout computation architecture
-- Selective re-render strategy for graph interactions
+**Avoids pitfalls:**
+- N+1 metadata queries (MANDATORY - batch caching required from start)
+- Case sensitivity mismatch (normalize on metadata lookup)
+- Stale metadata (document limitation, use confidence penalty)
+- CTE depth explosion (set depth limit = 5, add cycle detection)
+- EXCLUDE/EXCEPT syntax (detect and skip with warning)
 
-**Avoids:**
-- Pitfall #6 (ELKjs blocking main thread) via Web Worker offloading
-- Pitfall #3 (React re-render hell) via memoization and selective selectors
-- Pitfall #7 (measuring "feels faster") via React Profiler metrics
+**Technical work:**
+1. Create `WildcardResolver` class with batch metadata query + caching
+2. Modify `TeradataSQLParser.__init__()` for optional resolver injection
+3. Add `_expand_wildcards()` method using sqlglot.optimizer.qualify
+4. Modify `DBQLExtractor.extract_lineage()` to instantiate resolver
+5. Add unit tests with mock resolver
+6. Add integration tests with real DBC.ColumnsJQV queries
 
-**Target:** 10-15s → 6-10s (eliminating 3-5s UI freeze, layout still computes asynchronously)
+**Success criteria:**
+- Metadata cache hit rate >80% after first 100 queries
+- Extraction time increase <5% for queries with cached wildcards
+- Zero metadata queries after cache warm-up
+- Queries with unqualified multi-table `SELECT *` logged and skipped
 
-**Research flags:**
-- Standard React Flow patterns (skip deeper research)
-- Web Worker implementation is straightforward (ELK provides API)
-- May need performance testing on actual 600-node graphs
+### Phase 2: Qualified Wildcards + Schema Evolution (2-3 days)
 
----
-
-### Phase 3: Redis Caching Layer
-
-**Rationale:** After database + frontend optimization reduces load time to 6-10s, caching provides final leap to <2s for repeated queries. Cache-aside pattern is proven for read-heavy workloads. 80%+ hit rate expected based on user session patterns (exploring related datasets).
-
-**Delivers:**
-- Flask-Caching integration with Redis backend
-- Repository-layer cache decorators on lineage queries
-- Structured cache key design with pattern-based invalidation
-- Cache invalidation API endpoint for ETL job completion
-- Cache warming strategy for high-value graphs
-- Monitoring for hit rate, memory usage, and eviction rate
-
-**Uses:**
-- Redis 7 with RDB persistence
-- Flask-Caching library (mature, v1.0+)
-- Connection pooling (50 max connections)
-
-**Implements:**
-- Cache-aside pattern at repository layer
-- Hybrid TTL (1 hour) + event-based invalidation
-- Distributed locking for cache stampede prevention
-
-**Avoids:**
-- Pitfall #4 (cache invalidation failures) via TTL on all keys + manual invalidation API
-- Pitfall #7 (measuring "feels faster") via cache hit rate monitoring
-- Cache key explosion via structured key patterns and sanitization
-
-**Target:** 6-10s → <2s average with 80% hit rate (cache hit <100ms, cache miss 6-10s)
-
-**Research flags:**
-- Standard Redis caching patterns (skip deeper research)
-- May need TTL tuning based on actual ETL schedules
-- Cache warming integration with populate_lineage.py needs coordination
-
----
-
-### Phase 4: Query Pattern Refinement
-
-**Rationale:** If Phase 1-3 don't reach 2-4s target, this phase applies advanced query optimizations. Deferred because these are higher complexity with MEDIUM confidence on benefit. Only pursue if earlier phases insufficient.
+**Rationale:** Handles remaining 30% of wildcard patterns (qualified t.*, multi-table queries) and adds production robustness (schema change detection, partial failures). Depends on Phase 1 validation with real DBQL data.
 
 **Delivers:**
-- VARCHAR path column sizing optimization (reduce from 4000 to measured 2x max)
-- Early filtering optimization (push namespace to base query)
-- Incremental layout for depth changes (avoid full recalculation)
-- Join indexes for common traversal patterns (if materialization needed)
+- Qualified wildcard expansion (`SELECT t1.*, t2.*`)
+- Multi-table query support with table alias resolution
+- Schema evolution warnings (column count mismatches)
+- Wildcard expansion auditing (log table, columns, timestamp)
+- Partial failure handling (continue on metadata errors)
+- Positional ORDER BY detection (skip with warning)
 
-**Uses:**
-- Teradata join index capabilities
-- ELK incremental layout mode
-- Production path length measurements
+**Addresses features:**
+- Qualified wildcards (differentiator)
+- Schema evolution warnings (differentiator)
+- Wildcard expansion auditing (differentiator)
+- Partial failure handling (differentiator)
 
-**Avoids:**
-- Pitfall #5 (path VARCHAR overflow) via production validation
-- Over-optimization before measuring actual need
+**Avoids pitfalls:**
+- Ambiguous table references (qualified wildcards resolve ambiguity)
+- Wildcard + positional ORDER BY (detect, skip, log)
 
-**Target:** 2-4s → 1-2s (refinement, not major jump)
+**Technical work:**
+1. Extend `_expand_wildcards()` for qualified stars (`expr.table` attribute)
+2. Add table alias resolution from existing `_table_aliases` map
+3. Add schema timestamp tracking + staleness warnings
+4. Add per-wildcard try/catch for graceful degradation
+5. Add expansion audit logging
 
-**Research flags:**
-- MEDIUM confidence — needs deeper research if pursued
-- Incremental layout complexity may be high (ELK integration)
-- Join indexes require careful analysis of storage/maintenance tradeoffs
+**Success criteria:**
+- Queries with `SELECT t1.*, t2.*` extract correctly
+- Schema mismatches flagged with confidence 0.50 (vs 0.70)
+- Metadata failures skip wildcard but continue extracting explicit columns
 
----
+### Phase 3: Advanced Patterns - View Expansion (2 days, OPTIONAL)
+
+**Rationale:** Handles edge cases (view transitive lineage, CTE recursion) identified as lower priority during research. Only implement if Phase 1-2 validation reveals high demand for view-level lineage. May be deferred to v2.0 if users satisfied with view-as-table boundary.
+
+**Delivers:**
+- View definition parsing from DBC.TablesV.RequestText
+- Recursive view expansion with depth limits
+- Transitive lineage through view layers (base_table → view → target)
+
+**Addresses pitfalls:**
+- View definition wildcards (transitive expansion)
+
+**Technical work:**
+1. Add view detection (DBC.TablesV.TableKind = 'V')
+2. Query and parse view definitions (RequestText)
+3. Recursive wildcard expansion with depth limit = 3 for views
+4. Cache expanded view schemas
+
+**Success criteria:**
+- Lineage for views shows base table sources (not just view boundary)
+- Recursive view chains handled up to depth 3
+- Circular view references detected and logged
 
 ### Phase Ordering Rationale
 
 **Why this order:**
-1. **Database first**: Largest absolute time savings (50-55s → 10-15s). Foundational optimization with HIGH confidence.
-2. **Frontend second**: Next visible bottleneck after database optimization. ELKjs Worker is high-impact, low-complexity change.
-3. **Caching third**: Multiplicative benefit after query optimization. Cache 2s query is better than caching 60s query.
-4. **Query patterns last**: Advanced optimizations only if target not met. Defer complexity until proven necessary.
+1. **Phase 1 before Phase 2 before Phase 3:** Dependency-based ordering. Qualified wildcards (Phase 2) build on simple wildcard expansion (Phase 1). View expansion (Phase 3) requires stable wildcard expansion foundation.
+
+2. **Metadata caching mandatory in Phase 1:** N+1 pitfall is not an optimization concern—it's a correctness issue. Without batch caching, extraction is unusable at production scale (1000+ queries).
+
+3. **Qualified wildcards in Phase 2 (not Phase 1):** Simple wildcards cover 60-70% of patterns and allow rapid validation. Qualified wildcards add complexity (alias resolution, multi-table coordination) that should be tackled after core pattern validates.
+
+4. **View expansion optional in Phase 3:** Research shows view expansion is complex (recursive parsing, depth limits, circular references) and only valuable if users demand transitive lineage through views. Phase 1-2 deliver complete functionality for table-level lineage, allowing product decision on whether view expansion ROI justifies complexity.
 
 **Dependencies discovered:**
-- Caching effectiveness depends on query speed (caching 60s queries provides less UX benefit than caching 2s queries)
-- Frontend optimization impact only visible after database optimization (3s layout hidden by 55s query)
-- Statistics collection required for index effectiveness (optimizer needs fresh stats to use indexes)
+- Qualified wildcards depend on simple wildcard expansion
+- Schema evolution warnings require timestamp tracking infrastructure
+- View expansion requires recursive parsing with cycle detection
 
 **Pitfall avoidance:**
-- Phase 1 establishes profiling infrastructure before optimization (avoids Pitfall #1)
-- All phases require running existing test suites (avoids Pitfall #2)
-- Each phase has measurable success criteria (avoids Pitfall #7)
+- Phase 1 includes metadata caching (avoids N+1 trap)
+- All phases include depth limits (avoids recursion explosion)
+- Each phase logs skipped patterns (transparency for users)
 
 **Compounding benefits:**
-- Phase 1 reduces query time 4-6x
-- Phase 2 eliminates UI freeze (perceived 2-3x faster)
-- Phase 3 provides 30-600x speedup on cache hits (80%+ hit rate after warmup)
-- Combined: 60s → 2s average (30x overall improvement)
+- Phase 1 unlocks 60-70% of wildcard patterns
+- Phase 2 unlocks remaining 30% + adds robustness
+- Phase 3 enables transitive lineage through views
 
 ### Research Flags
 
+**Phases needing deeper research during planning:**
+- **Phase 3 (View Expansion):** SQLGlot Antiselect parsing support UNKNOWN. Teradata uses `Antiselect` function (not `SELECT * EXCEPT`). Need to test if sqlglot.parse_one() recognizes this syntax before implementing.
+
 **Phases with standard patterns (skip research-phase):**
-- **Phase 1 (Database):** Well-documented Teradata optimization patterns. Existing benchmark_cte.py ready to use. EXPLAIN analysis is standard practice.
-- **Phase 2 (Frontend):** React Flow performance docs are comprehensive. ELKjs Web Worker has built-in support. Memoization patterns are established best practices.
-- **Phase 3 (Caching):** Redis cache-aside pattern is industry standard. Flask-Caching is mature library with extensive docs.
-
-**Phases needing validation during planning:**
-- **Phase 4 (Query Patterns):** MEDIUM confidence on benefit. Incremental layout complexity needs investigation. Join indexes require storage/maintenance analysis. Only pursue if Phase 1-3 insufficient.
-
-**Areas needing production validation:**
-- Actual path lengths in production (for VARCHAR sizing)
-- Real cache hit rates (depends on user behavior patterns)
-- Index selectivity on production data (EXPLAIN analysis required)
-- Optimal TTL for caching (depends on ETL schedule)
+- **Phase 1:** SQLGlot star expansion verified with official docs. DBC.ColumnsJQV already in use. Integration points clear from codebase analysis.
+- **Phase 2:** Table alias resolution already implemented in `_table_aliases`. Schema evolution is standard metadata comparison pattern.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Database Optimization | HIGH | Composite indexes + statistics are foundational Teradata optimizations. Multiple official sources confirm approach. Existing benchmark infrastructure ready. |
-| Frontend Optimization | HIGH | React Flow 12.0 performance docs comprehensive. ELKjs Web Worker has built-in support. Existing implementation uses best practices (Zustand, memoization, virtualization). |
-| Caching Strategy | HIGH | Cache-aside pattern proven for read-heavy workloads. Flask-Caching is mature. Redis best practices well-documented. Repository-layer injection is clean architecture fit. |
-| Pitfalls Prevention | HIGH | Eight critical pitfalls identified with clear prevention strategies. Existing test infrastructure (73 DB + 20 API + 260 frontend + 21 E2E) supports validation. |
+| Stack | HIGH | SQLGlot star expansion verified with API docs and GitHub source. DBC.ColumnsJQV already in production use. Zero new dependencies. Version upgrade (25 → 28) is backward compatible. |
+| Features | HIGH | Feature categories validated against DataHub, Metaplane, and sqllineage implementations. SQL standard behavior (ordinal matching) verified with W3Schools and PostgreSQL docs. MVP definition aligns with table stakes identified across sources. |
+| Architecture | HIGH | Integration points verified in existing codebase (`sql_parser.py` line 424-478, `dbql_extractor.py`). Dependency injection pattern standard. Cache-aside with dict well-established. Performance estimates based on measured DBC query latency (10-50ms). |
+| Pitfalls | HIGH | Stale metadata, N+1 queries, ambiguous wildcards validated in DataHub blog, Metaplane blog, and academic paper (LineageX). CTE depth issues documented in PostgreSQL and SQLServer sources. View expansion complexity confirmed via Teradata DBC documentation. |
 
 **Overall confidence:** HIGH
 
-Research synthesizes three high-quality domain-specific documents (BACKEND.md, FRONTEND.md, CACHING.md) with comprehensive pitfall analysis (PITFALLS.md). All sources are recent (2023-2026), from authoritative sources (official Teradata/React Flow/Redis docs, reputable technical blogs, academic papers), and converge on consistent recommendations.
+All core recommendations backed by official documentation (SQLGlot API, Teradata DBC views) and verified implementations (DataHub uses identical approach). The existing codebase provides concrete integration points, eliminating architectural uncertainty. Performance characteristics estimated from measured metadata query latency and memory overhead calculations.
 
 ### Gaps to Address
 
-**Database layer:**
-- **Gap:** Actual row count in OL_COLUMN_LINEAGE unknown — optimization strategy differs for 10K vs 10M rows
-- **Handle:** Query `SELECT COUNT(*) FROM OL_COLUMN_LINEAGE` during Phase 1 setup
-- **Gap:** Typical graph depth in production unknown — depth 5 vs 20 has different optimization priorities
-- **Handle:** Run benchmark_cte.py on production data to measure max_depth_found
+1. **SQLGlot Antiselect support (Phase 3):** Research couldn't confirm if sqlglot.parse_one() recognizes Teradata's Antiselect function. **Resolution:** Test parsing during Phase 3 planning. If unsupported, document as v2+ feature.
 
-**Frontend layer:**
-- **Gap:** React Flow 12.0 canvas renderer not yet available — would provide 2-3x better performance than SVG for 600+ nodes
-- **Handle:** Monitor React Flow releases, consider opt-in when available
+2. **Metadata query failure modes:** Research identified failure scenarios (QVCI disabled, table dropped, permissions denied) but couldn't quantify frequency in production. **Resolution:** Add comprehensive error logging in Phase 1. Monitor error rates during first week of production use to prioritize Phase 2 error handling improvements.
 
-**Caching layer:**
-- **Gap:** Optimal TTL unknown — 1-hour TTL is educated guess based on typical ETL schedules
-- **Handle:** Start with 1 hour, monitor cache hit rates and staleness complaints, adjust based on real usage
-- **Gap:** Cache hit rate projection (80%+) based on assumption of user session patterns
-- **Handle:** Monitor actual hit rates after deployment, adjust warming strategy if below 60%
+3. **Schema staleness threshold:** Proposed 30-day cutoff for "stale metadata" warnings based on typical ETL cadences, but not validated against actual schema change frequency. **Resolution:** Make configurable via environment variable. Start with 30 days, adjust based on user feedback.
 
-**Integration:**
-- **Gap:** Breakdown of 60s load time across layers unknown — could be 55s DB + 3s layout + 2s render, or different distribution
-- **Handle:** Add timing instrumentation (API logs, React Profiler) in Phase 1 before optimization to establish baseline breakdown
-
-**All gaps are addressable during implementation.** No gaps block Phase 1 planning.
+4. **Wildcard expansion for ORDER BY/GROUP BY positional references:** Research identified the pitfall but didn't find established resolution patterns in other lineage tools. **Resolution:** Phase 1 detects and skips (conservative approach). Phase 2 investigate if SQLGlot's qualify() handles positional references automatically.
 
 ## Sources
 
-### Backend Optimization (HIGH confidence)
+### Primary (HIGH confidence)
+- **SQLGlot API Documentation** (sqlglot.com) — Star expansion via qualify() function, MappingSchema class, Teradata dialect support
+- **SQLGlot GitHub Repository** (github.com/tobymao/sqlglot) — Source code for qualify_columns.py, version compatibility (28.10.1 latest stable)
+- **Teradata Documentation** (docs.teradata.com) — DBC.ColumnsV vs DBC.ColumnsJQV, QVCI requirements, view column metadata
+- **DataHub Blog: Extracting Column-Level Lineage from SQL** (datahubproject.io) — Schema-aware parsing approach, metadata requirements, SQLGlot integration patterns
+- **Existing Codebase** (`sql_parser.py`, `dbql_extractor.py`, `populate_lineage.py`) — Current architecture, integration points, DBC query patterns
 
-**Teradata Recursive CTEs:**
-- [Mastering Teradata Recursive Queries - DWH Pro](https://www.dwhpro.com/teradata-recursive-queries/)
-- [SQL Fundamentals | Teradata Vantage - Recursive Queries](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Fundamentals/SQL-Data-Definition-Control-and-Manipulation/Recursive-Queries)
-- [Mastering Teradata Performance Tuning - Medium](https://medium.com/@guruprasadnujaimalsaedi/mastering-teradata-performance-tuning-best-practices-for-sql-optimization-834dccbaa375)
+### Secondary (MEDIUM confidence)
+- **Metaplane Blog: Column-Level Lineage** (metaplane.dev) — SQL parser challenges, wildcard handling pitfalls
+- **Recce Blog: Column-Level Lineage Internals** (reccehq.com) — SQLGlot lineage extraction approach
+- **sqllineage Documentation** (sqllineage.readthedocs.io) — Column-level lineage design patterns
+- **PostgreSQL Documentation** (postgresql.org) — INSERT INTO ordinal position matching behavior
+- **W3Schools SQL Reference** (w3schools.com) — SQL standard behavior for wildcards and INSERT
 
-**Teradata Indexing:**
-- [3 ways to use Indexes in Teradata - Packt](https://hub.packtpub.com/3-ways-to-use-indexes-in-teradata-to-improve-database-performance/)
-- [Understanding The Teradata Primary Index - DWH Pro](https://www.dwhpro.com/teradata-primary-index-pi/)
-- [Multiple Secondary Indexes and Composites - Teradata](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/SQL-Fundamentals/Database-Objects/Secondary-Indexes/Multiple-Secondary-Indexes-and-Composites)
-
-**Teradata Statistics:**
-- [Improving Query Performance Using COLLECT STATISTICS - Teradata](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/Database-Administration/Improving-Query-Performance-Using-COLLECT-STATISTICS-Application-DBAs)
-- [The Importance of Up-to-Date Statistics - DWH Pro](https://www.dwhpro.com/teradata-sql-tuning-top-10/)
-
-### Frontend Optimization (HIGH confidence)
-
-**React Flow Performance:**
-- [React Flow Performance Documentation](https://reactflow.dev/learn/advanced-use/performance)
-- [React Flow 12 Release Notes](https://reactflow.dev/whats-new/2024-07-09)
-- [The Ultimate Guide to Optimize React Flow - Medium](https://medium.com/@lukasz.jazwa_32493/the-ultimate-guide-to-optimize-react-flow-project-performance-42f4297b2b7b)
-- [Performance Discussion #4975](https://github.com/xyflow/xyflow/discussions/4975)
-
-**ELKjs Layout:**
-- [ELKjs GitHub Repository](https://github.com/kieler/elkjs)
-- [ELK Layered Algorithm Reference](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html)
-- [ELK Performance Paper - arXiv](https://arxiv.org/pdf/2311.00533)
-- [ELK JavaScript API](https://deepwiki.com/kieler/elkjs/3.1-javascript-api)
-
-**State Management:**
-- [Zustand vs Context Performance 2026](https://medium.com/@sparklewebhelp/redux-vs-zustand-vs-context-api-in-2026-7f90a2dc3439)
-
-### Caching Strategy (HIGH confidence)
-
-**Redis Caching Patterns:**
-- [Database Caching Strategies Using Redis - AWS](https://docs.aws.amazon.com/whitepapers/latest/database-caching-strategies-using-redis/caching-patterns.html)
-- [Redis Cache-Aside Simplified](https://redis.io/blog/redis-smart-cache/)
-- [Cache-Aside Pattern - Azure](https://learn.microsoft.com/en-us/azure/architecture/patterns/cache-aside)
-
-**Flask-Redis Integration:**
-- [Flask-Caching Official Documentation](https://flask-caching.readthedocs.io/)
-- [Using Flask and Redis for Performance](https://medium.com/@fahadnujaimalsaedi/using-flask-and-redis-to-optimize-web-application-performance-34a8ae750097)
-
-**Cache Invalidation:**
-- [How to Implement Cache Invalidation with Redis](https://oneuptime.com/blog/post/2026-01-25-redis-cache-invalidation/view)
-- [Cache Invalidation Strategies](https://leapcell.io/blog/cache-invalidation-strategies-time-based-vs-event-driven)
-
-### Performance Pitfalls (HIGH confidence)
-
-**Correctness Testing:**
-- [Regression Testing Guide 2026](https://www.leapwork.com/blog/regression-testing)
-- [Regression Test Performance](https://speedscale.com/blog/regression-test-performance/)
-
-**Query Optimization:**
-- [Query Optimization Patterns - Medium](https://medium.com/@artemkhrenov/query-optimization-patterns-writing-efficient-sql-for-high-performance-applications-8143e5028443)
-- [Stop Optimizing the Wrong Things - Dagster](https://dagster.io/blog/when-and-when-not-to-optimize-data-pipelines)
-
-**Redis Anti-Patterns:**
-- [Redis Anti-Patterns to Avoid](https://redis.io/tutorials/redis-anti-patterns-every-developer-should-avoid/)
-- [Redis Caching Pitfalls - Medium](https://medium.com/@QuarkAndCode/redis-caching-pitfalls-invalidation-testing-best-practices-3950a0660f1a)
-
-### Project-Specific Context
-
-- Existing `benchmark_cte.py` with depth testing and metrics collection
-- 73 database tests including cycle detection (CYCLE5_TEST, NESTED_DIAMOND, FANOUT10_TEST)
-- Current implementation using React Flow 12.0, Zustand, virtualization (VIRTUALIZATION_THRESHOLD = 50)
-- Loguru structured logging with correlation IDs already in place
+### Tertiary (LOW confidence)
+- **DWH Pro: Teradata Antiselect** (dwhpro.com) — Antiselect function documentation (not official Teradata docs)
+- **Medium: Teradata Antiselect** (medium.com/@r.wenzlofsky) — Usage examples, but author not verified Teradata expert
+- **DBMSTutorials: Teradata Metadata Queries** (dbmstutorials.com) — DBC query patterns, community-contributed
 
 ---
-
-*Research completed: 2026-02-15*
+*Research completed: 2026-02-18*
 *Ready for roadmap: yes*

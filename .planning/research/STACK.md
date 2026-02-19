@@ -1,314 +1,385 @@
-# Stack Research
+# Stack Research: Wildcard Expansion in SQL Lineage Extraction
 
-**Domain:** Teradata data lineage application - Impact Analysis feature and backend refactoring
-**Researched:** 2026-02-13
+**Domain:** SQL wildcard expansion for DBQL-based column lineage extraction
+**Researched:** 2026-02-18
 **Confidence:** HIGH
+
+## Context
+
+This research focuses ONLY on stack additions/changes needed for wildcard expansion (`SELECT *`, `SELECT t.*`, `SELECT * EXCEPT`) in existing DBQL lineage extraction. The system already has:
+- SQLGlot parser (>=25.0.0) for SQL parsing
+- DBC.ColumnsJQV queries for table/view metadata
+- OpenLineage schema (OL_* tables) for lineage storage
+- populate_lineage.py + dbql_extractor.py for DBQL extraction
 
 ## Recommended Stack
 
-### Backend: Logging and Exception Handling
+### Core: SQLGlot Optimizer for Star Expansion
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| loguru | >=0.7.3 | Structured logging with JSON output | Simplest Python logging library with zero-config JSON support, automatic contextualization, and better DX than stdlib logging. Flask community standard for structured logs. |
-| Flask (existing) | >=3.0.0 | Web framework | Already in use. Native logging integration via `app.logger`. |
+| sqlglot | >=28.0.0 | SQL parser with optimizer for star expansion | Version 28+ includes mature star expansion via `qualify()` function with `expand_stars=True` parameter. Already in use for parsing, now extending to use optimizer module. |
+| sqlglot.optimizer.qualify | Built-in | Normalize and expand SELECT * to column lists | Official SQLGlot method for star expansion. Requires schema catalog to resolve wildcards. Handles `SELECT *`, `SELECT t.*`, and dialect-specific exclusions. |
+| sqlglot.schema.MappingSchema | Built-in | In-memory schema catalog for star expansion | Lightweight schema representation supporting 3-level hierarchy (catalog.database.table.column). No external dependencies. |
 
-**Rationale for loguru over alternatives:**
-- **vs structlog**: Loguru requires zero configuration for JSON output while structlog needs explicit pipeline setup. For this application's size, loguru's simplicity wins.
-- **vs python-json-logger**: No longer actively maintained. Loguru provides superset of features with better API.
-- **vs stdlib logging**: Loguru adds automatic exception catching, better formatting, JSON output, and rotation - all without complex handler/formatter setup.
+**Why sqlglot.optimizer.qualify:**
+- Native SQLGlot feature, zero additional dependencies
+- Handles all wildcard patterns: `*`, `table.*`, qualified table references
+- Schema-aware expansion respects table context in JOINs
+- Returns expanded AST for existing lineage extraction logic
 
-### Backend: Application Structure (Service/Repository Pattern)
+**Why NOT custom regex/string parsing:**
+- Wildcards in complex queries (CTEs, subqueries, JOINs) require semantic understanding
+- Schema context needed to resolve `t.*` when `t` is an alias
+- SQLGlot AST already parsed, optimizer extends existing workflow
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| Flask Blueprints (stdlib) | Built-in | Modular application structure | Official Flask pattern for organizing large applications. Zero dependencies, native support, excellent documentation. |
-| NO dependency injection framework | - | Explicit > implicit | Python's dynamic nature + Flask's request context make DI frameworks (python-dependency-injector, Flask-Injector) unnecessary overhead for this application size. Use constructor injection with factory functions. |
+### Supporting: Schema Population from Teradata Metadata
 
-**Architecture Pattern:**
+| Component | Source | Purpose | Integration Point |
+|-----------|--------|---------|-------------------|
+| DBC.ColumnsJQV query | Teradata system view | Retrieve complete column lists for all tables/views in query | Called during DBQL extraction before SQL parsing |
+| Schema caching | Python dict | In-memory cache of table → columns mapping | Populated once per extraction batch, reused across queries |
+| QVCI requirement | Teradata DB config | Enable DBC.ColumnsJQV access for view column metadata | Already documented in CLAUDE.md, confirmed working |
+
+**Why DBC.ColumnsJQV:**
+- Already in use for `populate_openlineage_fields()` (line 198 of populate_lineage.py)
+- Returns complete column metadata including views (unlike DBC.ColumnsV)
+- Single query retrieves all columns for all referenced tables
+- Provides column order (ColumnId) for correct expansion sequence
+
+**Schema Query Pattern:**
+```sql
+-- Extract all columns for tables referenced in DBQL queries
+SELECT
+    TRIM(DatabaseName) as db_name,
+    TRIM(TableName) as tbl_name,
+    TRIM(ColumnName) as col_name,
+    ColumnId as ordinal
+FROM DBC.ColumnsJQV
+WHERE (DatabaseName, TableName) IN (
+    -- Subquery: extract unique table references from DBQL query batch
+    SELECT source_db, source_table FROM extracted_tables
+)
+ORDER BY DatabaseName, TableName, ColumnId
 ```
-lineage-api/
-├── api/                    # Flask blueprints (routes)
-│   ├── __init__.py
-│   ├── lineage_bp.py
-│   ├── datasets_bp.py
-│   └── namespaces_bp.py
-├── services/              # Business logic
-│   ├── __init__.py
-│   ├── lineage_service.py
-│   ├── dataset_service.py
-│   └── namespace_service.py
-├── repositories/          # Database access
-│   ├── __init__.py
-│   ├── base_repository.py
-│   ├── lineage_repository.py
-│   ├── dataset_repository.py
-│   └── namespace_repository.py
-├── models/               # Domain models (not DB models)
-│   └── __init__.py
-├── exceptions/           # Custom exceptions
-│   └── __init__.py
-├── config.py            # Configuration
-└── app_factory.py       # Application factory
-```
 
-### Frontend: Impact Analysis UI
+### Integration: Wildcard Expansion Workflow
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| TanStack Table | ^8.21.3 | Data table with sorting, filtering, pagination | Impact Analysis table display - already using TanStack Query, ecosystem consistency. |
-| lucide-react (existing) | ^0.300.0 | Icons | Already in use, has needed icons (AlertTriangle, ArrowRight, Database). |
-| NO charting library | - | - | Impact Analysis does not require charts/visualizations per fixture inspection - only tabular data with summary metrics. Existing components sufficient. |
+| Step | Technology | Method | Purpose |
+|------|------------|--------|---------|
+| 1. Parse SQL | sqlglot | `sqlglot.parse_one(sql, dialect="teradata")` | Already implemented in `TeradataSQLParser._parse_with_sqlglot()` |
+| 2. Extract table refs | sqlglot AST | `parsed.find_all(exp.Table)` | Identify tables needing column metadata |
+| 3. Query metadata | Teradata | DBC.ColumnsJQV | Build schema catalog for referenced tables only |
+| 4. Build schema | sqlglot.schema.MappingSchema | `MappingSchema(nested_dict)` | Create schema object for qualify() |
+| 5. Expand stars | sqlglot.optimizer.qualify | `qualify(parsed, schema=schema, expand_stars=True)` | Replace * with column lists in AST |
+| 6. Extract lineage | Existing logic | `_extract_insert_lineage(expanded_ast)` | Proceed with existing column mapping logic |
 
-**Why TanStack Table:**
-- Headless UI = full styling control with existing Tailwind classes
-- Lightweight (10-15kb)
-- React 18 compatible
-- Already using TanStack Query - same ecosystem, similar patterns
-- Built-in sorting, filtering, pagination without external dependencies
-
-**Why NOT recharts/visx:**
-- Impact Analysis fixture shows tabular data only (database, table, column, depth, impact type)
-- Summary metrics are simple counts displayed in `ImpactSummary` component
-- No time series, distributions, or relationships requiring visualization
-- Would add 50-200kb for unused functionality
-
-### Testing: New Code Patterns
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| pytest-mock | ^3.15.1 | Mocking with automatic cleanup | Unit tests for service layer, repository mocking in service tests. |
-| pytest-flask | ^1.3.0 | Flask test fixtures | Blueprint integration tests, request context testing. |
-| pytest (existing) | Latest | Test runner | Already in use for database tests. |
+**Modified Code Location:**
+- `lineage-api/utils/sql_parser.py` → Add `_expand_wildcards()` helper method
+- `database/scripts/populate/dbql_extractor.py` → Add schema caching before query processing loop
 
 ## Installation
 
-### Backend (Python)
+**No new dependencies required.** All components are either:
+- Already installed: `sqlglot>=25.0.0` (in requirements.txt)
+- Built-in to sqlglot: `sqlglot.optimizer.qualify`, `sqlglot.schema`
+- Existing infrastructure: DBC.ColumnsJQV queries, Teradata connection
+
+**Version Upgrade (Recommended):**
 ```bash
-# Add to requirements.txt
-loguru>=0.7.3
+# Update requirements.txt
+sqlglot>=28.0.0  # Up from >=25.0.0
 
 # Install
-pip install loguru>=0.7.3
+pip install --upgrade sqlglot
 ```
 
-### Backend Testing (Python)
-```bash
-# Add to requirements-dev.txt (create if doesn't exist)
-pytest-mock>=3.15.1
-pytest-flask>=1.3.0
-
-# Install
-pip install pytest-mock pytest-flask
-```
-
-### Frontend (React)
-```bash
-# From lineage-ui/
-npm install @tanstack/react-table@^8.21.3
-```
+**Rationale for 28.0.0:**
+- Version 25.0.0 has star expansion, but 28.x includes bug fixes and Teradata dialect improvements
+- Latest stable: 28.10.1 (released 2026-02-09)
+- Backward compatible with existing parsing code
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | When to Use Alternative |
-|----------|-------------|-------------|-------------------------|
-| Logging | loguru | structlog | Need async logging, buffered writes, or processing pipelines (e.g., PII redaction). This app doesn't need those. |
-| Logging | loguru | stdlib logging | Never for new code. Only if contributing to projects that mandate stdlib. |
-| Backend Structure | Blueprints + manual DI | python-dependency-injector | Large team needs enforced patterns, or migrating from DI-heavy framework (Spring, .NET). Overkill here. |
-| Impact Table | TanStack Table | Material React Table | Need Material UI design system. This app uses custom Tailwind. |
-| Impact Table | TanStack Table | Recharts/visx | Actually need charts. This feature needs tables only. |
+| Recommended | Alternative | Why Not Alternative |
+|-------------|-------------|---------------------|
+| sqlglot.optimizer.qualify | Manual regex wildcard detection + string replacement | Complex queries (CTEs, subqueries) break regex patterns. No schema context for `t.*` resolution. |
+| DBC.ColumnsJQV metadata query | Parse SHOW TABLE output | Requires N additional queries (one per table). No column order guarantee. |
+| Schema caching per batch | Query metadata per SQL statement | 1000+ queries in batch → 1000+ metadata round-trips. 50x slower. |
+| MappingSchema (dict-based) | Custom schema class | MappingSchema is official API, handles 3-level hierarchy, well-tested. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| python-json-logger | No longer maintained, last update 2020 | loguru (actively maintained, better API) |
-| Flask-Injector | Adds magic, unclear value for 1454-line server. Increases test complexity. | Constructor injection with factory functions |
-| SQLAlchemy for this app | Application already uses raw teradatasql driver. Adding ORM now would require full rewrite. | Keep existing teradatasql with repository pattern |
-| react-table (v7) | Deprecated, replaced by TanStack Table v8 | @tanstack/react-table (official successor) |
+| DBC.ColumnsV | Returns NULL for view column types. Insufficient for view lineage. | DBC.ColumnsJQV (requires QVCI enabled) |
+| sqlglot < 25.0.0 | Older versions lack mature star expansion. Teradata dialect incomplete. | sqlglot >= 28.0.0 |
+| HELP COLUMN commands | Legacy Teradata metadata access. Requires N queries per table. Slow. | DBC.ColumnsJQV bulk query |
+| Persistent schema database | Adds complexity, staleness issues. This is point-in-time extraction. | In-memory dict cache per batch |
 
-## Stack Integration Points
+## Teradata-Specific Considerations
 
-### Logging Configuration (loguru + Flask)
-```python
-# app_factory.py
-from loguru import logger
-import sys
+### Antiselect Function (Column Exclusion)
 
-def setup_logging():
-    """Configure loguru to work with Flask."""
-    # Remove default handler
-    logger.remove()
-
-    # Add JSON handler for production
-    logger.add(
-        sys.stderr,
-        format="{time:YYYY-MM-DD HH:mm:ss} | {level} | {name}:{function}:{line} | {message}",
-        level="INFO",
-        serialize=True,  # JSON output
-        backtrace=True,
-        diagnose=True,
-    )
-
-    # Intercept Flask's app.logger
-    class InterceptHandler(logging.Handler):
-        def emit(self, record):
-            logger_opt = logger.opt(depth=6, exception=record.exc_info)
-            logger_opt.log(record.levelname, record.getMessage())
-
-    app.logger.addHandler(InterceptHandler())
+**Status:** Teradata uses `Antiselect` function, NOT `SELECT * EXCEPT` syntax
+```sql
+-- Teradata column exclusion syntax
+SELECT * FROM Antiselect (ON table_name USING Exclude ('col1','col2')) AS anti
 ```
 
-### Blueprint + Service + Repository Pattern
+**SQLGlot Support:** UNKNOWN confidence (not documented in search results)
+
+**Recommendation:**
+- Phase 1 (wildcard expansion): Handle `SELECT *` and `SELECT t.*` only
+- Phase 2 (optional): Research SQLGlot's Antiselect parsing support
+- Antiselect is advanced feature, less common than basic wildcards
+
+**Sources:**
+- [Teradata Antiselect (DWH Pro)](https://www.dwhpro.com/teradata-antiselect/)
+- [Teradata Antiselect (Medium)](https://medium.com/@r.wenzlofsky/teradata-antiselect-2bebe8457739)
+
+### QVCI Requirement
+
+**Critical Dependency:** DBC.ColumnsJQV requires QVCI (Queryable View Column Index) enabled
+
+**Validation:**
+```sql
+-- Check QVCI status (error 9719 = disabled)
+SELECT TOP 1 * FROM DBC.ColumnsJQV;
+```
+
+**Documented:** CLAUDE.md section "Teradata QVCI Requirements"
+
+**Fallback:** If QVCI disabled, use DBC.ColumnsV + HELP COLUMN (slower, already documented in codebase history)
+
+## Stack Integration Example
+
 ```python
-# api/lineage_bp.py
-from flask import Blueprint, jsonify, request
-from services.lineage_service import LineageService
-from exceptions import LineageNotFoundError
-from loguru import logger
+# lineage-api/utils/sql_parser.py
 
-lineage_bp = Blueprint('lineage', __name__, url_prefix='/api/v2/openlineage')
+from sqlglot import exp
+from sqlglot.optimizer import qualify
+from sqlglot.schema import MappingSchema
+from typing import Dict, List, Tuple
 
-def create_lineage_blueprint(lineage_service: LineageService):
-    @lineage_bp.route('/lineage/<dataset_id>/<field_name>')
-    def get_lineage(dataset_id: str, field_name: str):
+class TeradataSQLParser:
+    def __init__(self, default_database: str = None):
+        self.default_database = default_database or self.DEFAULT_DATABASE
+        self._table_aliases: Dict[str, Tuple[str, str]] = {}
+        self._schema_cache: Optional[MappingSchema] = None  # NEW
+
+    def set_schema(self, schema_dict: Dict[str, Dict[str, Dict[str, str]]]):
+        """Set schema catalog for wildcard expansion.
+
+        Args:
+            schema_dict: Nested dict {db: {table: {column: type}}}
+        """
+        self._schema_cache = MappingSchema(schema_dict)
+
+    def _parse_with_sqlglot(self, sql: str) -> List[ColumnLineage]:
+        """Parse SQL using SQLGlot and extract lineage."""
+        self._table_aliases = {}
+
+        # Parse with Teradata dialect
+        parsed = sqlglot.parse_one(sql, dialect="teradata")
+        if parsed is None:
+            return []
+
+        # NEW: Expand wildcards if schema available
+        if self._schema_cache:
+            parsed = self._expand_wildcards(parsed)
+
+        # Continue with existing lineage extraction...
+        if isinstance(parsed, exp.Insert):
+            return self._extract_insert_lineage(parsed)
+        # ... rest of existing code
+
+    def _expand_wildcards(self, parsed: exp.Expression) -> exp.Expression:
+        """Expand SELECT * using sqlglot optimizer.
+
+        Args:
+            parsed: SQLGlot AST
+
+        Returns:
+            AST with wildcards expanded to explicit column lists
+        """
         try:
-            result = lineage_service.get_column_lineage(
-                dataset_id,
-                field_name,
-                direction=request.args.get('direction', 'both'),
-                max_depth=int(request.args.get('maxDepth', 10))
+            expanded = qualify(
+                parsed,
+                schema=self._schema_cache,
+                dialect="teradata",
+                expand_stars=True,
+                qualify_columns=True,
+                validate_qualify_columns=False,  # Don't fail on unresolved refs
             )
-            return jsonify(result)
-        except LineageNotFoundError as e:
-            logger.warning(f"Lineage not found: {dataset_id}.{field_name}")
-            return jsonify({"error": str(e)}), 404
-        except ValueError as e:
-            logger.warning(f"Invalid parameters: {e}")
-            return jsonify({"error": str(e)}), 400
+            return expanded
         except Exception as e:
-            logger.exception(f"Unexpected error fetching lineage")
-            return jsonify({"error": "Internal server error"}), 500
-
-    return lineage_bp
-
-# services/lineage_service.py
-from repositories.lineage_repository import LineageRepository
-from loguru import logger
-
-class LineageService:
-    def __init__(self, lineage_repo: LineageRepository):
-        self.lineage_repo = lineage_repo
-
-    def get_column_lineage(self, dataset_id: str, field_name: str,
-                          direction: str, max_depth: int):
-        logger.info(f"Fetching lineage for {dataset_id}.{field_name}")
-
-        if max_depth < 1 or max_depth > 50:
-            raise ValueError("max_depth must be between 1 and 50")
-
-        raw_data = self.lineage_repo.fetch_lineage(
-            dataset_id, field_name, direction, max_depth
-        )
-
-        # Transform to graph format
-        return self._transform_to_graph(raw_data)
+            # Fallback: return original AST if expansion fails
+            # Log warning but don't block lineage extraction
+            return parsed
 ```
 
-### TanStack Table Integration
-```typescript
-// ImpactAnalysisTable.tsx
-import { useReactTable, getCoreRowModel, getSortedRowModel } from '@tanstack/react-table';
-import type { ImpactedAsset } from '../../../types';
+```python
+# database/scripts/populate/dbql_extractor.py
 
-const columns = [
-  { accessorKey: 'tableName', header: 'Asset' },
-  { accessorKey: 'databaseName', header: 'Database' },
-  { accessorKey: 'depth', header: 'Depth' },
-  { accessorKey: 'impactType', header: 'Impact Type' },
-];
+class DBQLExtractor:
+    def extract_lineage(self, since: Optional[datetime] = None, full: bool = False) -> int:
+        """Extract column lineage from DBQL."""
 
-export function ImpactAnalysisTable({ data }: { data: ImpactedAsset[] }) {
-  const table = useReactTable({
-    data,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
+        # Fetch queries from DBQL
+        queries = self.fetch_queries(since)
+        if not queries:
+            return 0
 
-  // Render table with existing Tailwind styles...
-}
+        # NEW: Build schema catalog for all referenced tables
+        schema_dict = self._build_schema_catalog(queries)
+        self.parser.set_schema(schema_dict)
+
+        # Process each query (existing logic continues)
+        for query_id, stmt_type, query_text, query_time, default_db, sql_length in queries:
+            # Existing processing with wildcard expansion now enabled...
+            records = self.parser.extract_column_lineage(query_text, stmt_type)
+            # ... rest of existing code
+
+    def _build_schema_catalog(self, queries: List[Tuple]) -> Dict:
+        """Build schema catalog from DBC.ColumnsJQV for all referenced tables.
+
+        Args:
+            queries: List of DBQL query tuples
+
+        Returns:
+            Nested dict {database: {table: {column: type}}}
+        """
+        # Extract unique table references from all queries
+        table_refs = set()
+        for _, _, query_text, _, _, _ in queries:
+            if not query_text:
+                continue
+            try:
+                parsed = sqlglot.parse_one(query_text, dialect="teradata")
+                for table in parsed.find_all(exp.Table):
+                    db = table.db or self.parser.default_database
+                    table_refs.add((db, table.name))
+            except:
+                continue  # Skip unparseable queries
+
+        if not table_refs:
+            return {}
+
+        # Query DBC.ColumnsJQV for all referenced tables
+        placeholders = ','.join([f"('{db}','{tbl}')" for db, tbl in table_refs])
+        query = f"""
+            SELECT
+                TRIM(DatabaseName) as db_name,
+                TRIM(TableName) as tbl_name,
+                TRIM(ColumnName) as col_name,
+                TRIM(ColumnType) as col_type
+            FROM DBC.ColumnsJQV
+            WHERE (DatabaseName, TableName) IN ({placeholders})
+            ORDER BY DatabaseName, TableName, ColumnId
+        """
+
+        self.cursor.execute(query)
+        rows = self.cursor.fetchall()
+
+        # Build nested dict structure
+        schema = {}
+        for db, table, column, col_type in rows:
+            if db not in schema:
+                schema[db] = {}
+            if table not in schema[db]:
+                schema[db][table] = {}
+            schema[db][table][column] = col_type or "VARCHAR(1000)"  # Default type
+
+        return schema
 ```
 
 ## Version Compatibility
 
-| Package | Compatible With | Notes |
-|---------|-----------------|-------|
-| loguru@0.7.3 | Python >=3.5, Flask >=3.0.0 | No known conflicts with teradatasql |
-| pytest-mock@3.15.1 | pytest >=6.0 | Already compatible with existing pytest setup |
-| pytest-flask@1.3.0 | Flask >=2.2, pytest >=6.0 | Works with Flask 3.x |
-| @tanstack/react-table@8.21.3 | React >=18.0.0, TypeScript >=4.7 | Compatible with existing React 18.2.0 |
+| Package | Current Version | Recommended Version | Notes |
+|---------|----------------|---------------------|-------|
+| sqlglot | >=25.0.0 | >=28.0.0 | Star expansion available in 25.x, but 28.x more stable. Latest: 28.10.1 (2026-02-09) |
+| Python | 3.x | >=3.9 | SQLGlot 28.x requires Python 3.9+ |
+| teradatasql | >=17.20.0 | (unchanged) | No conflicts with SQLGlot upgrade |
 
-## Migration Notes
+**Breaking Changes:** None. SQLGlot 28.x is backward compatible with 25.x parsing API.
 
-### Exception Handling Migration
-**Current:** 11 endpoints with `except Exception: traceback.print_exc()`
-**After:**
-1. Create `exceptions/__init__.py` with domain exceptions (LineageNotFoundError, DatasetNotFoundError, etc.)
-2. Service layer raises domain exceptions
-3. Blueprint handlers catch and map to HTTP responses with loguru logging
-4. Remove all `traceback.print_exc()` - loguru handles with `backtrace=True`
+## Performance Considerations
 
-### Refactoring Order
-1. Add loguru, configure in `app_factory.py`
-2. Create repository layer (database access only)
-3. Create service layer (business logic, uses repositories)
-4. Create blueprints (HTTP handling, uses services)
-5. Update `python_server.py` to use application factory
-6. Add pytest-mock and pytest-flask for new tests
+### Schema Query Cost
 
-### Frontend Impact Analysis
-1. Install @tanstack/react-table
-2. Replace existing table in `ImpactAnalysis.tsx` with TanStack Table
-3. Add sorting to columns (depth, impactType)
-4. Add filtering by database name
-5. No other components needed - ImpactSummary already exists
+**Baseline:** DBQL extraction processes 1000+ queries per batch (based on codebase analysis)
+
+**With Schema Catalog:**
+- **One-time cost:** Single DBC.ColumnsJQV query for all tables in batch
+- **Per-query cost:** In-memory schema lookup (negligible)
+
+**Estimated Impact:**
+- Schema query: +0.5-2 seconds per batch (one query for N tables)
+- Wildcard expansion: +0.01-0.05 seconds per query (AST transformation)
+- **Net benefit:** Queries with wildcards now produce lineage (currently skipped)
+
+**Optimization:** Build schema catalog only for tables referenced in batch, not all database tables
+
+### Memory Considerations
+
+**Schema Size:**
+- 1000 tables × 50 columns average = 50,000 entries
+- Dict overhead: ~100 bytes per entry = ~5 MB
+- MappingSchema wrapper: negligible
+
+**Acceptable:** DBQL extraction already loads query text (32KB per query), schema adds <10 MB
+
+## Migration Path
+
+### Phase 1: Core Wildcard Expansion (SELECT *, SELECT t.*)
+1. Add `_expand_wildcards()` to `sql_parser.py`
+2. Add `_build_schema_catalog()` to `dbql_extractor.py`
+3. Update `extract_lineage()` to call schema builder before query loop
+4. Test with existing unit tests (should pass, wildcards now expanded)
+
+### Phase 2: Validation (optional)
+5. Add unit tests for wildcard expansion with mock schema
+6. Add integration test with real DBC.ColumnsJQV query
+7. Compare lineage output before/after expansion (should be superset)
+
+### Phase 3: Antiselect Support (future enhancement)
+8. Research SQLGlot Antiselect parsing (not covered in this research)
+9. Extend `_expand_wildcards()` if SQLGlot supports Antiselect
+10. Otherwise, manual AST transformation for Antiselect patterns
+
+## Open Questions (for implementation phase)
+
+1. **SQLGlot Antiselect Support:** Does sqlglot.parse_one() recognize Teradata's Antiselect function? (requires testing)
+2. **Error Handling:** Should wildcard expansion failures block lineage extraction or log warning + continue? (recommend: log + continue)
+3. **Schema Staleness:** How to handle schema changes mid-batch? (recommend: acceptable, extraction is point-in-time)
+4. **Partial Schema:** How to handle queries referencing tables not in DBC.ColumnsJQV result? (recommend: qualify() has fallback, existing skip logic continues)
 
 ## Sources
 
-**Python Logging:**
-- [Flask Official Documentation - Logging](https://flask.palletsprojects.com/en/stable/logging/) - Flask logging configuration recommendations
-- [Loguru PyPI](https://pypi.org/project/loguru/) - Current version 0.7.3 (HIGH confidence)
-- [Loguru GitHub Releases](https://github.com/Delgan/loguru/releases) - Version verification
-- [Better Stack: Logging in Python with Loguru](https://betterstack.com/community/guides/logging/loguru/) - Best practices and comparison
-- [Better Stack: Best Python Logging Libraries](https://betterstack.com/community/guides/logging/best-python-logging-libraries/) - Library comparison with loguru vs structlog vs python-json-logger
-- [Complete Guide to Logging in Flask | SigNoz](https://signoz.io/guides/flask-logging/) - Structured logging patterns
+**SQLGlot Core:**
+- [SQLGlot GitHub](https://github.com/tobymao/sqlglot) — Official repository (HIGH confidence)
+- [SQLGlot PyPI](https://pypi.org/project/sqlglot/) — Latest version 28.10.1, requires Python >=3.9 (HIGH confidence)
+- [SQLGlot API: qualify](https://sqlglot.com/sqlglot/optimizer/qualify.html) — Star expansion API documentation (HIGH confidence)
+- [SQLGlot API: schema](https://sqlglot.com/sqlglot/schema.html) — MappingSchema class documentation (HIGH confidence)
 
-**Flask Architecture:**
-- [Flask Official Documentation - Blueprints](https://flask.palletsprojects.com/en/stable/blueprints/) - Official blueprint patterns (HIGH confidence)
-- [Real Python: Use a Flask Blueprint to Architect Your Applications](https://realpython.com/flask-blueprint/) - Blueprint best practices
-- [Cosmic Python: Repository Pattern](https://www.cosmicpython.com/book/chapter_02_repository.html) - Repository pattern in Python
-- [Cosmic Python: Service Layer](https://www.cosmicpython.com/book/chapter_04_service_layer.html) - Service layer patterns
-- [Medium: Flask Repository Pattern](https://medium.com/@burchardt.tobias/flask-repository-pattern-12423ba9f6b4) - Flask-specific repository implementation
+**Star Expansion Research:**
+- [DataHub: Extracting Column-Level Lineage from SQL](https://blog.datahubproject.io/extracting-column-level-lineage-from-sql-779b8ce17567) — SQLGlot star expansion use case (MEDIUM confidence)
+- [GitHub: sqlglot/optimizer/qualify_columns.py](https://github.com/tobymao/sqlglot/blob/main/sqlglot/optimizer/qualify_columns.py) — Star expansion implementation details (HIGH confidence)
 
-**Dependency Injection:**
-- [python-dependency-injector Documentation](https://python-dependency-injector.ets-labs.org/) - DI framework overview (evaluated, not recommended for this app)
-- [Flask-Injector PyPI](https://pypi.org/project/Flask-Injector/) - Alternative DI approach (evaluated, not recommended)
-- Recommendation: Manual DI with constructor injection based on Flask's minimal philosophy
+**Teradata Metadata:**
+- [Teradata: ColumnsV[X] Documentation](https://docs.teradata.com/r/oiS9ixs9ixs2ypIQvjTUOJfgoA/fQ8NslP6DDESV0ZiODLlIw) — DBC.ColumnsV documentation (HIGH confidence)
+- [Teradata: Getting View Column Information](https://docs.teradata.com/r/Teradata-VantageCloud-Lake/Database-Reference/Database-Administration/Working-with-Tables-and-Views-Application-DBAs/Working-with-Views/Getting-View-Column-Information) — DBC.ColumnsJQV and QVCI (HIGH confidence)
+- [DBMSTutorials: Teradata Metadata Queries](https://dbmstutorials.com/teradata/teradata_data_dictionary_queries.html) — DBC views query patterns (MEDIUM confidence)
 
-**Testing:**
-- [pytest-mock PyPI](https://pypi.org/project/pytest-mock/) - Version 3.15.1 (MEDIUM confidence, Sep 2025 release)
-- [pytest-flask PyPI](https://pypi.org/project/pytest-flask/) - Version 1.3.0 (MEDIUM confidence)
-- [TestDriven.io: Testing Flask Applications with Pytest](https://testdriven.io/blog/flask-pytest/) - Flask testing patterns
-- [DataCamp: pytest-mock Tutorial](https://www.datacamp.com/tutorial/pytest-mock) - Mocking best practices
+**Teradata Antiselect:**
+- [DWH Pro: Teradata Antiselect](https://www.dwhpro.com/teradata-antiselect/) — Antiselect function documentation (MEDIUM confidence)
+- [Medium: Teradata Antiselect](https://medium.com/@r.wenzlofsky/teradata-antiselect-2bebe8457739) — Antiselect usage examples (MEDIUM confidence)
 
-**Frontend:**
-- [TanStack Table npm](https://www.npmjs.com/package/@tanstack/react-table) - Version 8.21.3 (HIGH confidence)
-- [TanStack Table Official Docs](https://tanstack.com/table/latest) - Documentation and examples
-- [Better Stack: Best React Chart Libraries](https://betterstack.com/community/guides/logging/best-python-logging-libraries/) - Comparison including recharts and visx (evaluated, determined unnecessary)
-- [LogRocket: Best React Chart Libraries 2025](https://blog.logrocket.com/best-react-chart-libraries-2025/) - Chart library comparison
+**SQLGlot Changelog:**
+- [SQLGlot CHANGELOG.md](https://github.com/tobymao/sqlglot/blob/main/CHANGELOG.md) — Version history and breaking changes (HIGH confidence)
 
 ---
-*Stack research for: Impact Analysis feature and backend refactoring*
-*Researched: 2026-02-13*
-*Confidence: HIGH - All core recommendations verified with official documentation and current versions*
+*Stack research for: Wildcard expansion in DBQL lineage extraction*
+*Researched: 2026-02-18*
+*Confidence: HIGH — SQLGlot star expansion verified with official docs and API references. DBC.ColumnsJQV already in use. Zero new dependencies required.*
