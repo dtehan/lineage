@@ -37,6 +37,7 @@ class ColumnReference:
     alias: Optional[str] = None
     is_expression: bool = False
     expression_text: Optional[str] = None
+    from_wildcard: bool = False
 
 
 @dataclass
@@ -77,10 +78,17 @@ class TeradataSQLParser:
     CONFIDENCE_STAR = 0.70         # SELECT * expansion
     CONFIDENCE_PATTERN = 0.60      # Pattern-based (fallback)
 
-    def __init__(self, default_database: str = None):
+    # Maximum CTE/subquery nesting depth for wildcard expansion
+    MAX_EXPANSION_DEPTH = 5
+
+    def __init__(self, default_database: str = None, wildcard_resolver=None):
         self.default_database = default_database or self.DEFAULT_DATABASE
         # Table alias to (database, table) mapping
         self._table_aliases: Dict[str, Tuple[str, str]] = {}
+        self.wildcard_resolver = wildcard_resolver  # Optional: enables SELECT * expansion
+        self._cte_definitions: Dict[str, exp.Select] = {}  # CTE name -> SELECT expression
+        self._expansion_depth: int = 0  # Track CTE/subquery expansion depth
+        self._expansion_path: Set[str] = set()  # Track expansion path for cycle detection
 
     def extract_column_lineage(
         self,
@@ -141,6 +149,15 @@ class TeradataSQLParser:
         if parsed is None:
             return []
 
+        # Collect CTE definitions for wildcard expansion
+        self._cte_definitions = {}
+        self._expansion_depth = 0
+        self._expansion_path = set()
+        for cte in parsed.find_all(exp.CTE):
+            cte_name = cte.alias.upper() if cte.alias else None
+            if cte_name and isinstance(cte.this, exp.Select):
+                self._cte_definitions[cte_name] = cte.this
+
         # Determine statement type and extract accordingly
         if isinstance(parsed, exp.Insert):
             return self._extract_insert_lineage(parsed)
@@ -184,6 +201,12 @@ class TeradataSQLParser:
         # Extract source columns from SELECT expressions
         source_columns = self._extract_select_columns(select_expr)
 
+        # CORE-02: If SELECT * was expanded and no explicit target columns,
+        # resolve target table columns for ordinal position matching
+        if not target_columns and any(c.from_wildcard for c in source_columns):
+            if self.wildcard_resolver:
+                target_columns = self.wildcard_resolver.resolve_star(target_db, target_tbl)
+
         # Match source to target columns
         for i, source_info in enumerate(source_columns):
             # Determine target column
@@ -201,7 +224,14 @@ class TeradataSQLParser:
 
             if source_db and source_tbl and source_info.column:
                 transformation = "CALCULATION" if source_info.is_expression else "DIRECT"
-                confidence = self.CONFIDENCE_EXPRESSION if source_info.is_expression else self.CONFIDENCE_DIRECT
+
+                # Confidence scoring with wildcard expansion
+                if source_info.from_wildcard:
+                    confidence = self.CONFIDENCE_STAR  # 0.70
+                elif source_info.is_expression:
+                    confidence = self.CONFIDENCE_EXPRESSION  # 0.85
+                else:
+                    confidence = self.CONFIDENCE_DIRECT  # 0.95
 
                 lineage.append(ColumnLineage(
                     source_database=source_db,
@@ -294,7 +324,14 @@ class TeradataSQLParser:
 
             if source_db and source_tbl and source_info.column:
                 transformation = "CALCULATION" if source_info.is_expression else "DIRECT"
-                confidence = self.CONFIDENCE_EXPRESSION if source_info.is_expression else self.CONFIDENCE_DIRECT
+
+                # Confidence scoring with wildcard expansion
+                if source_info.from_wildcard:
+                    confidence = self.CONFIDENCE_STAR  # 0.70
+                elif source_info.is_expression:
+                    confidence = self.CONFIDENCE_EXPRESSION  # 0.85
+                else:
+                    confidence = self.CONFIDENCE_DIRECT  # 0.95
 
                 lineage.append(ColumnLineage(
                     source_database=source_db,
@@ -427,8 +464,11 @@ class TeradataSQLParser:
 
         for expr in select.expressions:
             if isinstance(expr, exp.Star):
-                # Handle SELECT *
-                # This would require schema information to expand
+                # Handle SELECT * - expand if resolver available
+                if self.wildcard_resolver:
+                    expanded = self._expand_wildcard(select)
+                    columns.extend(expanded)
+                # If no resolver, skip wildcard (existing behavior)
                 continue
 
             alias = expr.alias if hasattr(expr, 'alias') else None
@@ -499,6 +539,100 @@ class TeradataSQLParser:
         elif hasattr(expr, 'name'):
             return expr.name
         return str(expr)
+
+    def _expand_wildcard(self, select: exp.Select) -> List[ColumnReference]:
+        """Expand SELECT * to actual column references using metadata.
+
+        CORE-01: Expands simple SELECT * from single-table sources.
+        CORE-07: Skips multi-table unqualified SELECT * with warning.
+        CORE-08: Respects CTE depth limit and detects cycles.
+        """
+        # Check multi-table context (CORE-07)
+        table_count = len(self._table_aliases)
+        if table_count == 0:
+            return []  # No tables in scope
+        if table_count > 1:
+            # Multi-table unqualified wildcard -- ambiguous, skip with warning
+            import logging
+            logger = logging.getLogger('sql_parser')
+            tables = list(self._table_aliases.values())
+            logger.warning(
+                "Skipping unqualified SELECT * with %d tables in scope: %s "
+                "(ambiguous table attribution, use qualified wildcards)",
+                table_count, [f"{db}.{tbl}" for db, tbl in tables[:5]]
+            )
+            return []
+
+        # Single table in scope -- resolve columns
+        db, tbl = list(self._table_aliases.values())[0]
+
+        # Check if this is a CTE reference -- need to resolve CTE columns first
+        cte_key = tbl.upper()
+        if cte_key in self._cte_definitions:
+            return self._expand_cte_wildcard(cte_key, db)
+
+        # Resolve from metadata
+        columns = self.wildcard_resolver.resolve_star(db, tbl)
+        if not columns:
+            return []
+
+        # Create ColumnReference for each expanded column
+        return [
+            ColumnReference(
+                database=db,
+                table=tbl,
+                column=col,
+                alias=None,
+                is_expression=False,
+                from_wildcard=True,
+            )
+            for col in columns
+        ]
+
+    def _expand_cte_wildcard(self, cte_name: str, default_db: str) -> List[ColumnReference]:
+        """Expand wildcard from CTE definition, respecting depth limit."""
+        # Depth limit check (CORE-08)
+        if self._expansion_depth >= self.MAX_EXPANSION_DEPTH:
+            import logging
+            logging.getLogger('sql_parser').warning(
+                "CTE expansion depth limit reached (%d levels) for CTE '%s'",
+                self.MAX_EXPANSION_DEPTH, cte_name
+            )
+            return []
+
+        # Cycle detection (CORE-08)
+        if cte_name in self._expansion_path:
+            import logging
+            logging.getLogger('sql_parser').warning(
+                "Cycle detected in CTE expansion: %s (path: %s)",
+                cte_name, ' -> '.join(self._expansion_path)
+            )
+            return []
+
+        cte_select = self._cte_definitions.get(cte_name)
+        if not cte_select:
+            return []
+
+        # Push onto expansion stack
+        self._expansion_depth += 1
+        self._expansion_path.add(cte_name)
+
+        try:
+            # Save and restore table aliases context
+            saved_aliases = self._table_aliases.copy()
+            self._table_aliases = {}
+            self._build_table_aliases(cte_select)
+
+            # Recursively extract columns from CTE's SELECT
+            columns = self._extract_select_columns(cte_select)
+
+            # Restore context
+            self._table_aliases = saved_aliases
+
+            return columns
+        finally:
+            self._expansion_depth -= 1
+            self._expansion_path.discard(cte_name)
 
     # =========================================================================
     # Pattern-Based Extraction (Fallback)
