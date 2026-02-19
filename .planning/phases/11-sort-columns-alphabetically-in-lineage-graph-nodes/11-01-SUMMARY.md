@@ -12,6 +12,7 @@ provides:
   - Alphabetical column sorting in layoutEngine.ts transformToTableNodes
   - Alphabetical column sorting in DetailPanel across all three graph components
   - Unit tests proving alphabetical sort correctness
+
 affects: [any future phase touching layoutEngine, TableNode, DetailPanel]
 
 # Tech tracking
@@ -38,22 +39,20 @@ patterns-established:
   - "DetailPanel sort pattern: getTableColumns(id).sort((a, b) => a.columnName.localeCompare(b.columnName))"
 
 # Metrics
-duration: 2min (Task 1 only; Task 2 pending human verification)
+duration: ~2min
 completed: 2026-02-19
 ---
 
 # Phase 11 Plan 01: Sort Columns Alphabetically in Lineage Graph Nodes Summary
 
-**Alphabetical column sort via localeCompare in layoutEngine.ts transformToTableNodes and in DetailPanel across all three graph components, with 3 new unit tests**
-
-**Status: Task 1 complete. Task 2 (human-verify checkpoint) pending human verification.**
+**Alphabetical column sort via localeCompare in layoutEngine.ts transformToTableNodes and in DetailPanel across all three graph components, with 3 new unit tests — human verified**
 
 ## Performance
 
-- **Duration:** ~2 min (Task 1 only)
+- **Duration:** ~2 min
 - **Started:** 2026-02-19T00:49:20Z
-- **Completed:** 2026-02-19T00:51:11Z (Task 1)
-- **Tasks:** 1 of 2 complete (Task 2 is checkpoint:human-verify)
+- **Completed:** 2026-02-19 (human verification approved)
+- **Tasks:** 2 of 2 complete
 - **Files modified:** 5
 
 ## Accomplishments
@@ -61,14 +60,16 @@ completed: 2026-02-19
 - Added `.sort((a, b) => a.columnName.localeCompare(b.columnName))` to `getTableColumns(selectedAssetId)` in LineageGraph.tsx, DatabaseLineageGraph.tsx, and AllDatabasesLineageGraph.tsx DetailPanel blocks
 - Added 3 new unit tests in layoutEngine.test.ts: basic alphabetical sort, case-insensitive sort, and per-table independent sort
 - 546 tests pass (3 more than before — the 3 new sort tests); 32 pre-existing failures unchanged (accessibility + component tests unrelated to this change)
+- Human verified: columns display alphabetically in graph nodes and DetailPanel, edges connect to correct rows
 
 ## Task Commits
 
 Each task was committed atomically:
 
 1. **Task 1: Add alphabetical column sorting to layoutEngine and all graph components** - `1266dd1` (feat)
+2. **Task 2: Verify alphabetical column sorting in lineage graph** - human-verified (checkpoint:human-verify approved)
 
-**Plan metadata:** (pending — Task 2 checkpoint not yet cleared)
+**Plan metadata:** (see final docs commit)
 
 ## Files Created/Modified
 - `lineage-ui/src/utils/graph/layoutEngine.ts` - Added `.sort((a, b) => a.name.localeCompare(b.name))` after `.map()` in `transformToTableNodes` (line 197)
@@ -96,17 +97,27 @@ None - no external service configuration required.
 
 ## Next Phase Readiness
 
-Task 2 (human-verify checkpoint) is pending. Once human confirms:
-- Columns in graph nodes are alphabetically ordered (A at top, Z at bottom)
-- Columns in DetailPanel side drawer are alphabetically ordered
-- Lineage edges still connect to correct column rows (no misaligned edges)
+Phase 11 is fully complete. This is the final planned phase in the roadmap.
 
-Phase 11 plan 01 will be fully complete.
+All planned features delivered:
+- Column-level lineage graph with alphabetical sorting
+- View lineage extraction via SQLGlot
+- Wildcard column expansion
+- Complete OpenLineage schema with recursive CTE traversal
 
-## Self-Check: PENDING
+## Self-Check: PASSED
 
-Task 2 checkpoint has not been executed. Self-check will be completed after human verification is approved.
+All files verified present:
+- FOUND: lineage-ui/src/utils/graph/layoutEngine.ts
+- FOUND: lineage-ui/src/utils/graph/layoutEngine.test.ts
+- FOUND: lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx
+- FOUND: lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx
+- FOUND: lineage-ui/src/components/domain/LineageGraph/AllDatabasesLineageGraph.tsx
+
+All commits verified present:
+- FOUND: 1266dd1 (feat: sort columns alphabetically)
+- FOUND: 87ccf19 (docs: partial summary at checkpoint)
 
 ---
 *Phase: 11-sort-columns-alphabetically-in-lineage-graph-nodes*
-*Completed: 2026-02-19 (partial — checkpoint pending)*
+*Completed: 2026-02-19*
