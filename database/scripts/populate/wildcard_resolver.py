@@ -31,6 +31,9 @@ Teradata Conventions:
 
 import json
 import logging
+import os
+import re
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -56,6 +59,9 @@ class WildcardResolver:
     # Batch size limit to prevent query explosion
     BATCH_SIZE = 100
 
+    # Maximum view expansion depth (separate from CTE's 5-level limit in TeradataSQLParser)
+    MAX_VIEW_EXPANSION_DEPTH = 3
+
     def __init__(self, cursor, default_database: str, baseline_path: str = None):
         """Initialize the wildcard resolver.
 
@@ -74,6 +80,11 @@ class WildcardResolver:
         self._baseline_path = Path(baseline_path) if baseline_path else None
         self._baseline: Dict[Tuple[str, str], int] = self._load_baseline() if self._baseline_path else {}
         self._schema_changes: List[Dict] = []  # Track detected changes for reporting
+
+        # Phase 9: View expansion state
+        self._view_expansion_cache: Dict[Tuple[str, str], List[str]] = {}
+        self._view_expansion_depth: int = 0
+        self._view_expansion_path: Set[Tuple[str, str]] = set()
 
     def _load_baseline(self) -> Dict[Tuple[str, str], int]:
         """Load column count baseline from previous extraction run.
@@ -112,6 +123,9 @@ class WildcardResolver:
         batch query (or multiple batches if > BATCH_SIZE tables). Results are cached
         in-memory for subsequent wildcard resolution.
 
+        For views, queries DBC.TablesV to detect them, then fetches view definitions
+        and expands wildcards recursively.
+
         Args:
             table_refs: Set of (database, table) tuples to fetch metadata for.
                        Database can be None (will use default_database).
@@ -141,18 +155,59 @@ class WildcardResolver:
 
             # Remove duplicates after normalization
             unique_refs = list(normalized_refs)
-            total_tables = len(unique_refs)
+            total_refs = len(unique_refs)
 
-            logger.debug(f"Warming cache for {total_tables} unique tables (after normalization)")
+            logger.debug(f"Warming cache for {total_refs} unique refs (after normalization)")
 
-            # Process in batches to avoid query limits
+            # Step 1: Identify views from all references
+            view_refs = self._identify_views(unique_refs)
+
+            # Step 2: Separate tables from views
+            table_only_refs = [r for r in unique_refs if r not in view_refs]
+            total_tables = len(table_only_refs)
+
+            logger.debug(f"Found {len(view_refs)} views and {total_tables} tables")
+
+            # Step 3: Warm table cache (existing behavior for non-view refs)
             for batch_start in range(0, total_tables, self.BATCH_SIZE):
                 batch_end = min(batch_start + self.BATCH_SIZE, total_tables)
-                batch_refs = unique_refs[batch_start:batch_end]
-
+                batch_refs = table_only_refs[batch_start:batch_end]
                 self._warm_cache_batch(batch_refs)
 
-            # Phase 8: Schema evolution detection
+            # Step 4: Fetch view definitions
+            all_view_definitions = self._fetch_view_definitions(view_refs)
+
+            # Step 5: Handle truncated definitions via SHOW VIEW fallback
+            for view_key in list(all_view_definitions.keys()):
+                if all_view_definitions[view_key] is None:
+                    db, tbl = view_key
+                    definition = self._fetch_view_definition_show_view(db, tbl)
+                    all_view_definitions[view_key] = definition
+
+            # Step 6: Reset expansion state before expanding
+            self._view_expansion_depth = 0
+            self._view_expansion_path = set()
+            self._view_expansion_cache = {}
+
+            # Step 7: Expand each view's columns
+            views_expanded = 0
+            for view_key in view_refs:
+                db, tbl = view_key
+                view_sql = all_view_definitions.get(view_key)
+                if view_sql:
+                    columns = self._expand_view_columns(db, tbl, view_sql, all_view_definitions)
+                    if columns:
+                        self._column_cache[view_key] = columns
+                        views_expanded += 1
+                    else:
+                        logger.warning(f"View expansion yielded no columns for {db}.{tbl}")
+                else:
+                    logger.warning(f"No definition available for view {db}.{tbl}, skipping expansion")
+
+            if view_refs:
+                logger.info(f"View expansion: {views_expanded}/{len(view_refs)} views expanded successfully")
+
+            # Phase 8: Schema evolution detection (unchanged)
             if self._baseline_path:
                 self._detect_schema_changes()
                 self._save_baseline()
@@ -172,6 +227,317 @@ class WildcardResolver:
                 f"Failed to warm metadata cache: {e}. "
                 "Wildcard expansion will be skipped for affected queries."
             )
+
+    def _identify_views(self, table_refs: List[Tuple[str, str]]) -> Set[Tuple[str, str]]:
+        """Identify which of the given table references are actually views.
+
+        Batch-queries DBC.TablesV using the same OR-condition pattern as
+        _warm_cache_batch() to identify views. Returns empty set on error
+        (graceful degradation).
+
+        Args:
+            table_refs: List of (database, table) tuples (already normalized)
+
+        Returns:
+            Set of (database, table) tuples that are views (TableKind = 'V')
+        """
+        if not table_refs:
+            return set()
+
+        views = set()
+
+        try:
+            # Process in batches to avoid query limits
+            for batch_start in range(0, len(table_refs), self.BATCH_SIZE):
+                batch_end = min(batch_start + self.BATCH_SIZE, len(table_refs))
+                batch_refs = table_refs[batch_start:batch_end]
+
+                # Build OR conditions for batch query
+                conditions = []
+                for db, table in batch_refs:
+                    conditions.append(f"(DatabaseName = '{db}' AND TableName = '{table}')")
+
+                where_clause = " OR ".join(conditions)
+
+                query = f"""
+                    SELECT TRIM(DatabaseName), TRIM(TableName)
+                    FROM DBC.TablesV
+                    WHERE ({where_clause}) AND TableKind = 'V'
+                """
+
+                self.cursor.execute(query)
+                rows = self.cursor.fetchall()
+
+                for row in rows:
+                    views.add((row[0], row[1]))
+
+            logger.debug(f"Identified {len(views)} views out of {len(table_refs)} table references")
+
+        except Exception as e:
+            logger.warning(f"Failed to identify views: {e}. Treating all refs as tables.")
+            return set()
+
+        return views
+
+    def _fetch_view_definitions(
+        self, view_refs: Set[Tuple[str, str]]
+    ) -> Dict[Tuple[str, str], Optional[str]]:
+        """Fetch view definitions (RequestText) from DBC.TablesV.
+
+        Tries to retrieve RequestText with overflow detection via RequestTxtOverFlow.
+        If overflow is detected (truncated at 12500 chars), sets definition to None
+        as a signal for the SHOW VIEW fallback.
+
+        Args:
+            view_refs: Set of (database, table) tuples that are views
+
+        Returns:
+            Dict mapping (database, table) -> view SQL string or None if truncated
+        """
+        if not view_refs:
+            return {}
+
+        definitions: Dict[Tuple[str, str], Optional[str]] = {}
+        view_list = list(view_refs)
+
+        try:
+            # Process in batches
+            for batch_start in range(0, len(view_list), self.BATCH_SIZE):
+                batch_end = min(batch_start + self.BATCH_SIZE, len(view_list))
+                batch_refs = view_list[batch_start:batch_end]
+
+                conditions = []
+                for db, table in batch_refs:
+                    conditions.append(f"(DatabaseName = '{db}' AND TableName = '{table}')")
+
+                where_clause = " OR ".join(conditions)
+
+                try:
+                    # Try with RequestTxtOverFlow column first
+                    query = f"""
+                        SELECT TRIM(DatabaseName), TRIM(TableName), RequestText, RequestTxtOverFlow
+                        FROM DBC.TablesV
+                        WHERE ({where_clause}) AND TableKind = 'V'
+                    """
+                    self.cursor.execute(query)
+                    rows = self.cursor.fetchall()
+
+                    for row in rows:
+                        db, tbl, text, overflow = row[0], row[1], row[2], row[3]
+                        key = (db, tbl)
+
+                        if overflow == 'Y':
+                            logger.warning(
+                                f"View definition truncated (RequestTxtOverFlow='Y') for {db}.{tbl}, "
+                                "will attempt SHOW VIEW fallback"
+                            )
+                            definitions[key] = None
+                        elif text:
+                            definitions[key] = text.strip()
+                        else:
+                            definitions[key] = None
+
+                except Exception as overflow_err:
+                    # Fallback: query without RequestTxtOverFlow (column may not exist)
+                    logger.debug(
+                        f"RequestTxtOverFlow column unavailable ({overflow_err}), "
+                        "using fallback query"
+                    )
+
+                    query_fallback = f"""
+                        SELECT TRIM(DatabaseName), TRIM(TableName), RequestText
+                        FROM DBC.TablesV
+                        WHERE ({where_clause}) AND TableKind = 'V'
+                    """
+                    self.cursor.execute(query_fallback)
+                    rows = self.cursor.fetchall()
+
+                    for row in rows:
+                        db, tbl, text = row[0], row[1], row[2]
+                        key = (db, tbl)
+
+                        if text and len(text) >= 12500:
+                            logger.warning(
+                                f"View definition may be truncated (length={len(text)}) for {db}.{tbl}, "
+                                "will attempt SHOW VIEW fallback"
+                            )
+                            definitions[key] = None
+                        elif text:
+                            definitions[key] = text.strip()
+                        else:
+                            definitions[key] = None
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch view definitions: {e}")
+
+        return definitions
+
+    def _fetch_view_definition_show_view(self, database: str, table: str) -> Optional[str]:
+        """Execute SHOW VIEW as fallback for truncated RequestText definitions.
+
+        Args:
+            database: Database name
+            table: View name
+
+        Returns:
+            View definition text, or None on any exception
+        """
+        try:
+            query = f"SHOW VIEW {database}.{table}"
+            self.cursor.execute(query)
+            rows = self.cursor.fetchall()
+
+            if not rows:
+                return None
+
+            # Join all result rows with newline
+            lines = []
+            for row in rows:
+                if row and row[0]:
+                    lines.append(str(row[0]))
+
+            result = "\n".join(lines).strip()
+            return result if result else None
+
+        except Exception as e:
+            logger.warning(f"SHOW VIEW failed for {database}.{table}: {e}")
+            return None
+
+    def _expand_view_columns(
+        self,
+        database: str,
+        table: str,
+        view_sql: str,
+        all_view_definitions: Dict[Tuple[str, str], Optional[str]]
+    ) -> List[str]:
+        """Recursively expand a view definition to derive its actual column list.
+
+        Parses the view's SELECT statement using TeradataSQLParser with a
+        _ViewExpansionProxy as the wildcard resolver, enabling transparent
+        nested view expansion.
+
+        Args:
+            database: Database name of the view
+            table: View name
+            view_sql: Raw view definition SQL (REPLACE VIEW ... AS SELECT ...)
+            all_view_definitions: All fetched view definitions for nested expansion
+
+        Returns:
+            List of column names, or empty list on error/depth/cycle
+        """
+        key = (database, table)
+
+        # Check cache first
+        if key in self._view_expansion_cache:
+            return self._view_expansion_cache[key]
+
+        # Depth limit check
+        if self._view_expansion_depth >= self.MAX_VIEW_EXPANSION_DEPTH:
+            logger.warning(
+                f"View expansion depth limit ({self.MAX_VIEW_EXPANSION_DEPTH}) reached "
+                f"while expanding {database}.{table}"
+            )
+            return []
+
+        # Cycle detection
+        if key in self._view_expansion_path:
+            logger.error(
+                f"Circular view reference detected: {database}.{table} "
+                f"(expansion path: {list(self._view_expansion_path)})"
+            )
+            return []
+
+        self._view_expansion_depth += 1
+        self._view_expansion_path.add(key)
+        depth = self._view_expansion_depth
+
+        try:
+            # Import TeradataSQLParser (only once, cached by Python's import system)
+            lineage_api_path = os.path.join(
+                os.path.dirname(__file__), '..', '..', '..', 'lineage-api'
+            )
+            lineage_api_path = os.path.normpath(lineage_api_path)
+            if lineage_api_path not in sys.path:
+                sys.path.insert(0, lineage_api_path)
+
+            from utils.sql_parser import TeradataSQLParser
+            import sqlglot
+            from sqlglot import exp
+
+            # Normalize REPLACE VIEW -> CREATE VIEW for sqlglot parsing
+            # Teradata stores view definitions as REPLACE VIEW in RequestText
+            normalized_sql = re.sub(
+                r'^\s*REPLACE\s+VIEW',
+                'CREATE VIEW',
+                view_sql,
+                count=1,
+                flags=re.IGNORECASE
+            )
+
+            # Parse with Teradata dialect, fallback to generic
+            try:
+                parsed = sqlglot.parse_one(normalized_sql, dialect="teradata")
+            except Exception:
+                try:
+                    parsed = sqlglot.parse_one(normalized_sql)
+                except Exception as parse_err:
+                    logger.warning(f"Failed to parse view {database}.{table}: {parse_err}")
+                    return []
+
+            if parsed is None:
+                logger.warning(f"sqlglot returned None for view {database}.{table}")
+                return []
+
+            # Extract SELECT expression from parsed AST
+            select_expr = None
+            if isinstance(parsed, exp.Create):
+                inner = parsed.expression
+                if isinstance(inner, exp.Subquery):
+                    inner = inner.this
+                if isinstance(inner, exp.Select):
+                    select_expr = inner
+            elif isinstance(parsed, exp.Select):
+                select_expr = parsed
+
+            if select_expr is None:
+                logger.warning(
+                    f"Could not extract SELECT expression from view {database}.{table}"
+                )
+                return []
+
+            # Create proxy and fresh parser instance
+            proxy = _ViewExpansionProxy(self, all_view_definitions)
+            parser = TeradataSQLParser(default_database=database, wildcard_resolver=proxy)
+
+            # Build table aliases and extract columns
+            parser._table_aliases = {}
+            parser._build_table_aliases(select_expr)
+            col_refs = parser._extract_select_columns(select_expr)
+
+            # Extract column names from column references
+            columns = []
+            for ref in col_refs:
+                name = ref.alias or ref.column
+                if name:
+                    columns.append(name)
+
+            # Cache the result
+            self._view_expansion_cache[key] = columns
+            self._column_cache[key] = columns
+
+            logger.info(
+                f"Expanded view {database}.{table} -> {len(columns)} columns at depth {depth}"
+            )
+
+            return columns
+
+        except Exception as e:
+            logger.warning(f"Failed to expand view {database}.{table}: {e}")
+            return []
+
+        finally:
+            self._view_expansion_depth -= 1
+            self._view_expansion_path.discard(key)
 
     def _warm_cache_batch(self, table_refs: List[Tuple[str, str]]) -> None:
         """Query metadata for a single batch of tables.
@@ -384,3 +750,68 @@ class WildcardResolver:
             'hit_rate_pct': round(hit_rate, 1),
             'schema_changes': len(self._schema_changes) if hasattr(self, '_schema_changes') else 0
         }
+
+
+class _ViewExpansionProxy:
+    """Proxy that implements the WildcardResolver.resolve_star() interface.
+
+    Used during view expansion to allow TeradataSQLParser to resolve wildcards
+    in nested view definitions without re-querying the database. Looks up columns
+    from the parent resolver's caches and the pre-fetched view definitions.
+    """
+
+    def __init__(
+        self,
+        parent_resolver: WildcardResolver,
+        all_view_definitions: Dict[Tuple[str, str], Optional[str]]
+    ):
+        """Initialize the proxy.
+
+        Args:
+            parent_resolver: The WildcardResolver instance driving the expansion
+            all_view_definitions: All fetched view definitions for nested expansion
+        """
+        self._parent = parent_resolver
+        self._all_view_definitions = all_view_definitions
+
+    def resolve_star(self, database: Optional[str], table: str) -> List[str]:
+        """Resolve SELECT * for a table or view during nested expansion.
+
+        Priority:
+            1. Already-cached table columns (_column_cache)
+            2. Already-expanded view columns (_view_expansion_cache)
+            3. View in all_view_definitions with SQL -> recursive expansion
+            4. Otherwise return [] (graceful degradation)
+
+        Args:
+            database: Database name (None uses parent's default_database)
+            table: Table or view name
+
+        Returns:
+            List of column names, or empty list if not available
+        """
+        # Normalize using parent's method
+        db_norm = self._parent.normalize_identifier(
+            database if database else self._parent.default_database
+        )
+        table_norm = self._parent.normalize_identifier(table)
+        key = (db_norm, table_norm)
+
+        # Check parent's column cache (already-warmed tables)
+        if key in self._parent._column_cache:
+            return self._parent._column_cache[key]
+
+        # Check view expansion cache (already-expanded views)
+        if key in self._parent._view_expansion_cache:
+            return self._parent._view_expansion_cache[key]
+
+        # Try recursive expansion if view definition is available
+        if key in self._all_view_definitions:
+            view_sql = self._all_view_definitions[key]
+            if view_sql:
+                return self._parent._expand_view_columns(
+                    db_norm, table_norm, view_sql, self._all_view_definitions
+                )
+
+        # Graceful degradation
+        return []
