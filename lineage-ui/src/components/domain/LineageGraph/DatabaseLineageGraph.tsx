@@ -34,6 +34,7 @@ import {
   useKeyboardShortcuts,
   useLineageExport,
   useSmartViewport,
+  useMultiSelect,
 } from './hooks';
 
 const nodeTypes = {
@@ -83,6 +84,8 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     edges: storeEdges,
     assetTypeFilter,
     isTableSelection,
+    isMultiSelectMode,
+    toggleMultiSelectMode,
     // Note: setAssetTypeFilter is available but not used in current implementation
   } = useLineageStore();
 
@@ -205,14 +208,17 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     }
   }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
 
+  const { onSelectionChange, onSelectionDragStart } = useMultiSelect(hasUserInteractedRef);
+
   // Handle node click for selection and path highlighting
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
+    (event: React.MouseEvent, node: Node) => {
+      if (event.metaKey || event.ctrlKey || isMultiSelectMode) return;
       if (node.type !== 'tableNode') {
         setSelectedAssetId(node.id);
       }
     },
-    [setSelectedAssetId]
+    [setSelectedAssetId, isMultiSelectMode]
   );
 
   // Handle edge click
@@ -440,6 +446,8 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         onExport={handleExport}
         onFullscreen={toggleFullscreen}
         isLoading={isLoading}
+        isMultiSelectMode={isMultiSelectMode}
+        onToggleMultiSelectMode={toggleMultiSelectMode}
       />
 
       {/* Graph View */}
@@ -454,6 +462,9 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             onNodeDragStart={onNodeDragStart}
+            onSelectionChange={onSelectionChange}
+            onSelectionDragStart={onSelectionDragStart}
+            multiSelectionKeyCode={isMultiSelectMode ? null : 'Meta'}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}

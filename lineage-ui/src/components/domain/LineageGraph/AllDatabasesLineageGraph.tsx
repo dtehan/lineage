@@ -34,6 +34,7 @@ import {
   useKeyboardShortcuts,
   useLineageExport,
   useSmartViewport,
+  useMultiSelect,
 } from './hooks';
 import type { LineageNode, LineageEdge as LineageEdgeType } from '../../../types';
 
@@ -86,6 +87,8 @@ function AllDatabasesLineageGraphInner() {
     loadMoreCount,
     setLoadMoreCount,
     isTableSelection,
+    isMultiSelectMode,
+    toggleMultiSelectMode,
   } = useLineageStore();
 
   // Get list of available databases for filtering
@@ -230,14 +233,17 @@ function AllDatabasesLineageGraphInner() {
     }
   }, [selectedAssetId, highlightPath, setHighlightedPath, openPanel]);
 
+  const { onSelectionChange, onSelectionDragStart } = useMultiSelect(hasUserInteractedRef);
+
   // Handle node click
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node) => {
+    (event: React.MouseEvent, node: Node) => {
+      if (event.metaKey || event.ctrlKey || isMultiSelectMode) return;
       if (node.type !== 'tableNode') {
         setSelectedAssetId(node.id);
       }
     },
-    [setSelectedAssetId]
+    [setSelectedAssetId, isMultiSelectMode]
   );
 
   // Handle edge click
@@ -586,6 +592,8 @@ function AllDatabasesLineageGraphInner() {
         onExport={handleExport}
         onFullscreen={toggleFullscreen}
         isLoading={isLoading || isFetchingNextPage}
+        isMultiSelectMode={isMultiSelectMode}
+        onToggleMultiSelectMode={toggleMultiSelectMode}
       />
 
       {/* Graph View */}
@@ -600,6 +608,9 @@ function AllDatabasesLineageGraphInner() {
             onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
             onNodeDragStart={onNodeDragStart}
+            onSelectionChange={onSelectionChange}
+            onSelectionDragStart={onSelectionDragStart}
+            multiSelectionKeyCode={isMultiSelectMode ? null : 'Meta'}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             connectionMode={ConnectionMode.Loose}
