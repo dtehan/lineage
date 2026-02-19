@@ -96,7 +96,7 @@ function calculateClusterBounds(
 
 export const ClusterBackground = memo(function ClusterBackground({
   clusters,
-  padding = 20,
+  padding = 60,
   headerHeight = 40,
   visible = true,
 }: ClusterBackgroundProps) {

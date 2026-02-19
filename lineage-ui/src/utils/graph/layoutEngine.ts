@@ -313,7 +313,14 @@ export async function layoutGraph(
   // If there are cross-database edges, use flat layout (no compound nodes)
   // This avoids ELK's limitation with cross-hierarchy edge routing
   if (hasCrossDatabaseEdges) {
-    // Create flat table nodes (no database grouping)
+    // Build database -> partition index map (alphabetical order)
+    const databaseNames = Array.from(databaseGroups.keys()).sort();
+    const databasePartitionMap = new Map<string, number>();
+    databaseNames.forEach((dbName, index) => {
+      databasePartitionMap.set(dbName, index);
+    });
+
+    // Create flat table nodes (no database grouping) with partition assignments
     const elkTableNodes: ElkNode[] = tableNodeData.map((tableNode) => {
       const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
       const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
@@ -324,6 +331,9 @@ export async function layoutGraph(
         height,
         ports: createElkPorts(tableNode.id, tableNode.columns),
         labels: [{ text: `${tableNode.databaseName}.${tableNode.tableName}` }],
+        properties: {
+          'partitioning.partition': String(databasePartitionMap.get(tableNode.databaseName) ?? 0),
+        },
       };
     });
 
@@ -337,6 +347,7 @@ export async function layoutGraph(
         'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
         'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
         'elk.portConstraints': 'FIXED_ORDER',
+        'elk.partitioning.activate': 'true',
       },
       children: elkTableNodes,
       edges: allElkEdges,
