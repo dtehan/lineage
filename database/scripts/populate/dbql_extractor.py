@@ -39,6 +39,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import teradatasql
 
 from db_config import CONFIG
+from wildcard_resolver import WildcardResolver
 
 # Import SQL parser from canonical location (lineage-api/utils/)
 # Go up to project root: dbql_extractor.py -> populate -> scripts -> database -> project_root
@@ -77,6 +78,8 @@ class ExtractionStats:
     queries_failed: int = 0
     queries_skipped: int = 0
     lineage_records: int = 0
+    wildcards_expanded: int = 0
+    wildcards_skipped: int = 0
     errors: List[Dict] = field(default_factory=list)
 
     def record_success(self, lineage_count: int = 0):
@@ -259,6 +262,37 @@ class DBQLExtractor:
             return match.group(1).replace('"', '')
         return "UNKNOWN"
 
+    def _collect_table_references(self, queries: List[Tuple]) -> Set[Tuple[str, str]]:
+        """Collect unique (database, table) references from all queries for batch metadata warmup.
+
+        This pre-scan enables batch metadata querying instead of per-query N+1 pattern.
+        Uses lightweight regex scanning (not full parsing) for speed.
+        """
+        import re
+        table_refs = set()
+
+        for query_id, stmt_type, query_text, query_time, default_db, sql_length in queries:
+            if not query_text:
+                continue
+
+            db = (default_db or DATABASE).strip()
+
+            # Extract table references from FROM and JOIN clauses
+            # Lightweight regex: catches database.table and standalone table names
+            pattern = r'(?:FROM|JOIN|INTO|UPDATE|MERGE\s+INTO)\s+(["\w]+(?:\.["\w]+)?)'
+            matches = re.findall(pattern, query_text, re.IGNORECASE)
+
+            for match in matches:
+                table_name = match.replace('"', '')
+                if '.' in table_name:
+                    parts = table_name.split('.', 1)
+                    table_refs.add((parts[0].upper(), parts[1].upper()))
+                else:
+                    table_refs.add((db.upper(), table_name.upper()))
+
+        logger.info("Collected %d unique table references for metadata warmup", len(table_refs))
+        return table_refs
+
     def extract_lineage(
         self,
         since: Optional[datetime] = None,
@@ -292,6 +326,22 @@ class DBQLExtractor:
         if not queries:
             logger.info("No queries to process")
             return 0
+
+        # Two-pass extraction: collect table refs, then warm cache
+        table_refs = self._collect_table_references(queries)
+
+        # Create resolver and warm metadata cache (single batch query)
+        resolver = WildcardResolver(self.cursor, DATABASE)
+        resolver.warm_cache(table_refs)
+
+        # Update parser with wildcard resolver
+        self.parser = TeradataSQLParser(
+            default_database=DATABASE,
+            wildcard_resolver=resolver
+        )
+
+        # Store resolver reference for stats
+        self.resolver = resolver
 
         if self.dry_run:
             logger.info("[DRY RUN] Would process %d queries", len(queries))
@@ -447,6 +497,13 @@ class DBQLExtractor:
         print(f"  Queries failed:        {self.stats.queries_failed}")
         print(f"  Queries skipped:       {self.stats.queries_skipped}")
         print(f"  Lineage records:       {self.stats.lineage_records}")
+
+        # Print resolver statistics if available
+        if hasattr(self, 'resolver') and self.resolver:
+            stats = self.resolver.get_stats()
+            print(f"  Metadata cache hits:   {stats.get('cache_hits', 0)}")
+            print(f"  Metadata cache misses: {stats.get('cache_misses', 0)}")
+            print(f"  Tables cached:         {stats.get('tables', 0)}")
 
         if self.verbose and self.stats.errors:
             print("\n  Failed Query Details:")
