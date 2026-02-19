@@ -7,3 +7,4 @@ export * from './useSmartViewport';
 export * from './useFitToSelection';
 export * from './useLayoutWorker';
 export * from './useProfiler';
+export * from './useMultiSelect';

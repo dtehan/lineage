@@ -28,6 +28,8 @@ export function useKeyboardShortcuts({
     closePanel,
     setSearchQuery,
     toggleDatabaseClusters,
+    isMultiSelectMode,
+    toggleMultiSelectMode,
   } = useLineageStore();
 
   const handleKeyDown = useCallback(
@@ -44,6 +46,11 @@ export function useKeyboardShortcuts({
         clearHighlight();
         closePanel();
         setSearchQuery('');
+
+        // Exit multi-select mode
+        if (isMultiSelectMode) {
+          toggleMultiSelectMode();
+        }
 
         // Blur any focused input
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
@@ -110,6 +117,8 @@ export function useKeyboardShortcuts({
       setSearchQuery,
       toggleDatabaseClusters,
       searchInputSelector,
+      isMultiSelectMode,
+      toggleMultiSelectMode,
     ]
   );
 

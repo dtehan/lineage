@@ -86,6 +86,10 @@ interface LineageState {
   toggleTableExpanded: (tableId: string, defaultExpanded?: boolean) => void;
   setAllTablesExpanded: (expanded: boolean) => void;
   isTableExpanded: (tableId: string, defaultExpanded: boolean) => boolean;
+
+  // Multi-select mode
+  isMultiSelectMode: boolean;
+  toggleMultiSelectMode: () => void;
 }
 
 export const useLineageStore = create<LineageState>((set) => ({
@@ -196,4 +200,23 @@ export const useLineageStore = create<LineageState>((set) => ({
     // This is a selector-like function - handled in component instead
     return defaultExpanded;
   },
+
+  // Multi-select mode
+  isMultiSelectMode: false,
+  toggleMultiSelectMode: () => set((state) => {
+    if (!state.isMultiSelectMode) {
+      // Entering multi-select: clear path highlight and column selection
+      return {
+        isMultiSelectMode: true,
+        highlightedNodeIds: new Set(),
+        highlightedEdgeIds: new Set(),
+        selectedAssetId: null,
+        selectedEdgeId: null,
+        isTableSelection: false,
+        isPanelOpen: false,
+        panelContent: null,
+      };
+    }
+    return { isMultiSelectMode: false };
+  }),
 }));
