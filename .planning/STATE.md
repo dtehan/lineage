@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-18)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 11 - Sort columns alphabetically in lineage graph nodes (COMPLETE)
+**Current focus:** Phase 12 - Prevent database cluster overlap in lineage graph visualization (IN PROGRESS)
 
 ## Current Position
 
-Phase: 11 of 11 (Sort columns alphabetically in lineage graph nodes)
-Plan: 1 of 1 (complete)
-Status: Complete - All 11 phases complete
-Last activity: 2026-02-19 — Plan 11-01 complete: alphabetical column sort human-verified — all 11 phases done
+Phase: 12 of 12 (Prevent database cluster overlap in lineage graph visualization)
+Plan: 1 of 1 (in progress - awaiting human verify checkpoint)
+Status: In Progress - Phase 12 executing
+Last activity: 2026-02-19 — Plan 12-01 tasks 1 and 2 complete, awaiting Task 3 human verify checkpoint
 
-Progress: [██████████] 100% complete (11/11 phases, all plans done)
+Progress: [██████████] 92% complete (11/12 phases done, 12 in progress)
 
 ## Performance Metrics
 
@@ -33,9 +33,9 @@ Progress: [██████████] 100% complete (11/11 phases, all plan
 | v3.0 Wildcard Expansion | 3 | 6 | Complete |
 
 **Recent Trend:**
-Phase 11 complete - Alphabetical column sort in layoutEngine.ts and DetailPanel; human verified graph nodes display columns A-Z with edges correctly aligned
+Phase 12 in progress - ELK partitioning added to flat-layout path; ClusterBackground padding 20->60; 4 new unit tests passing; awaiting human visual verify
 
-*Updated after 11-01 completion*
+*Updated after 12-01 tasks 1+2 completion*
 | Phase 07 P01 | 78s | 1 task | 1 file |
 | Phase 07 P02 | 181s | 2 tasks | 2 files |
 | Phase 07 P03 | 293s | 2 tasks | 3 files |
@@ -46,6 +46,7 @@ Phase 11 complete - Alphabetical column sort in layoutEngine.ts and DetailPanel;
 | Phase 10 P01 | 140s | 2 tasks | 3 files |
 | Phase 10 P02 | ~300s | 2 tasks | 3 files |
 | Phase 11 P01 | ~2min | 2 tasks | 5 files | 2026-02-19 |
+| Phase 12 P01 | ~5min | 2 tasks (checkpoint) | 3 files | 2026-02-19 |
 
 ## Accumulated Context
 
@@ -53,12 +54,16 @@ Phase 11 complete - Alphabetical column sort in layoutEngine.ts and DetailPanel;
 
 - Phase 10 added: View lineage - show data flow through views to source tables
 - Phase 11 added: Sort columns alphabetically in lineage graph nodes
+- Phase 12 added: Prevent database cluster overlap in lineage graph visualization
 
 ### Decisions
 
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
+- [Phase 12-01]: ELK partitioning applied only to hasCrossDatabaseEdges flat-layout branch; compound-node path unchanged
+- [Phase 12-01]: Alphabetical sort of database names gives deterministic partition indices (db_alpha=0, db_beta=1)
+- [Phase 12-01]: ClusterBackground default padding increased from 20 to 60 flow units; no post-layout overlap correction added
 - [Phase 11-01]: Sort applied after .map() in transformToTableNodes so original columnNodes array is not mutated
 - [Phase 11-01]: Sort happens before createElkPorts so ELK port indices automatically match sorted display order
 - [Phase 11-01]: DetailPanel sort uses columnName field (ColumnDetail type) vs layoutEngine sort using name field (ColumnDefinition type)
@@ -107,7 +112,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Completed Phase 11 Plan 01 — alphabetical column sort human-verified, all 11 phases complete
+Stopped at: Phase 12 Plan 01 — Tasks 1 and 2 complete, paused at Task 3 human-verify checkpoint
 Resume file: None
 
 ## Performance Metrics (v3.0)
@@ -124,3 +129,4 @@ Resume file: None
 | 10-01 | 140s | 2 | 3 | 2026-02-19 |
 | 10-02 | ~300s | 2 | 3 | 2026-02-19 |
 | 11-01 | 131s | 1 (checkpoint) | 5 | 2026-02-19 |
+| 12-01 | ~300s | 2 (checkpoint) | 3 | 2026-02-19 |
