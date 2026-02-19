@@ -13,6 +13,7 @@ Run with:
     python -m unittest test_wildcard_resolver -v
 """
 
+import os
 import unittest
 from unittest.mock import MagicMock, patch, call
 from wildcard_resolver import WildcardResolver
@@ -236,6 +237,257 @@ class TestWildcardResolver(unittest.TestCase):
         self.assertEqual(stats['tables'], 1)
         self.assertEqual(stats['columns'], 2)
         self.assertEqual(stats['hit_rate_pct'], 50.0)
+
+
+class TestSchemaEvolution(unittest.TestCase):
+    """Unit tests for schema evolution detection (Phase 8: QUAL-03)."""
+
+    def setUp(self):
+        """Set up mock cursor and temp baseline file for each test."""
+        self.mock_cursor = MagicMock()
+        # Create a temporary directory for baseline files
+        import tempfile
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.baseline_path = f"{self.temp_dir.name}/baseline.json"
+
+    def tearDown(self):
+        """Clean up temporary directory."""
+        self.temp_dir.cleanup()
+
+    # =========================================================================
+    # QUAL-03: Schema evolution detection
+    # =========================================================================
+
+    def test_schema_change_detected(self):
+        """Test schema change detection logs warning and records delta."""
+        import json
+
+        # Create baseline file with 5 columns for CUSTOMERS
+        baseline_data = {"DEMO_USER.CUSTOMERS": 5}
+        with open(self.baseline_path, 'w') as f:
+            json.dump(baseline_data, f)
+
+        # Create resolver with baseline
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=self.baseline_path
+        )
+
+        # Manually populate cache with 6 columns (baseline was 5)
+        resolver._column_cache = {
+            ('DEMO_USER', 'CUSTOMERS'): ['a', 'b', 'c', 'd', 'e', 'f']
+        }
+
+        # Capture logging output
+        with self.assertLogs('wildcard_resolver', level='WARNING') as log_context:
+            resolver._detect_schema_changes()
+
+        # Assert warning was logged
+        warning_found = any('schema evolution' in msg.lower() for msg in log_context.output)
+        self.assertTrue(warning_found, f"Expected schema evolution warning. Got: {log_context.output}")
+
+        # Assert _schema_changes list has 1 entry with delta +1
+        self.assertEqual(len(resolver._schema_changes), 1)
+        change = resolver._schema_changes[0]
+        self.assertEqual(change['table'], 'DEMO_USER.CUSTOMERS')
+        self.assertEqual(change['baseline_columns'], 5)
+        self.assertEqual(change['current_columns'], 6)
+        self.assertEqual(change['delta'], 1)
+        self.assertIn('timestamp', change)
+
+    def test_schema_no_change(self):
+        """Test no change detected when column count matches baseline."""
+        import json
+
+        # Create baseline file with 3 columns
+        baseline_data = {"DEMO_USER.CUSTOMERS": 3}
+        with open(self.baseline_path, 'w') as f:
+            json.dump(baseline_data, f)
+
+        # Create resolver
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=self.baseline_path
+        )
+
+        # Populate cache with 3 columns (same as baseline)
+        resolver._column_cache = {
+            ('DEMO_USER', 'CUSTOMERS'): ['col1', 'col2', 'col3']
+        }
+
+        # Call detect_schema_changes
+        resolver._detect_schema_changes()
+
+        # Assert no changes detected
+        self.assertEqual(len(resolver._schema_changes), 0)
+
+    def test_schema_no_baseline_first_run(self):
+        """Test no changes detected when baseline file doesn't exist (first run)."""
+        import os
+
+        # Create resolver with non-existent baseline file
+        non_existent_path = f"{self.temp_dir.name}/does_not_exist.json"
+        self.assertFalse(os.path.exists(non_existent_path))
+
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=non_existent_path
+        )
+
+        # Populate cache
+        resolver._column_cache = {
+            ('DEMO_USER', 'CUSTOMERS'): ['col1', 'col2']
+        }
+
+        # Call detect_schema_changes
+        resolver._detect_schema_changes()
+
+        # Assert no changes detected (nothing to compare)
+        self.assertEqual(len(resolver._schema_changes), 0)
+
+    def test_baseline_save_and_load(self):
+        """Test baseline save/load round-trip."""
+        import json
+
+        # Create resolver
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=self.baseline_path
+        )
+
+        # Manually populate cache with known data
+        resolver._column_cache = {
+            ('DB1', 'TABLE1'): ['a', 'b', 'c'],
+            ('DB2', 'TABLE2'): ['x', 'y']
+        }
+
+        # Save baseline
+        resolver._save_baseline()
+
+        # Verify file was created
+        self.assertTrue(os.path.exists(self.baseline_path))
+
+        # Load baseline in new resolver
+        resolver2 = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=self.baseline_path
+        )
+
+        # Verify baseline was loaded correctly
+        self.assertEqual(resolver2._baseline[('DB1', 'TABLE1')], 3)
+        self.assertEqual(resolver2._baseline[('DB2', 'TABLE2')], 2)
+
+    def test_baseline_backward_compatible(self):
+        """Test backward compatibility when baseline_path not provided."""
+        # Create resolver WITHOUT baseline_path
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user'
+        )
+
+        # Assert baseline attributes are correct
+        self.assertIsNone(resolver._baseline_path)
+        self.assertEqual(resolver._baseline, {})
+        self.assertEqual(resolver._schema_changes, [])
+
+        # Mock cursor for warm_cache
+        self.mock_cursor.fetchall.return_value = []
+
+        # Call warm_cache - should not raise
+        resolver.warm_cache(set())
+
+        # Should complete without error
+        self.assertIsInstance(resolver._column_cache, dict)
+
+    def test_get_schema_changes_returns_details(self):
+        """Test get_schema_changes returns list of change details."""
+        import json
+
+        # Create baseline
+        baseline_data = {"DEMO_USER.CUSTOMERS": 3}
+        with open(self.baseline_path, 'w') as f:
+            json.dump(baseline_data, f)
+
+        # Create resolver
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=self.baseline_path
+        )
+
+        # Populate cache with different count
+        resolver._column_cache = {
+            ('DEMO_USER', 'CUSTOMERS'): ['a', 'b', 'c', 'd', 'e']  # 5 columns, baseline was 3
+        }
+
+        # Detect changes
+        resolver._detect_schema_changes()
+
+        # Call get_schema_changes
+        changes = resolver.get_schema_changes()
+
+        # Assert returns list of dicts with correct keys
+        self.assertIsInstance(changes, list)
+        self.assertEqual(len(changes), 1)
+
+        change = changes[0]
+        self.assertIn('table', change)
+        self.assertIn('baseline_columns', change)
+        self.assertIn('current_columns', change)
+        self.assertIn('delta', change)
+        self.assertIn('timestamp', change)
+
+        # Verify values
+        self.assertEqual(change['table'], 'DEMO_USER.CUSTOMERS')
+        self.assertEqual(change['baseline_columns'], 3)
+        self.assertEqual(change['current_columns'], 5)
+        self.assertEqual(change['delta'], 2)
+
+    def test_get_stats_includes_schema_changes(self):
+        """Test get_stats includes schema_changes count."""
+        import json
+
+        # Create baseline
+        baseline_data = {
+            "DEMO_USER.CUSTOMERS": 3,
+            "DEMO_USER.ORDERS": 5
+        }
+        with open(self.baseline_path, 'w') as f:
+            json.dump(baseline_data, f)
+
+        # Create resolver
+        resolver = WildcardResolver(
+            self.mock_cursor,
+            default_database='demo_user',
+            baseline_path=self.baseline_path
+        )
+
+        # Populate cache with changes to both tables
+        resolver._column_cache = {
+            ('DEMO_USER', 'CUSTOMERS'): ['a', 'b', 'c', 'd'],  # 4 columns, baseline was 3
+            ('DEMO_USER', 'ORDERS'): ['x', 'y', 'z']  # 3 columns, baseline was 5
+        }
+
+        # Detect changes
+        resolver._detect_schema_changes()
+
+        # Get stats
+        stats = resolver.get_stats()
+
+        # Assert schema_changes key present with correct count
+        self.assertIn('schema_changes', stats)
+        self.assertEqual(stats['schema_changes'], 2)
+
+        # Verify other stats are present
+        self.assertIn('tables', stats)
+        self.assertIn('columns', stats)
+        self.assertEqual(stats['tables'], 2)
+        self.assertEqual(stats['columns'], 7)  # 4 + 3
 
 
 if __name__ == '__main__':
