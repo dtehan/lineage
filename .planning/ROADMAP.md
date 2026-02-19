@@ -139,3 +139,13 @@ Plans:
 
 Plans:
 - [x] 12-01-PLAN.md -- ELK partitioning on flat-layout path + ClusterBackground padding increase + unit tests
+
+### Phase 13: Multi-select and group move in lineage graph
+
+**Goal:** Enable users to hold the command key and click multiple nodes/edges in the lineage graph, then drag the selection as a group
+**Depends on:** Phase 12
+**Plans:** 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md -- Multi-select implementation: store state, useMultiSelect hook, RF wiring, TableNode visual, Toolbar toggle
+- [ ] 13-02-PLAN.md -- Unit tests for useMultiSelect + Toolbar multi-select + human verification
