@@ -112,7 +112,7 @@ Phases execute in numeric order: 7 → 8 → 9
 | 8. Qualified Wildcards | v3.0 | 2/2 | Complete | 2026-02-19 |
 | 9. View Expansion | v3.0 | 2/2 | Complete | 2026-02-19 |
 
-### Phase 10: View lineage - show data flow through views to source tables
+### ✅ Phase 10: View lineage - show data flow through views to source tables (Complete 2026-02-19)
 
 **Goal:** Surface views as visible intermediate nodes in lineage graphs by propagating sourceType and populating view-derived column lineage
 **Depends on:** Phase 9
@@ -120,4 +120,4 @@ Phases execute in numeric order: 7 → 8 → 9
 
 Plans:
 - [x] 10-01-PLAN.md -- Add sourceType propagation to column/table lineage endpoints + unit tests
-- [ ] 10-02-PLAN.md -- Automatic view lineage derivation via DBC.TablesV.RequestText + SQLGlot parsing (gap closure)
+- [x] 10-02-PLAN.md -- Automatic view lineage derivation via DBC.TablesV.RequestText + SQLGlot parsing (gap closure)
