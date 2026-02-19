@@ -179,20 +179,22 @@ function transformToTableNodes(
   tableGroups.forEach((columnNodes, tableKey) => {
     const firstColumn = columnNodes[0];
 
-    const columns: ColumnDefinition[] = columnNodes.map((node) => {
-      // Map column ID to table key for edge routing
-      columnToTableMap.set(node.id, tableKey);
+    const columns: ColumnDefinition[] = columnNodes
+      .map((node) => {
+        // Map column ID to table key for edge routing
+        columnToTableMap.set(node.id, tableKey);
 
-      return {
-        id: node.id,
-        name: node.columnName || 'unknown',
-        dataType: (node.metadata?.columnType as string) || 'unknown',
-        isPrimaryKey: node.metadata?.isPrimaryKey === true,
-        isForeignKey: node.metadata?.isForeignKey === true,
-        hasUpstreamLineage: columnsWithUpstream.has(node.id),
-        hasDownstreamLineage: columnsWithDownstream.has(node.id),
-      };
-    });
+        return {
+          id: node.id,
+          name: node.columnName || 'unknown',
+          dataType: (node.metadata?.columnType as string) || 'unknown',
+          isPrimaryKey: node.metadata?.isPrimaryKey === true,
+          isForeignKey: node.metadata?.isForeignKey === true,
+          hasUpstreamLineage: columnsWithUpstream.has(node.id),
+          hasDownstreamLineage: columnsWithDownstream.has(node.id),
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     nodes.push({
       id: tableKey,

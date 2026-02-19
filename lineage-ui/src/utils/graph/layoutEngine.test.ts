@@ -620,6 +620,59 @@ describe('TC-GRAPH-005: Node Types in Layout', () => {
   });
 });
 
+// Column sorting tests
+describe('column sorting', () => {
+  it('sorts columns alphabetically within a table node', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'zebra' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 't', columnName: 'alpha' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 't', columnName: 'mango' },
+    ];
+    const edges: LineageEdge[] = [];
+
+    const result = await layoutGraph(nodes, edges);
+
+    const nodeData = result.nodes[0].data as { columns: Array<{ name: string }> };
+    expect(nodeData.columns.map((c) => c.name)).toEqual(['alpha', 'mango', 'zebra']);
+  });
+
+  it('sorts columns case-insensitively', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'ZEBRA' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 't', columnName: 'alpha' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 't', columnName: 'Mango' },
+    ];
+    const edges: LineageEdge[] = [];
+
+    const result = await layoutGraph(nodes, edges);
+
+    const nodeData = result.nodes[0].data as { columns: Array<{ name: string }> };
+    const names = nodeData.columns.map((c) => c.name.toLowerCase());
+    expect(names).toEqual(['alpha', 'mango', 'zebra']);
+  });
+
+  it('sorts columns independently per table node', async () => {
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 't1', columnName: 'charlie' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 't1', columnName: 'alpha' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 't2', columnName: 'zulu' },
+      { id: '4', type: 'column', databaseName: 'db', tableName: 't2', columnName: 'bravo' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '2', target: '4' },
+    ];
+
+    const result = await layoutGraph(nodes, edges);
+
+    // Find each table node and verify its columns are sorted
+    const t1Node = result.nodes.find((n) => n.data.tableName === 't1');
+    const t2Node = result.nodes.find((n) => n.data.tableName === 't2');
+
+    expect(t1Node!.data.columns.map((c: { name: string }) => c.name)).toEqual(['alpha', 'charlie']);
+    expect(t2Node!.data.columns.map((c: { name: string }) => c.name)).toEqual(['bravo', 'zulu']);
+  });
+});
+
 // TC-GRAPH-002 & TC-GRAPH-003: Layout Options Tests
 describe('TC-GRAPH-002 & TC-GRAPH-003: Layout Options', () => {
   it('respects direction option (DOWN)', async () => {

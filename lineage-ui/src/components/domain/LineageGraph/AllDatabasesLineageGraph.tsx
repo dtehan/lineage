@@ -461,7 +461,7 @@ function AllDatabasesLineageGraphInner() {
   // If table selection, get all columns from the table; otherwise just the selected column
   const selectedColumns = selectedAssetId
     ? (isTableSelection
-        ? getTableColumns(selectedAssetId)
+        ? getTableColumns(selectedAssetId).sort((a, b) => a.columnName.localeCompare(b.columnName))
         : [getColumnDetail(selectedAssetId)].filter((c): c is ColumnDetail => c !== null))
     : [];
   const selectedEdgeDetail = selectedEdgeId ? getEdgeDetail(selectedEdgeId) : null;
