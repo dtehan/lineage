@@ -678,5 +678,189 @@ class TestQualifiedWildcard(unittest.TestCase):
         self.assertIsInstance(lineage, list)
 
 
+class TestViewExpansion(unittest.TestCase):
+    """Integration tests for view-through lineage in SQL parser (Phase 9: VIEW-01 through VIEW-05).
+
+    These tests use MockWildcardResolver pre-populated with view-derived column lists.
+    Since resolve_star() is the interface between the parser and the resolver, view
+    expansion is simulated by providing the view's column list directly in the mock
+    resolver's column_map.
+
+    All tests run without database connection.
+    """
+
+    # =========================================================================
+    # INSERT INTO ... SELECT * FROM view
+    # =========================================================================
+
+    def test_insert_select_star_from_view(self):
+        """Test INSERT with SELECT * from view produces correct lineage via resolve_star."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'customer_view'): ['customer_id', 'name', 'email']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (id, full_name, contact)
+        SELECT * FROM demo_user.customer_view
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert 3 lineage records with ordinal matching
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_column'], 'customer_id')
+        self.assertEqual(lineage[0]['target_column'], 'id')
+        self.assertEqual(lineage[1]['source_column'], 'name')
+        self.assertEqual(lineage[1]['target_column'], 'full_name')
+        self.assertEqual(lineage[2]['source_column'], 'email')
+        self.assertEqual(lineage[2]['target_column'], 'contact')
+
+        # Assert confidence = 0.70 (wildcard expansion)
+        for record in lineage:
+            self.assertEqual(record['confidence_score'], 0.70)
+
+    # =========================================================================
+    # CTAS SELECT * FROM view
+    # =========================================================================
+
+    def test_ctas_select_star_from_view(self):
+        """Test CTAS with SELECT * from view derives target column names from source."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'order_view'): ['order_id', 'amount', 'status']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        CREATE TABLE demo_user.new_orders AS (
+            SELECT * FROM demo_user.order_view
+        ) WITH DATA
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert 3 lineage records with target names derived from source
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_column'], 'order_id')
+        self.assertEqual(lineage[0]['target_column'], 'order_id')
+        self.assertEqual(lineage[1]['source_column'], 'amount')
+        self.assertEqual(lineage[1]['target_column'], 'amount')
+        self.assertEqual(lineage[2]['source_column'], 'status')
+        self.assertEqual(lineage[2]['target_column'], 'status')
+
+    # =========================================================================
+    # Qualified wildcard from view
+    # =========================================================================
+
+    def test_qualified_wildcard_from_view(self):
+        """Test qualified wildcards work with views (cv.* and o.*)."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'customer_view'): ['customer_id', 'name'],
+            ('demo_user', 'orders'): ['order_id', 'amount'],
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c, d)
+        SELECT cv.*, o.*
+        FROM demo_user.customer_view cv
+        JOIN demo_user.orders o ON cv.customer_id = o.order_id
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert 4 lineage records with correct ordinal position mapping
+        self.assertEqual(len(lineage), 4)
+        self.assertEqual(lineage[0]['source_column'], 'customer_id')
+        self.assertEqual(lineage[0]['target_column'], 'a')
+        self.assertEqual(lineage[1]['source_column'], 'name')
+        self.assertEqual(lineage[1]['target_column'], 'b')
+        self.assertEqual(lineage[2]['source_column'], 'order_id')
+        self.assertEqual(lineage[2]['target_column'], 'c')
+        self.assertEqual(lineage[3]['source_column'], 'amount')
+        self.assertEqual(lineage[3]['target_column'], 'd')
+
+    # =========================================================================
+    # Mixed wildcard + explicit columns from view
+    # =========================================================================
+
+    def test_view_with_explicit_columns_mixed(self):
+        """Test mix of qualified wildcard and explicit column from view."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'my_view'): ['col1', 'col2'],
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c)
+        SELECT v.*, v.col1 AS extra FROM demo_user.my_view v
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert lineage is extracted (wildcard expanded + explicit column)
+        self.assertIsInstance(lineage, list)
+        self.assertGreater(len(lineage), 0)
+
+        # Wildcard-expanded columns have confidence 0.70
+        wildcard_records = [r for r in lineage if r['confidence_score'] == 0.70]
+        self.assertGreater(len(wildcard_records), 0,
+                           "Expected at least one wildcard-confidence record")
+
+        # Explicit column has confidence 0.95
+        explicit_records = [r for r in lineage if r['confidence_score'] == 0.95]
+        self.assertGreater(len(explicit_records), 0,
+                           "Expected at least one explicit-confidence record")
+
+    # =========================================================================
+    # Graceful degradation: empty view columns
+    # =========================================================================
+
+    def test_view_no_columns_graceful_degradation(self):
+        """Test empty view column list does not crash (graceful degradation)."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'empty_view'): []
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a)
+        SELECT * FROM demo_user.empty_view
+        """
+
+        # Should not raise - graceful degradation
+        lineage = parser.extract_column_lineage(sql)
+        self.assertIsInstance(lineage, list)
+
+        # No wildcard-confidence records expected (no columns to expand to)
+        for record in lineage:
+            self.assertNotEqual(record['confidence_score'], 0.70,
+                                "Should not produce wildcard confidence for empty view")
+
+    # =========================================================================
+    # View columns through subquery
+    # =========================================================================
+
+    def test_view_columns_through_subquery(self):
+        """Test SELECT * from subquery that selects from a view expands correctly."""
+        resolver = MockWildcardResolver({
+            ('demo_user', 'my_view'): ['col1', 'col2', 'col3']
+        })
+        parser = TeradataSQLParser(wildcard_resolver=resolver)
+
+        sql = """
+        INSERT INTO demo_user.target (a, b, c)
+        SELECT * FROM (SELECT * FROM demo_user.my_view) sub
+        """
+
+        lineage = parser.extract_column_lineage(sql)
+
+        # Assert lineage flows through subquery with correct column names
+        self.assertEqual(len(lineage), 3)
+        self.assertEqual(lineage[0]['source_column'], 'col1')
+        self.assertEqual(lineage[1]['source_column'], 'col2')
+        self.assertEqual(lineage[2]['source_column'], 'col3')
+
+
 if __name__ == '__main__':
     unittest.main()
