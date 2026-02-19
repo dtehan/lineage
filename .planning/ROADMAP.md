@@ -121,3 +121,12 @@ Phases execute in numeric order: 7 → 8 → 9
 Plans:
 - [x] 10-01-PLAN.md -- Add sourceType propagation to column/table lineage endpoints + unit tests
 - [x] 10-02-PLAN.md -- Automatic view lineage derivation via DBC.TablesV.RequestText + SQLGlot parsing (gap closure)
+
+### Phase 11: Sort columns alphabetically in lineage graph nodes
+
+**Goal:** Display columns in alphabetical order within table and view nodes in the lineage graph, making it easier to locate and follow column-level lineage connections
+**Depends on:** Phase 10
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd:plan-phase 11 to break down)

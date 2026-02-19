@@ -51,6 +51,7 @@ Phase 10 complete - ViewLineageExtractor derives column-level lineage from view 
 ### Roadmap Evolution
 
 - Phase 10 added: View lineage - show data flow through views to source tables
+- Phase 11 added: Sort columns alphabetically in lineage graph nodes
 
 ### Decisions
 
