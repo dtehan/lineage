@@ -275,6 +275,37 @@ def populate_lineage_from_fixtures(cursor, namespace_id: str, namespace_uri: str
     return count
 
 
+def populate_lineage_from_views(cursor, namespace_uri: str, verbose: bool = False,
+                                dry_run: bool = False):
+    """Populate OL_COLUMN_LINEAGE by deriving lineage from view definitions.
+
+    Fetches view SQL from DBC.TablesV.RequestText, parses with SQLGlot to extract
+    column mappings, and inserts results as OL_COLUMN_LINEAGE records.
+    """
+    print("\n--- Populating OL_COLUMN_LINEAGE from view definitions ---")
+
+    try:
+        from view_lineage_extractor import ViewLineageExtractor
+    except ImportError:
+        try:
+            from database.scripts.populate.view_lineage_extractor import ViewLineageExtractor
+        except ImportError:
+            print("ERROR: Could not import view_lineage_extractor module.")
+            print("Make sure sqlglot is installed: pip install sqlglot>=25.0.0")
+            return 0
+
+    extractor = ViewLineageExtractor(
+        cursor=cursor,
+        namespace_uri=namespace_uri,
+        database=DATABASE,
+        verbose=verbose,
+        dry_run=dry_run,
+    )
+
+    count = extractor.extract_all()
+    return count
+
+
 def populate_lineage_from_dbql(cursor, namespace_uri: str, since: datetime = None,
                                full: bool = False, verbose: bool = False,
                                dry_run: bool = False):
@@ -447,6 +478,11 @@ DBQL Requirements:
         help="Verbose output"
     )
     parser.add_argument(
+        "--views",
+        action="store_true",
+        help="Derive column lineage from view definitions (DBC.TablesV.RequestText + SQLGlot parsing)"
+    )
+    parser.add_argument(
         "--skip-clear",
         action="store_true",
         help="Skip clearing existing data (append mode)"
@@ -539,6 +575,14 @@ DBQL Requirements:
             )
         else:
             populate_lineage_from_fixtures(cursor, namespace_id, namespace_uri)
+
+        # Optionally derive lineage from view definitions
+        if args.views:
+            populate_lineage_from_views(
+                cursor, namespace_uri,
+                verbose=args.verbose,
+                dry_run=args.dry_run
+            )
 
         # Verify data
         verify_openlineage_data(cursor)
