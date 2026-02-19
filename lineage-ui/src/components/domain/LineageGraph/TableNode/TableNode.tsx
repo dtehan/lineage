@@ -91,8 +91,8 @@ export const TableNode = memo(function TableNode({ id, data, selected }: TableNo
     [setSelectedAssetId, setIsTableSelection]
   );
 
-  const handleNodeClick = useCallback(() => {
-    // When the table node header is clicked, select the first column
+  const handleNodeDoubleClick = useCallback(() => {
+    // When the table node header is double-clicked, select the first column
     // This triggers path highlighting and dimming animation
     // Mark as table selection so the panel shows all columns
     if (data.columns.length > 0) {
@@ -120,7 +120,7 @@ export const TableNode = memo(function TableNode({ id, data, selected }: TableNo
         isExpanded={isExpanded}
         columnCount={data.columns.length}
         onToggleExpand={handleToggleExpand}
-        onNodeClick={handleNodeClick}
+        onNodeDoubleClick={handleNodeDoubleClick}
       />
 
       {isExpanded && (
