@@ -28,6 +28,8 @@ Data lineage tracks the flow of data from its source to its destination, showing
 - **Lineage Visualization**: Interactive graphs showing data relationships
 - **Impact Analysis**: Assess downstream effects before making changes
 - **Search**: Find assets across your entire Teradata environment
+- **Wildcard Expansion**: Automatically resolve `SELECT *`, `t1.*`, and view wildcards to actual column names
+- **View Lineage**: Trace data flow through views to their underlying source tables
 
 ### Use Cases
 
@@ -67,6 +69,15 @@ Relationships include:
 - **Transformation Type**: Direct copy, concatenation, aggregation, calculation, etc.
 - **Confidence Score**: How certain the system is about the relationship (0.0-1.0)
 - **Query ID**: The query that created the relationship
+
+**Confidence Score Levels:**
+
+| Score | Source | Description |
+|-------|--------|-------------|
+| 0.95 | Explicit column references | Columns named directly in SQL |
+| 0.85 | Expression-derived | Columns derived from SQL expressions |
+| 0.80 | View calculation | Columns derived from expressions in view definitions |
+| 0.70 | Wildcard-expanded | Columns resolved from `SELECT *` or `t1.*` patterns |
 
 ### Lineage Direction
 
@@ -189,12 +200,17 @@ Edges display confidence levels visually:
 - **50-69% confidence**: 80% opacity
 - **Below 50%**: 70% opacity with dashed animation
 
+**Column Display:**
+
+Columns within each table node are sorted alphabetically for easy scanning. This ordering is consistent across the graph and the Detail Panel.
+
 **Interactions:**
 
 - **Pan**: Click and drag on the background
 - **Zoom**: Scroll wheel or +/- keys (range: 0.1x to 2x)
 - **Select Column**: Click a column row to highlight its full lineage path
 - **Select Edge**: Click an edge to view transformation details
+- **Multi-Select**: Enable via the toolbar toggle button, then click nodes to add them to the selection. Drag any selected node to move the entire group together
 - **Clear Selection**: Click on empty space or press Escape
 - **Fit View**: Press F or use toolbar button
 - **MiniMap**: Corner minimap for navigation in large graphs
@@ -203,11 +219,12 @@ Edges display confidence levels visually:
 
 | Shortcut | Action |
 |----------|--------|
-| `Escape` | Clear selection and close panel |
+| `Escape` | Clear selection, close panel, or exit multi-select mode |
 | `F` | Fit all nodes to view |
 | `+` / `-` | Zoom in / out |
 | `Ctrl+F` or `/` | Focus search box |
 | `Ctrl+G` | Toggle database cluster backgrounds |
+| `Cmd+Click` | Add/remove node from multi-selection (when multi-select is off) |
 
 **Note:** Fit to Selection is available via the toolbar button only (Crosshair icon) and does not have a keyboard shortcut. It differs from Fit View (F key) in that it centers only on the nodes in the highlighted lineage path rather than all nodes in the graph.
 
@@ -222,8 +239,9 @@ The lineage graph includes an advanced toolbar with the following controls:
 | **View Mode Toggle** | Switch between Graph view (visual) and Table view (tabular list) |
 | **Search Box** | Autocomplete search for columns within the current lineage graph |
 | **Direction Dropdown** | Select Upstream, Downstream, or Both directions |
-| **Asset Type Filter** | Filter visible nodes by type: Tables, Views, Materialized Views (checkbox dropdown) |
+| **Asset Type Filter** | Filter visible nodes by type: Tables, Views, Materialized Views (checkbox dropdown). Shows "All Types", "Tables Only", "Views Only", or "{N} Types" based on selection |
 | **Depth Slider** | Interactive slider to adjust traversal depth (1-10) |
+| **Multi-Select Toggle** | Enable multi-select mode (MousePointerClick icon). When active, click nodes to select/deselect them, then drag to move the group. Button highlights blue when active. Press Escape to exit |
 | **Fit View Button** | Fit all graph nodes within the viewport (Focus icon, or press F) |
 | **Fit to Selection** | Center the viewport on the highlighted lineage path (Crosshair icon). Only active when a column is selected and its lineage path is highlighted |
 | **Export Button** | Export the current lineage graph as PNG, SVG, or JSON |
@@ -369,12 +387,25 @@ Use the autocomplete search box in the toolbar to find and navigate to specific 
 - Results are ranked by relevance (exact match > starts with > contains)
 - Selecting a result centers and highlights that column in the graph
 
+**Multi-Select and Group Move:**
+
+Select multiple nodes and move them as a group:
+- **Toolbar toggle:** Click the Multi-Select button (MousePointerClick icon) in the toolbar to enter multi-select mode. The button highlights blue when active
+- **Click to select:** In multi-select mode, click any table node to add or remove it from the selection. Selected nodes display a blue ring
+- **Cmd+Click:** When not in toolbar multi-select mode, hold Cmd (Mac) and click nodes to multi-select
+- **Group drag:** Drag any selected node to move the entire selection together
+- **Exit:** Press Escape or click the toolbar button again to exit multi-select mode
+
+**Note:** Entering multi-select mode clears any active lineage path highlighting to avoid visual conflicts.
+
 **Database Clustering:**
 
 Tables are visually grouped by their parent database with semi-transparent colored backgrounds:
 - Toggle visibility with Ctrl+G or the toolbar button
 - Each database gets a distinct background color
 - Database name label appears at the top of each cluster region
+- Databases are ordered left-to-right following data flow direction (upstream databases on the left, downstream on the right) using topological sorting
+- Cluster bounding boxes are guaranteed not to overlap, with automatic spacing applied after layout
 - Helps understand cross-database data flows in complex lineage graphs
 
 **Path Highlighting:**
@@ -434,6 +465,19 @@ Each result has an expand/collapse arrow:
 - Click a **database name** to view all table-to-table relationships in that database (database-level lineage)
 - Click a **table name** to view lineage for all columns in that table (table-level lineage)
 - Click a **column name** (within an expanded table) to view upstream and downstream lineage for that specific column
+
+### View Lineage
+
+Views are surfaced as visible intermediate nodes in lineage graphs, showing how data flows from source tables through views to downstream consumers.
+
+**Visual Indicators:**
+- **Orange border:** View nodes have an orange border (vs gray for tables, violet for materialized views)
+- **VIEW badge:** A "VIEW" badge appears next to view names in the Asset Browser and graph nodes
+- **Transitive lineage:** Clicking a column in a view shows lineage flowing from the view's source tables through the view to downstream targets
+
+**How view lineage is populated:**
+
+View lineage is automatically derived from view SQL definitions stored in Teradata's `DBC.TablesV.RequestText`. The system parses view SQL using SQLGlot to extract column-level mappings from source tables to view columns. Run `populate_lineage.py --views` to populate view lineage (see [DBQL-Based Lineage Extraction](#dbql-based-lineage-extraction)).
 
 ### Lineage Levels
 
@@ -914,6 +958,10 @@ This fallback uses `HELP COLUMN` commands for each view column, which is slower 
 | **Detail Panel** | A slide-out panel showing metadata for selected columns or edges |
 | **ELKjs** | Eclipse Layout Kernel for JavaScript - the library used for automatic graph layout |
 | **React Flow** | The React library used for rendering interactive node-based graphs |
+| **Wildcard Expansion** | The process of resolving `SELECT *` and `t1.*` patterns to actual column names using table metadata |
+| **View Lineage** | Column-level lineage derived from view SQL definitions, showing data flow through views to source tables |
+| **Multi-Select** | A graph interaction mode where multiple nodes can be selected and moved as a group |
+| **Topological Sort** | An ordering of database clusters based on data flow direction, placing upstream databases on the left |
 
 ---
 
@@ -1022,9 +1070,9 @@ The application includes comprehensive test suites for all components.
 |------------|-------|-------------|
 | Database (Python) | 73 | Schema validation, data extraction, recursive CTEs |
 | Backend API (Python) | 20 | API endpoint validation |
-| Frontend Unit (Vitest) | 260+ | Component, hook, and utility tests |
-| Frontend E2E (Playwright) | 21 | End-to-end user flow tests |
-| **Total** | **370+** | |
+| Frontend Unit (Vitest) | ~558 | Component, hook, and utility tests |
+| Frontend E2E (Playwright) | 34 | End-to-end user flow tests |
+| **Total** | **685+** | |
 
 ### Database Tests
 
@@ -1119,10 +1167,10 @@ npm run test:coverage
  ✓ src/test/accessibility.test.tsx (28 tests)
  ✓ src/components/domain/LineageGraph/DetailPanel.test.tsx (16 tests)
  ✓ src/components/domain/LineageGraph/LineageGraph.test.tsx (18 tests)
- ... (21 test files total)
+ ... (32 test files total)
 
- Test Files  21 passed (21)
-      Tests  260+ passed
+ Test Files  32 passed (32)
+      Tests  ~558 passed
 ```
 
 **Test Coverage:**
@@ -1158,14 +1206,14 @@ npx playwright show-report
 
 **Expected Output:**
 ```
-Running 21 tests using 5 workers
+Running 34 tests using 5 workers
 
   ✓ TC-E2E-001: displays databases in asset browser
   ✓ TC-E2E-002: expands database to show tables
   ...
-  ✓ TC-E2E-021: verify aggregation lineage FACT -> FACT_DAILY
+  ✓ TC-E2E-034: verify view lineage flow
 
-  21 passed (25.9s)
+  34 passed
 ```
 
 **Test Coverage:**
@@ -1213,9 +1261,9 @@ npx playwright test
 **Expected Results:**
 - Database tests: 44 passed, 29 skipped (ClearScape limitations)
 - Backend API tests: 20 passed
-- Frontend unit tests: 260+ passed
-- Frontend E2E tests: 21 passed
-- **Total: 345+ tests passed**
+- Frontend unit tests: ~558 passed
+- Frontend E2E tests: 34 passed
+- **Total: 656+ tests passed**
 
 ### Playwright Configuration
 
@@ -1383,12 +1431,13 @@ Response includes OpenLineage-structured graph with transformation type/subtype:
 
 The application supports extracting column-level lineage automatically from Teradata's Database Query Log (DBQL). This captures lineage from actual executed SQL statements like INSERT SELECT, MERGE, CREATE TABLE AS, and CREATE VIEW.
 
-### When to Use DBQL Extraction
+### When to Use Each Mode
 
 | Mode | Use Case | Command |
 |------|----------|---------|
-| **Fixtures** (default) | Demo, testing, development | `python populate_lineage.py` |
-| **DBQL** | Production, real lineage from executed queries | `python populate_lineage.py --dbql` |
+| **DBQL** (default) | Production, real lineage from executed queries | `python populate_lineage.py` |
+| **Fixtures** | Demo, testing, development | `python populate_lineage.py --fixtures` |
+| **View Lineage** | Derive lineage from view SQL definitions | `python populate_lineage.py --views` |
 
 ### DBQL Prerequisites
 
@@ -1415,20 +1464,29 @@ Before using DBQL extraction, ensure these requirements are met:
 ```bash
 cd database/
 
-# Extract lineage from last 30 days (default)
-python scripts/populate/populate_lineage.py --dbql
+# Extract lineage from last 30 days (default mode)
+python scripts/populate/populate_lineage.py
 
 # Extract lineage since a specific date
-python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"
+python scripts/populate/populate_lineage.py --since "2024-01-01"
 
 # Extract all available history
-python scripts/populate/populate_lineage.py --dbql --full
+python scripts/populate/populate_lineage.py --full
+
+# Derive view lineage from view SQL definitions
+python scripts/populate/populate_lineage.py --views
 
 # Preview what would be extracted (dry run)
-python scripts/populate/populate_lineage.py --dbql --dry-run
+python scripts/populate/populate_lineage.py --dry-run
 
 # Verbose output for debugging
-python scripts/populate/populate_lineage.py --dbql --verbose
+python scripts/populate/populate_lineage.py --verbose
+
+# Skip clearing existing data (append mode)
+python scripts/populate/populate_lineage.py --skip-clear
+
+# Only populate lineage, skip datasets/fields
+python scripts/populate/populate_lineage.py --lineage-only
 ```
 
 ### What DBQL Extraction Captures
@@ -1441,6 +1499,30 @@ The extractor parses the following statement types from DBQL:
 - `UPDATE` statements
 
 For each statement, it extracts column-level lineage by parsing the SQL using SQLGlot with Teradata dialect support.
+
+**Wildcard Expansion:**
+
+The extractor automatically resolves wildcards in SQL statements to actual column names:
+
+| Pattern | Example | How It's Resolved |
+|---------|---------|-------------------|
+| Simple wildcard | `SELECT *` | Expanded to all columns from the source table via DBC.ColumnsJQV metadata |
+| Qualified wildcard | `SELECT t1.*, t2.*` | Each alias resolved to its table, then expanded to that table's columns |
+| INSERT with wildcard | `INSERT INTO target SELECT * FROM source` | Columns matched by ordinal position (1st to 1st, 2nd to 2nd) |
+| CREATE AS wildcard | `CREATE TABLE target AS SELECT * FROM source` | Target columns derived from source column names |
+| View wildcards | `SELECT * FROM my_view` | View definition retrieved and wildcards recursively expanded (up to 3 levels) |
+
+Wildcard-expanded lineage records receive a confidence score of 0.70. Multi-table unqualified `SELECT *` (ambiguous source attribution) is skipped with a warning.
+
+**View Lineage Extraction (`--views`):**
+
+When run with `--views`, the script uses the `ViewLineageExtractor` to:
+1. Discover all views registered in `OL_DATASET`
+2. Retrieve view SQL definitions from `DBC.TablesV.RequestText`
+3. Parse each view's SQL using SQLGlot to extract column-level mappings
+4. Insert lineage records linking view columns to their source table columns
+
+This surfaces views as intermediate nodes in lineage graphs, showing how data flows from source tables through views to downstream consumers.
 
 ### DBQL Extraction Limitations
 
@@ -1473,9 +1555,10 @@ For each statement, it extracts column-level lineage by parsing the SQL using SQ
 Additional lineage discovery methods planned for future releases:
 
 1. **SQL File Ingestion**: Parse ETL script files directly
-2. **DDL-Based Lineage**: Extract from view definitions automatically
-3. **API Registration**: Applications register lineage at runtime
-4. **Metadata Import**: Import from dbt, DataHub, OpenLineage producers
+2. **API Registration**: Applications register lineage at runtime
+3. **Metadata Import**: Import from dbt, DataHub, OpenLineage producers
+
+**Note:** DDL-based lineage (extracting from view definitions) is now implemented via the `--views` flag in `populate_lineage.py`.
 
 ---
 

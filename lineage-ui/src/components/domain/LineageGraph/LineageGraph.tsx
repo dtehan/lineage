@@ -16,10 +16,10 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useOpenLineageTableLineage } from '../../../api/hooks/useOpenLineage';
+import { useOpenLineageTableLineage, useOpenLineageGraph } from '../../../api/hooks/useOpenLineage';
 import { openLineageApi } from '../../../api/client';
 import { useLineageStore } from '../../../stores/useLineageStore';
-import type { TableNodeData } from '../../../utils/graph/layoutEngine';
+import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
@@ -31,14 +31,13 @@ import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
-import { LargeGraphWarning } from './LargeGraphWarning';
+import { LargeGraphWarning, LARGE_GRAPH_THRESHOLD } from './LargeGraphWarning';
 import {
   useLineageHighlight,
   useKeyboardShortcuts,
   useLineageExport,
   useSmartViewport,
   useFitToSelection,
-  useLayoutWorker,
   useProfiler,
   useMultiSelect,
 } from './hooks';
@@ -75,6 +74,9 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   const wrapperRef = useRef<HTMLDivElement>(null);
   const [showMinimap, setShowMinimap] = useState(false);
   const [isWarningDismissed, setIsWarningDismissed] = useState(false);
+  // Tracks when a graph is too large to layout — set before ELK runs so we can
+  // show an immediate warning instead of waiting minutes for ELK to finish.
+  const [preLayoutNodeCount, setPreLayoutNodeCount] = useState(0);
   const hasAppliedViewportRef = useRef(false);
   const hasUserInteractedRef = useRef(false);
 
@@ -109,8 +111,24 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     toggleMultiSelectMode,
   } = useLineageStore();
 
-  // Always use table lineage to show all columns
-  const { data, isLoading, isFetching, error } = useOpenLineageTableLineage(datasetId, direction, maxDepth);
+  // Use column-level lineage for a specific field, table-level lineage for '_all'.
+  // Column-level lineage is much faster for large tables: it fetches only the
+  // selected column's connections rather than all columns in the table.
+  const isTableView = fieldName === '_all';
+  const columnQuery = useOpenLineageGraph(
+    datasetId,
+    fieldName,
+    direction,
+    maxDepth,
+    { enabled: !isTableView && !!datasetId && !!fieldName }
+  );
+  const tableQuery = useOpenLineageTableLineage(
+    datasetId,
+    direction,
+    maxDepth,
+    { enabled: isTableView && !!datasetId }
+  );
+  const { data, isLoading, isFetching, error } = isTableView ? tableQuery : columnQuery;
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -146,9 +164,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Use fit-to-selection hook for centering on highlighted path
   const { fitToSelection, hasSelection } = useFitToSelection();
-
-  // Use layout worker hook for off-thread layout computation
-  const { layoutGraph: workerLayoutGraph } = useLayoutWorker();
 
   // Use profiler hook for measuring re-render frequency (FRONTEND-02)
   const { onRender } = useProfiler('LineageGraph');
@@ -195,12 +210,13 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     return () => toggleTransitions(true);
   }, [filteredNodesAndEdges.filteredNodes.length]);
 
-  // Reset loading state and viewport flags when datasetId changes
+  // Reset loading state and viewport flags when datasetId or fieldName changes
   useEffect(() => {
     reset();
+    setPreLayoutNodeCount(0);
     hasAppliedViewportRef.current = false;
     hasUserInteractedRef.current = false;
-  }, [datasetId, reset]);
+  }, [datasetId, fieldName, reset]);
 
   // Sync data fetch stage with TanStack Query loading state
   // Also reset stage on error so the error UI can render (not blocked by showProgress)
@@ -216,6 +232,10 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   useEffect(() => {
     if (data?.graph) {
       setStage('layout');
+      // Track whether this effect run has been superseded (data changed or component unmounted).
+      // Without this, stale worker promises from previous navigations can call setState on the
+      // current component, corrupting stage and nodes while a fresh computation is in progress.
+      let cancelled = false;
 
       // Convert OpenLineage graph to legacy format for layout engine
       const { nodes: legacyNodes, edges: legacyEdges } = convertOpenLineageGraph(
@@ -223,13 +243,51 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         data.graph.edges
       );
 
-      // Set progress manually since onProgress callback can't be passed to Worker
-      // (functions are not serializable via structured clone)
-      setProgress(35); // Entering layout stage
+      // Count unique tables (which become React Flow table cards after layout).
+      // LARGE_GRAPH_THRESHOLD is calibrated for table-card count, NOT column-node
+      // count. A single table can have 30+ columns, so comparing legacyNodes.length
+      // would fire the threshold far too early.
+      const uniqueTableCount = new Set(
+        legacyNodes
+          .filter((n) => n.type === 'column' && n.tableName)
+          .map((n) => `${n.databaseName}.${n.tableName}`)
+      ).size;
+      setPreLayoutNodeCount(uniqueTableCount);
 
-      workerLayoutGraph(legacyNodes, legacyEdges, {})
+      // Gate: if there are no edges, skip ELK entirely. There are no relationships
+      // to visualise, so layout is unnecessary. Certain ELK configurations
+      // (rectpacking inner layout + FIXED_ORDER port constraints propagated via
+      // hierarchyHandling: INCLUDE_CHILDREN) can cause ELK to hang indefinitely
+      // for a single-table, 0-edge graph, leaving the spinner stuck at
+      // "Calculating layout". The hasNoLineageData check in the render tree
+      // handles showing the correct empty-state UI once stage is 'complete'.
+      if (legacyEdges.length === 0) {
+        setGraph(legacyNodes, legacyEdges);
+        setStage('complete');
+        return () => {
+          cancelled = true;
+          reset();
+        };
+      }
+
+      // Gate: if graph is too large, skip ELK entirely and surface an immediate
+      // blocking warning. ELK's hierarchical algorithm takes O(n²+) time; graphs
+      // with 200+ table nodes can take many minutes.  Users can reduce depth to recover.
+      if (uniqueTableCount > LARGE_GRAPH_THRESHOLD) {
+        setGraph(legacyNodes, legacyEdges);
+        setStage('complete');
+        return () => {
+          cancelled = true;
+          reset();
+        };
+      }
+
+      // Run layout on main thread (topological layout is O(V+E), completes in ms)
+      layoutGraph(legacyNodes, legacyEdges, {
+        onProgress: (p) => setProgress(p),
+      })
         .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-          setProgress(70); // Layout complete
+          if (cancelled) return;
           setStage('rendering');
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
@@ -243,13 +301,20 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
           });
         })
         .catch((error) => {
+          if (cancelled) return;
           console.error('Layout error:', error);
           // Fallback: set nodes without layout
           setGraph(legacyNodes, legacyEdges);
           setStage('complete');
         });
+
+      return () => {
+        cancelled = true;
+        // Reset stage so a stale 'layout' stage doesn't block the next render cycle
+        reset();
+      };
     }
-  }, [data, setNodes, setEdges, setGraph, setStage, setProgress, workerLayoutGraph]);
+  }, [data, setNodes, setEdges, setGraph, setStage, setProgress, reset]);
 
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
@@ -360,17 +425,28 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
 
   // Handle refresh - fetch fresh data bypassing backend cache
   const handleRefresh = useCallback(async () => {
-    const freshData = await openLineageApi.getTableLineageGraph(datasetId, {
-      direction,
-      maxDepth,
-      refresh: true,
-    });
-    // Update TanStack Query cache with fresh data
-    queryClient.setQueryData(
-      ['openlineage', 'table-lineage', datasetId, direction, maxDepth],
-      freshData
-    );
-  }, [datasetId, direction, maxDepth, queryClient]);
+    if (isTableView) {
+      const freshData = await openLineageApi.getTableLineageGraph(datasetId, {
+        direction,
+        maxDepth,
+        refresh: true,
+      });
+      queryClient.setQueryData(
+        ['openlineage', 'table-lineage', datasetId, direction, maxDepth],
+        freshData
+      );
+    } else {
+      const freshData = await openLineageApi.getLineageGraph(datasetId, fieldName, {
+        direction,
+        maxDepth,
+        refresh: true,
+      });
+      queryClient.setQueryData(
+        ['openlineage', 'lineage', datasetId, fieldName, direction, maxDepth],
+        freshData
+      );
+    }
+  }, [isTableView, datasetId, fieldName, direction, maxDepth, queryClient]);
 
   // Get column detail for panel
   const getColumnDetail = useCallback(
@@ -545,6 +621,32 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     return (
       <div className="flex items-center justify-center h-full text-red-500" role="alert">
         Failed to load lineage: {error.message}
+      </div>
+    );
+  }
+
+  // Graph too large to layout with ELK — show a blocking warning instead of
+  // making the user wait several minutes for a layout that may never finish.
+  // The user can reduce depth and re-fetch to get a smaller, renderable graph.
+  if (preLayoutNodeCount > LARGE_GRAPH_THRESHOLD) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-600 px-8">
+        <svg className="w-12 h-12 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+        <h3 className="text-lg font-semibold text-slate-700">Graph Too Large to Display</h3>
+        <p className="text-sm text-center text-slate-500 max-w-md">
+          This graph has <strong>{preLayoutNodeCount} nodes</strong> at depth {maxDepth}. Laying out graphs this
+          large can take many minutes. Try reducing the depth to see a more focused view.
+        </p>
+        {suggestedDepth < maxDepth && (
+          <button
+            onClick={handleAcceptDepthSuggestion}
+            className="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors"
+          >
+            Reduce depth to {suggestedDepth}
+          </button>
+        )}
       </div>
     );
   }

@@ -1,4 +1,4 @@
-import ELK, { ElkNode, ElkExtendedEdge, ElkPort } from 'elkjs/lib/elk.bundled.js';
+import ELK, { ElkNode, ElkExtendedEdge } from 'elkjs/lib/elk.bundled.js';
 import type { Node, Edge } from '@xyflow/react';
 import type { LineageNode, LineageEdge } from '../../types';
 import type { ColumnDefinition } from '../../components/domain/LineageGraph/TableNode/ColumnRow';
@@ -137,28 +137,6 @@ export function calculateTableNodeWidth(tableName: string, columns: ColumnDefini
 }
 
 /**
- * Creates ELK ports for a table node's columns
- */
-function createElkPorts(tableId: string, columns: ColumnDefinition[]): ElkPort[] {
-  return columns.flatMap((column, index) => [
-    {
-      id: `${tableId}-${column.id}-target`,
-      properties: {
-        'port.side': 'WEST',
-        'port.index': String(index),
-      },
-    },
-    {
-      id: `${tableId}-${column.id}-source`,
-      properties: {
-        'port.side': 'EAST',
-        'port.index': String(index),
-      },
-    },
-  ]);
-}
-
-/**
  * Transforms LineageNodes to TableNodeData format
  */
 function transformToTableNodes(
@@ -210,10 +188,6 @@ function transformToTableNodes(
 
   return { nodes, columnToTableMap };
 }
-
-// Constants for database cluster padding
-const DATABASE_CLUSTER_PADDING = 40;
-const DATABASE_CLUSTER_HEADER_HEIGHT = 50;
 
 // Must match the `padding` default in ClusterBackground so post-layout separation
 // leaves exactly enough room for the bounding box borders not to touch.
@@ -366,23 +340,6 @@ export function separateDatabaseClusters(
 }
 
 /**
- * Groups table nodes by their database name
- */
-function groupTablesByDatabase(tableNodes: TableNodeData[]): Map<string, TableNodeData[]> {
-  const groups = new Map<string, TableNodeData[]>();
-
-  for (const tableNode of tableNodes) {
-    const dbName = tableNode.databaseName;
-    if (!groups.has(dbName)) {
-      groups.set(dbName, []);
-    }
-    groups.get(dbName)!.push(tableNode);
-  }
-
-  return groups;
-}
-
-/**
  * Main layout function - transforms LineageNodes/Edges to React Flow format
  * with table-grouped nodes and column-level edge routing.
  * Uses ELK compound nodes to ensure tables stay within their database boundaries.
@@ -426,312 +383,145 @@ export async function layoutGraph(
     prepEndTime = performance.now();
   }
 
-  // Group tables by database for compound node layout
-  const databaseGroups = groupTablesByDatabase(tableNodeData);
+  // ── Custom topological layout ────────────────────────────────────
+  // Replaces ELK which hangs indefinitely on dense column-level
+  // graphs. This completes in O(V+E) time.
 
-  // Build a map of tableKey -> databaseName for edge routing
+  // Build table→database map for cluster separation
   const tableToDatabase = new Map<string, string>();
   tableNodeData.forEach((t) => tableToDatabase.set(t.id, t.databaseName));
 
-  // Check if there are cross-database edges
-  let hasCrossDatabaseEdges = false;
-  const allElkEdges: ElkExtendedEdge[] = [];
-
-  rawEdges.forEach((edge) => {
-    const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
-    const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
-
-    if (!sourceTableKey || !targetTableKey) {
-      return;
-    }
-
-    const sourceDb = tableToDatabase.get(sourceTableKey);
-    const targetDb = tableToDatabase.get(targetTableKey);
-
-    if (sourceDb !== targetDb) {
-      hasCrossDatabaseEdges = true;
-    }
-
-    allElkEdges.push({
-      id: edge.id,
-      sources: [`${sourceTableKey}-${edge.source}-source`],
-      targets: [`${targetTableKey}-${edge.target}-target`],
-    });
-  });
-
-  
-  // If there are cross-database edges, use flat layout (no compound nodes)
-  // This avoids ELK's limitation with cross-hierarchy edge routing.
-  if (hasCrossDatabaseEdges) {
-    // Sort databases by lineage-flow order: upstream (source) databases come first
-    // and map to lower ELK partition indices so they are placed LEFT in the layout.
-    const allDbs = new Set<string>(databaseGroups.keys());
-    const dbOrder = topoSortDatabases(allDbs, rawEdges, columnToTableMap, tableToDatabase);
-    const dbPartition = new Map<string, number>();
-    dbOrder.forEach((db, i) => dbPartition.set(db, i));
-
-    // Flat table nodes — each carries a partition index so ELK keeps databases
-    // in lineage order (partition 0 = upstream/left, partition N = downstream/right).
-    const elkTableNodes: ElkNode[] = tableNodeData.map((tableNode) => {
-      const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
-      const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
-
-      return {
-        id: tableNode.id,
-        width,
-        height,
-        ports: createElkPorts(tableNode.id, tableNode.columns),
-        labels: [{ text: `${tableNode.databaseName}.${tableNode.tableName}` }],
-        properties: {
-          'partitioning.partition': String(dbPartition.get(tableNode.databaseName) ?? 0),
-        },
-      };
-    });
-
-    const elkGraph: ElkNode = {
-      id: 'root',
-      layoutOptions: {
-        'elk.algorithm': 'layered',
-        'elk.direction': direction,
-        'elk.spacing.nodeNode': String(nodeSpacing),
-        'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
-        'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-        'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
-        'elk.portConstraints': 'FIXED_ORDER',
-        // Activate partitioning: forces each database's nodes into layers that
-        // precede the next database's layers, matching lineage-flow direction.
-        'elk.partitioning.activate': 'true',
-      },
-      children: elkTableNodes,
-      edges: allElkEdges,
-    };
-
-    onProgress?.(55); // Graph built, starting ELK layout
-    const layoutedGraph = await elk.layout(elkGraph);
-
-    // Record ELK completion time
-    if (collectMetrics) {
-      elkEndTime = performance.now();
-    }
-
-    onProgress?.(70); // Layout complete, entering render
-
-    // Transform to React Flow nodes
-    const layoutedNodes: Node[] = (layoutedGraph.children || [])
-      .map((elkNode) => {
-        const tableNode = tableNodeData.find((n) => n.id === elkNode.id);
-        if (tableNode) {
-          return {
-            id: elkNode.id,
-            type: 'tableNode',
-            position: { x: elkNode.x || 0, y: elkNode.y || 0 },
-            data: tableNode,
-          } as Node;
-        }
-        return null;
-      })
-      .filter((n): n is Node => n !== null);
-
-    // Transform to React Flow edges
-    const layoutedEdges: Edge[] = rawEdges
-      .map((edge) => {
-        const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
-        const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
-
-        if (!sourceTableKey || !targetTableKey) {
-          return null;
-        }
-
-        return {
-          id: edge.id,
-          source: sourceTableKey,
-          sourceHandle: `${sourceTableKey}-${edge.source}-source`,
-          target: targetTableKey,
-          targetHandle: `${targetTableKey}-${edge.target}-target`,
-          type: 'lineageEdge',
-          animated: false,
-          data: {
-            sourceColumnId: edge.source,
-            targetColumnId: edge.target,
-            transformationType: edge.transformationType || 'unknown',
-            confidenceScore: edge.confidenceScore,
-          },
-          style: {
-            stroke: getEdgeColor(edge),
-            strokeWidth: 2,
-          },
-          markerEnd: {
-            type: 'arrowclosed' as const,
-            color: getEdgeColor(edge),
-          },
-        } as Edge;
-      })
-      .filter((edge): edge is Edge => edge !== null);
-
-    // Post-layout: guarantee padded cluster bounding boxes are non-overlapping
-    // and appear in lineage-flow order. ELK partitioning alone cannot prevent
-    // box overlap when databases share the same y-range after layout.
-    const separatedNodes = separateDatabaseClusters(
-      layoutedNodes,
-      tableNodeData,
-      direction,
-      CLUSTER_BOX_PADDING,
-      dbOrder
-    );
-
-    // Calculate and return metrics
-    const endTime = collectMetrics ? performance.now() : 0;
-    const metrics: LayoutMetrics | undefined = collectMetrics
-      ? {
-          prepTime: prepEndTime - startTime,
-          elkTime: elkEndTime - prepEndTime,
-          transformTime: endTime - elkEndTime,
-          totalTime: endTime - startTime,
-        }
-      : undefined;
-
-    return { nodes: separatedNodes, edges: layoutedEdges, metrics };
+  // Build table-level directed adjacency (deduplicated)
+  const tableAdj = new Map<string, Set<string>>();
+  const tableInDeg = new Map<string, number>();
+  for (const t of tableNodeData) {
+    tableAdj.set(t.id, new Set());
+    tableInDeg.set(t.id, 0);
   }
 
-  // No cross-database edges - use compound node layout for database clustering
-  const internalEdgesByDb = new Map<string, ElkExtendedEdge[]>();
-
-  rawEdges.forEach((edge) => {
-    const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
-    const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
-
-    if (!sourceTableKey || !targetTableKey) {
-      return;
+  for (const edge of rawEdges) {
+    const src = columnToTableMap.get(edge.source);
+    const tgt = columnToTableMap.get(edge.target);
+    if (!src || !tgt || src === tgt) continue;
+    if (!tableAdj.get(src)!.has(tgt)) {
+      tableAdj.get(src)!.add(tgt);
+      tableInDeg.set(tgt, (tableInDeg.get(tgt) || 0) + 1);
     }
+  }
 
-    const sourceDb = tableToDatabase.get(sourceTableKey);
+  // Topological sort via Kahn's algorithm (deterministic tie-breaking)
+  const topoOrder: string[] = [];
+  const inDegCopy = new Map(tableInDeg);
+  const topoQueue: string[] = [];
+  for (const [id, deg] of inDegCopy) {
+    if (deg === 0) topoQueue.push(id);
+  }
+  topoQueue.sort();
+  while (topoQueue.length > 0) {
+    topoQueue.sort();
+    const current = topoQueue.shift()!;
+    topoOrder.push(current);
+    for (const target of tableAdj.get(current) || new Set<string>()) {
+      const nd = inDegCopy.get(target)! - 1;
+      inDegCopy.set(target, nd);
+      if (nd === 0) topoQueue.push(target);
+    }
+  }
+  // Append any cycle-trapped nodes
+  const topoSet = new Set(topoOrder);
+  for (const t of tableNodeData) {
+    if (!topoSet.has(t.id)) topoOrder.push(t.id);
+  }
 
-    const elkEdge: ElkExtendedEdge = {
-      id: edge.id,
-      sources: [`${sourceTableKey}-${edge.source}-source`],
-      targets: [`${targetTableKey}-${edge.target}-target`],
-    };
-
-    if (sourceDb) {
-      if (!internalEdgesByDb.has(sourceDb)) {
-        internalEdgesByDb.set(sourceDb, []);
+  // Longest-path layering: layer[v] = max(layer[u] + 1) for all edges u→v
+  const layerMap = new Map<string, number>();
+  for (const id of topoOrder) layerMap.set(id, 0);
+  let maxLayer = 0;
+  for (const id of topoOrder) {
+    const curLayer = layerMap.get(id)!;
+    for (const tgt of tableAdj.get(id) || new Set<string>()) {
+      const proposed = curLayer + 1;
+      if (proposed > (layerMap.get(tgt) ?? 0)) {
+        layerMap.set(tgt, proposed);
+        if (proposed > maxLayer) maxLayer = proposed;
       }
-      internalEdgesByDb.get(sourceDb)!.push(elkEdge);
     }
-  });
+  }
 
-  // Create ELK compound nodes (database clusters containing table nodes)
-  const elkDatabaseNodes: ElkNode[] = [];
+  onProgress?.(55); // Layering complete
 
-  databaseGroups.forEach((tables, databaseName) => {
-    // Create child table nodes for this database
-    const childTableNodes: ElkNode[] = tables.map((tableNode) => {
-      const height = calculateTableNodeHeight(tableNode.columns.length, tableNode.isExpanded);
-      const width = calculateTableNodeWidth(tableNode.tableName, tableNode.columns);
+  // Group tables by layer
+  const layerBuckets = new Map<number, TableNodeData[]>();
+  for (const t of tableNodeData) {
+    const layer = layerMap.get(t.id) ?? 0;
+    if (!layerBuckets.has(layer)) layerBuckets.set(layer, []);
+    layerBuckets.get(layer)!.push(t);
+  }
 
-      return {
-        id: tableNode.id,
-        width,
-        height,
-        ports: createElkPorts(tableNode.id, tableNode.columns),
-        labels: [{ text: tableNode.tableName }],
-      };
-    });
+  // Position tables: primary axis = layer, secondary axis = stacked within layer
+  const isHorizontal = direction === 'RIGHT' || direction === 'LEFT';
+  const isReversed = direction === 'LEFT' || direction === 'UP';
 
-    const internalEdges = internalEdgesByDb.get(databaseName) || [];
-    const hasInternalEdges = internalEdges.length > 0;
+  let primaryCursor = 0;
+  const layoutedNodes: Node[] = [];
 
-    // Choose algorithm based on whether there are internal edges
-    const innerLayoutOptions: Record<string, string> = {
-      'elk.padding': `[top=${DATABASE_CLUSTER_HEADER_HEIGHT},left=${DATABASE_CLUSTER_PADDING},bottom=${DATABASE_CLUSTER_PADDING},right=${DATABASE_CLUSTER_PADDING}]`,
-      'elk.spacing.nodeNode': String(nodeSpacing),
-    };
+  for (let layer = 0; layer <= maxLayer; layer++) {
+    const tables = layerBuckets.get(layer);
+    if (!tables) continue;
+    tables.sort((a, b) => a.id.localeCompare(b.id)); // deterministic order
 
-    if (hasInternalEdges) {
-      innerLayoutOptions['elk.algorithm'] = 'layered';
-      innerLayoutOptions['elk.direction'] = direction;
-      innerLayoutOptions['elk.layered.spacing.nodeNodeBetweenLayers'] = String(layerSpacing);
-      innerLayoutOptions['elk.portConstraints'] = 'FIXED_ORDER';
-    } else {
-      innerLayoutOptions['elk.algorithm'] = 'rectpacking';
-      innerLayoutOptions['elk.rectpacking.widthApproximation.strategy'] = 'MAX_SCALE_DRIVEN';
-      innerLayoutOptions['elk.rectpacking.widthApproximation.targetWidth'] = String(1200);
-      innerLayoutOptions['elk.contentAlignment'] = 'V_CENTER H_LEFT';
+    let secondaryCursor = 0;
+    let maxPrimarySize = 0;
+
+    for (const table of tables) {
+      const width = calculateTableNodeWidth(table.tableName, table.columns);
+      const height = calculateTableNodeHeight(table.columns.length, table.isExpanded);
+      const primarySize = isHorizontal ? width : height;
+      const secondarySize = isHorizontal ? height : width;
+      maxPrimarySize = Math.max(maxPrimarySize, primarySize);
+
+      layoutedNodes.push({
+        id: table.id,
+        type: 'tableNode',
+        position: {
+          x: isHorizontal ? primaryCursor : secondaryCursor,
+          y: isHorizontal ? secondaryCursor : primaryCursor,
+        },
+        data: table,
+      } as Node);
+
+      secondaryCursor += secondarySize + nodeSpacing;
     }
 
-    // Create database compound node containing all its tables
-    elkDatabaseNodes.push({
-      id: `db-${databaseName}`,
-      labels: [{ text: databaseName }],
-      layoutOptions: innerLayoutOptions,
-      children: childTableNodes,
-      edges: internalEdges,
-    });
-  });
+    primaryCursor += maxPrimarySize + layerSpacing;
+  }
 
-  // Configure and run ELK layout with compound node support
-  const elkGraph: ElkNode = {
-    id: 'root',
-    layoutOptions: {
-      'elk.algorithm': 'layered',
-      'elk.direction': direction,
-      'elk.spacing.nodeNode': String(nodeSpacing * 2),
-      'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing * 1.5),
-      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
-      'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
-      'elk.portConstraints': 'FIXED_ORDER',
-      'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-      'elk.hierarchyHandling': 'INCLUDE_CHILDREN',
-    },
-    children: elkDatabaseNodes,
-    edges: [], // No external edges in this path
-  };
+  // Flip positions for LEFT/UP directions
+  if (isReversed && layoutedNodes.length > 0) {
+    const maxPos = Math.max(
+      ...layoutedNodes.map((n) => (isHorizontal ? n.position.x : n.position.y))
+    );
+    for (const node of layoutedNodes) {
+      if (isHorizontal) {
+        node.position.x = maxPos - node.position.x;
+      } else {
+        node.position.y = maxPos - node.position.y;
+      }
+    }
+  }
 
-  onProgress?.(55); // Graph built, starting ELK layout
-  const layoutedGraph = await elk.layout(elkGraph);
-
-  // Record ELK completion time
   if (collectMetrics) {
     elkEndTime = performance.now();
   }
 
-  onProgress?.(70); // Layout complete, entering render
+  onProgress?.(70); // Layout complete, building edges
 
-  // Transform to React Flow nodes - extract table positions from within database compound nodes
-  const layoutedNodes: Node[] = [];
-
-  (layoutedGraph.children || []).forEach((elkDbNode) => {
-    // Get database position offset
-    const dbX = elkDbNode.x || 0;
-    const dbY = elkDbNode.y || 0;
-
-    // Extract table nodes from within the database compound node
-    (elkDbNode.children || []).forEach((elkTableNode) => {
-      const tableNode = tableNodeData.find((n) => n.id === elkTableNode.id);
-      if (tableNode) {
-        layoutedNodes.push({
-          id: elkTableNode.id,
-          type: 'tableNode',
-          // Position is relative to database container, so add the database offset
-          position: {
-            x: dbX + (elkTableNode.x || 0),
-            y: dbY + (elkTableNode.y || 0)
-          },
-          data: tableNode,
-        });
-      }
-    });
-  });
-
-  // Transform to React Flow edges with handles
+  // Transform raw edges to React Flow edges with column-level handles
   const layoutedEdges: Edge[] = rawEdges
     .map((edge) => {
       const sourceTableKey = getTableKeyFromColumnId(edge.source, columnToTableMap);
       const targetTableKey = getTableKeyFromColumnId(edge.target, columnToTableMap);
-
-      if (!sourceTableKey || !targetTableKey) {
-        return null;
-      }
+      if (!sourceTableKey || !targetTableKey) return null;
 
       return {
         id: edge.id,
@@ -757,7 +547,21 @@ export async function layoutGraph(
         },
       } as Edge;
     })
-    .filter((edge): edge is Edge => edge !== null);
+    .filter((e): e is Edge => e !== null);
+
+  // Post-layout: separate database clusters for multi-database graphs
+  const allDbs = new Set(tableNodeData.map((t) => t.databaseName));
+  let finalNodes = layoutedNodes;
+  if (allDbs.size > 1) {
+    const dbOrder = topoSortDatabases(allDbs, rawEdges, columnToTableMap, tableToDatabase);
+    finalNodes = separateDatabaseClusters(
+      layoutedNodes,
+      tableNodeData,
+      direction,
+      CLUSTER_BOX_PADDING,
+      dbOrder
+    );
+  }
 
   // Calculate and return metrics
   const endTime = collectMetrics ? performance.now() : 0;
@@ -770,7 +574,7 @@ export async function layoutGraph(
       }
     : undefined;
 
-  return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
+  return { nodes: finalNodes, edges: layoutedEdges, metrics };
 }
 
 /**

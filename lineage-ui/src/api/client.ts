@@ -81,7 +81,7 @@ export const openLineageApi = {
   },
 
   async unifiedSearch(query: string, limit?: number): Promise<UnifiedSearchResponse> {
-    const response = await apiClientV2.get<UnifiedSearchResponse>('/api/v2/openlineage/datasets/search', {
+    const response = await apiClientV2.get<UnifiedSearchResponse>('/api/v2/openlineage/search', {
       params: { q: query, limit },
     });
     return response.data;

@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 The Python environment is required for both the backend server and the database setup scripts.
 
-**Python dependencies installed:** `teradatasql`, `flask`, `flask-cors`, `requests`, `python-dotenv`, `sqlglot`.
+**Python dependencies installed:** `teradatasql`, `flask`, `flask-cors`, `requests`, `python-dotenv`, `sqlglot`, `loguru`.
 
 ### Step 3: Configure Environment
 
@@ -177,16 +177,25 @@ This creates sample medallion architecture tables (SRC -> STG -> DIM -> FACT) in
 
 ### 4.4 Populate Lineage Data
 
-Two population methods are available depending on your environment.
+Multiple population methods are available depending on your environment.
 
 **DBQL mode (default)** -- extracts lineage from executed SQL in Teradata query logs:
 
 ```bash
 python scripts/populate/populate_lineage.py                                # Default - uses DBQL
-python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"    # DBQL since a specific date
+python scripts/populate/populate_lineage.py --since "2024-01-01"           # DBQL since a specific date
+python scripts/populate/populate_lineage.py --full                         # Full extraction (all history)
 ```
 
-DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. The Teradata user specified in your configuration must have access to these system views.
+DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. The Teradata user specified in your configuration must have access to these system views. The DBQL extractor uses the `WildcardResolver` module to automatically expand `SELECT *` and qualified wildcards (`t1.*`) to actual column names using batch DBC.ColumnsJQV metadata.
+
+**View lineage mode** -- derives column-level lineage from view SQL definitions:
+
+```bash
+python scripts/populate/populate_lineage.py --views
+```
+
+This uses the `ViewLineageExtractor` module to parse view definitions from `DBC.TablesV.RequestText` via SQLGlot, extracting column-level mappings. Views then surface as orange intermediate nodes in lineage graphs. Can be combined with other modes.
 
 **Fixtures mode** -- uses hardcoded column mappings for demo and testing:
 
@@ -194,10 +203,13 @@ DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. Th
 python scripts/populate/populate_lineage.py --fixtures
 ```
 
-**Dry run** -- preview what would be populated without making changes:
+**Additional flags:**
 
 ```bash
-python scripts/populate/populate_lineage.py --dry-run
+python scripts/populate/populate_lineage.py --dry-run        # Preview without making changes
+python scripts/populate/populate_lineage.py --verbose         # Verbose logging output
+python scripts/populate/populate_lineage.py --skip-clear      # Append mode (don't clear existing data)
+python scripts/populate/populate_lineage.py --lineage-only    # Only populate lineage, skip datasets/fields
 ```
 
 **Populate metadata** -- after populating lineage data, populate the metadata for the tables:

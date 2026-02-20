@@ -127,14 +127,15 @@ Developer-specific notes:
 
 See [Operations Guide > Database Setup](operations_guide.md#database-setup) for QVCI verification, schema creation, and lineage population procedures.
 
-The lineage population script supports two modes:
+The lineage population script supports multiple modes:
 
 | Mode | Command | Use Case |
 |------|---------|----------|
-| Fixtures (default) | `python scripts/populate/populate_lineage.py` | Demo and testing -- uses hardcoded mappings |
-| DBQL extraction | `python scripts/populate/populate_lineage.py --dbql` | Production -- extracts lineage from Teradata query logs |
+| DBQL extraction (default) | `python scripts/populate/populate_lineage.py` | Production -- extracts lineage from Teradata query logs |
+| Fixtures | `python scripts/populate/populate_lineage.py --fixtures` | Demo and testing -- uses hardcoded mappings |
+| View lineage | `python scripts/populate/populate_lineage.py --views` | Derives column lineage from view SQL definitions |
 
-For local development, the fixtures mode provides a complete working dataset without requiring query log history.
+For local development, fixtures mode provides a complete working dataset without requiring query log history. The `--views` flag can be combined with either mode to additionally populate view lineage.
 
 ---
 
@@ -149,7 +150,7 @@ The project has four test suites covering database, API, frontend unit, and end-
 | Database | 73 | `cd database && python tests/run_tests.py` | Teradata connection |
 | API | 20 | `cd lineage-api && python tests/run_api_tests.py` | Backend running on :8080 |
 | Frontend Unit | ~558 | `cd lineage-ui && npm test` | Nothing (runs in jsdom) |
-| E2E | 34 | `cd lineage-ui && npx playwright test` | Backend on :8080 |
+| E2E | 34 | `cd lineage-ui && npx playwright test` | Backend on :8080 + auto-starts frontend |
 
 ### 3.1 Database Tests (73 tests)
 
@@ -326,6 +327,17 @@ lineage-api/
 - **Exception hierarchy:** `LineageException` base class with specific errors
 - **Optional caching:** Redis cache-aside pattern with graceful degradation
 
+**Database-side modules (v3.0):**
+
+The `database/scripts/populate/` directory includes two key modules for lineage extraction:
+
+| Module | Purpose |
+|--------|---------|
+| `wildcard_resolver.py` | Resolves `SELECT *` and qualified wildcards (`t1.*`) to actual column names using batch DBC.ColumnsJQV metadata with in-memory caching |
+| `view_lineage_extractor.py` | Derives column-level lineage from view SQL definitions via SQLGlot parsing of DBC.TablesV.RequestText |
+
+These modules are invoked by `populate_lineage.py` during DBQL extraction (WildcardResolver) and `--views` mode (ViewLineageExtractor).
+
 ### 5.2 Layered Architecture
 
 **Routes (Flask Blueprints)** → **Repositories (Data Access)** → **Teradata Database**
@@ -408,7 +420,7 @@ lineage-ui/src/
 │       │   ├── Toolbar.tsx, DetailPanel.tsx, Legend.tsx
 │       │   ├── DetailPanel/ (ColumnsTab, StatisticsTab, DDLTab)
 │       │   ├── LineageTableView/
-│       │   └── hooks/ (useLineageHighlight, useDatabaseClusters, etc.)
+│       │   └── hooks/ (useLineageHighlight, useDatabaseClusters, useMultiSelect, etc.)
 │       ├── ImpactAnalysis/     # Impact summary and analysis table
 │       └── Search/             # SearchBar, SearchResults
 │
@@ -421,7 +433,7 @@ lineage-ui/src/
 │   └── SearchPage.tsx          # Search results
 │
 ├── stores/                     # STATE LAYER - Zustand stores
-│   ├── useLineageStore.ts      # Graph state (selection, depth, direction)
+│   ├── useLineageStore.ts      # Graph state (selection, depth, direction, multi-select mode)
 │   └── useUIStore.ts           # UI state (sidebar, panels, view mode)
 │
 ├── hooks/                      # SHARED HOOKS
@@ -453,6 +465,9 @@ Data flows through the frontend in a consistent pattern:
 - **React Flow custom nodes.** The lineage graph renders tables as `TableNode` components containing `ColumnNode` children. Each column row is interactive (click to view lineage, hover to highlight).
 - **ELKjs in Web Worker (Phase 5).** Graph layout computation happens off the main thread using a Web Worker to prevent UI freezes. The worker is exposed via `useLayoutWorker` hook and communicates using Comlink for type-safe RPC. Large graphs (200+ nodes) automatically disable CSS transitions to prevent animation jank.
 - **React memoization.** `nodeTypes`, `edgeTypes`, and filtered node/edge arrays are memoized to prevent unnecessary re-renders. React Profiler instrumentation tracks re-render frequency in development mode.
+- **Multi-select via store + hook (Phase 13).** `isMultiSelectMode` in Zustand controls whether toolbar multi-select is active. The `useMultiSelect` hook syncs this state with React Flow's internal `multiSelectionActive` property via `useStoreApi`. When active, `multiSelectionKeyCode` is set to `null` so every click toggles selection without requiring a modifier key. Selected nodes display a blue ring and can be dragged as a group.
+- **Alphabetical column sorting (Phase 11).** Columns within table nodes are sorted by `name.localeCompare()` in the layout engine before being assigned to table groups. The Detail Panel's Columns tab uses the same ordering.
+- **Topological cluster ordering (Phase 12).** Database clusters are ordered left-to-right using Kahn's algorithm (`topoSortDatabases`) based on edge direction, placing upstream databases on the left. A post-layout `separateDatabaseClusters` pass shifts bounding boxes to guarantee non-overlap with 60px padding.
 
 ### 6.5 Performance Optimizations (Phase 5)
 
@@ -549,8 +564,13 @@ The backend serves two API versions:
 | GET | `/api/v2/openlineage/namespaces/{namespaceId}` | Get namespace details |
 | GET | `/api/v2/openlineage/namespaces/{namespaceId}/datasets` | List datasets in namespace |
 | GET | `/api/v2/openlineage/datasets/{datasetId}` | Get dataset with fields |
+| GET | `/api/v2/openlineage/datasets/{datasetId}/statistics` | Get dataset statistics |
+| GET | `/api/v2/openlineage/datasets/{datasetId}/ddl` | Get dataset DDL |
 | GET | `/api/v2/openlineage/datasets/search?q=query` | Search datasets by name |
+| GET | `/api/v2/openlineage/search?q=query` | Search (alias) |
 | GET | `/api/v2/openlineage/lineage/{datasetId}/{fieldName}` | Get lineage graph for a column |
+| GET | `/api/v2/openlineage/lineage/table/{datasetId}` | Get lineage graph for a table |
+| GET | `/api/v2/openlineage/lineage/database/{databaseName}` | Get lineage graph for all tables in a database |
 
 All endpoints return JSON. Error responses use standard HTTP status codes with a JSON body containing an `error` field.
 
@@ -665,10 +685,13 @@ When making changes, use this table to find the relevant code:
 
 | What You're Changing | Where to Look |
 |---------------------|---------------|
-| API endpoint | `lineage-api/python_server.py` |
+| API endpoint | `lineage-api/routes/` (Blueprints) or `lineage-api/python_server.py` (app factory) |
 | UI component | `lineage-ui/src/components/domain/` |
 | Graph behavior | `lineage-ui/src/components/domain/LineageGraph/` |
+| Graph layout | `lineage-ui/src/utils/graph/layoutEngine.ts` |
 | State management | `lineage-ui/src/stores/` |
 | API hook | `lineage-ui/src/api/hooks/` |
 | Database schema | `database/scripts/setup/setup_lineage_schema.py` |
-| Lineage data | `database/scripts/populate/populate_lineage.py` |
+| Lineage population | `database/scripts/populate/populate_lineage.py` |
+| Wildcard expansion | `database/scripts/populate/wildcard_resolver.py` |
+| View lineage extraction | `database/scripts/populate/view_lineage_extractor.py` |

@@ -161,28 +161,41 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     if (!data?.graph?.nodes) return;
 
     setStage('layout');
+    let cancelled = false;
 
     // Convert OpenLineage graph to React Flow format
     const converted = convertOpenLineageGraph(data.graph.nodes, data.graph.edges);
 
-    // Layout the graph
+    setProgress(35); // Entering layout stage
+
+    // Run layout on main thread (topological layout is O(V+E), completes in ms)
     layoutGraph(converted.nodes, converted.edges, {
-      onProgress: (layoutProgress) => setProgress(layoutProgress),
-    }).then(
-      ({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+      onProgress: (p) => setProgress(p),
+    })
+      .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+        if (cancelled) return;
         setStage('rendering');
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
         setGraph(converted.nodes, converted.edges);
-        // Use requestAnimationFrame to detect render complete
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             setStage('complete');
           });
         });
-      }
-    );
-  }, [data, setNodes, setEdges, setGraph, setStage, setProgress]);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('Database layout error:', err);
+        setGraph(converted.nodes, converted.edges);
+        setStage('complete');
+      });
+
+    return () => {
+      cancelled = true;
+      reset();
+    };
+  }, [data, setNodes, setEdges, setGraph, setStage, setProgress, reset]);
 
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
