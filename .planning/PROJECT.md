@@ -20,13 +20,22 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - **Impact Analysis:** Complete downstream impact visualization with TanStack Table UI
 - **Production Ready:** ~16,253 Python + ~23,031 TypeScript LOC; graceful degradation throughout; structured JSON logging
 
+## Current Milestone: v4.0 First-Time Load Performance
+
+**Goal:** Eliminate database round-trips for lineage traversal by building an in-memory graph engine with progressive depth loading, reducing first-time graph load from seconds to <500ms.
+
+**Target features:**
+- In-memory graph engine replacing recursive CTE traversal with BFS/DFS
+- Progressive depth loading (depth=1 instant, deeper levels expand asynchronously)
+- Data normalization (TRIM removal from CTE joins, normalize at write time)
+- API timing headers for performance observability
+
 ## Next Milestone Goals
 
 **Future considerations:**
-- Performance Validation: Automated CI benchmarking and regression detection
 - Security Hardening: Authentication, rate limiting, input validation for multi-user deployment
 - Feature Expansion: Version tracking, batch operations, data quality metrics
-- BigQuery Compatibility: SELECT * EXCEPT, SELECT * REPLACE syntax (tracked as v4.0 requirements)
+- BigQuery Compatibility: SELECT * EXCEPT, SELECT * REPLACE syntax
 
 ## Requirements
 
@@ -76,7 +85,10 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 <!-- Current scope. Building toward these. -->
 
-None — all phases complete. Use `/gsd:new-milestone` to start next milestone.
+- [ ] In-memory graph engine with BFS/DFS traversal replacing recursive CTEs
+- [ ] Progressive depth loading — depth=1 instant, deeper levels expand asynchronously
+- [ ] Data normalization — TRIM() removal from CTE joins, normalize at write time
+- [ ] API performance observability — timing headers for each pipeline stage
 
 ### Out of Scope
 
@@ -155,4 +167,4 @@ None — all phases complete. Use `/gsd:new-milestone` to start next milestone.
 | REPLACE VIEW → CREATE VIEW normalization for SQLGlot (v3.0) | Teradata stores view definitions as REPLACE VIEW in RequestText, SQLGlot needs CREATE VIEW | ✓ Good — Required for correct parsing |
 
 ---
-*Last updated: 2026-02-19 after v3.0 milestone*
+*Last updated: 2026-02-20 after v4.0 milestone started*

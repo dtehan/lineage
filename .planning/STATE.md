@@ -2,18 +2,19 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-19)
+See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v3.0 complete — planning next milestone
+**Current focus:** v4.0 First-Time Load Performance
 
 ## Current Position
 
-Phase: All 13 phases complete
-Status: v3.0 shipped and archived
-Last activity: 2026-02-19 — v3.0 milestone archived, ROADMAP.md reorganized, PROJECT.md evolved
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-20 — Milestone v4.0 started
 
-Progress: [██████████] 100% complete — v3.0 archived, ready for next milestone
+Progress: [░░░░░░░░░░] 0% — Defining requirements
 
 ## Performance Metrics
 
