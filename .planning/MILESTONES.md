@@ -57,3 +57,20 @@ Project milestone history tracking completed phases and shipped features.
 
 ---
 
+
+## v3.0 Wildcard Expansion & Graph Enhancements (Shipped: 2026-02-19)
+
+**Phases completed:** 7 phases (7-13), 13 plans
+
+**Delivered:** 79 files modified (+18,781/-726 lines), 2 days (2026-02-18 → 2026-02-19)
+
+**Key accomplishments:**
+1. Wildcard Resolver — `SELECT *` expanded to actual column names via batch DBC.ColumnsJQV with in-memory caching, ordinal-position matching for INSERT INTO, and confidence score 0.70
+2. Qualified Wildcard Expansion — `t1.*, t2.*` patterns resolved with schema evolution detection (column count diffing) and per-expansion audit logging
+3. Recursive View Expansion — view definitions fetched from DBC.TablesV.RequestText and recursively expanded up to 3 levels deep with circular reference detection and cache reuse
+4. ViewLineageExtractor — column-level lineage automatically derived from Teradata view SQL via SQLGlot; `--views` flag on populate_lineage.py enables view-chain lineage population
+5. Cross-Database Cluster Separation — ELK partitioning + topological sort (Kahn's algorithm) + post-layout bounding-box shift guarantees non-overlapping cluster boxes with upstream databases on left
+6. Multi-Select and Group Move — Cmd+click or toolbar toggle selects multiple table nodes with blue ring; group drag moves selection together; Escape exits cleanly
+
+---
+

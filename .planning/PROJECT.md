@@ -10,26 +10,15 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 ## Current State
 
-**Shipped:** v2.0 Performance Optimization (Feb 16, 2026)
+**Shipped:** v3.0 Wildcard Expansion & Graph Enhancements (Feb 19, 2026)
 
 **What's working:**
-- **Performance Optimized:** Database query optimizations (composite indexes, statistics, LOCKING hints), Web Worker-based graph layout (eliminating UI freeze), Redis caching layer with stampede prevention
-- **Impact Analysis:** Complete downstream impact visualization with depth indicators, column counts, and TanStack Table UI
-- **Structured Observability:** Exception hierarchy with correlation IDs, dual-sink JSON logging (stdout + rotating file)
-- **Maintainable Architecture:** Service/repository layers, 3 shared CTE functions, 77-line application factory (down from 1454 lines)
-- **Production Ready:** 374 tests passing (73 DB + 20 API + 260+ frontend + 21 E2E), graceful degradation patterns
-
-## Current Milestone: v3.0 Wildcard Expansion
-
-**Goal:** Enable complete column-level lineage capture for SQL queries using wildcard syntax.
-
-**Target features:**
-- Expand `*` wildcards to actual column names during DBQL extraction
-- Support INSERT INTO ... SELECT * patterns
-- Support CREATE TABLE AS with wildcards
-- Support qualified wildcards (t1.*) in joins
-- Support Teradata's SELECT * EXCEPT syntax
-- Generate DIRECT transformation lineage for matched column pairs
+- **Complete Wildcard Lineage:** `SELECT *`, `t1.*`, `INSERT INTO...SELECT *`, `CREATE TABLE AS SELECT *` all expand to actual column names with confidence scoring (0.70)
+- **View Lineage:** Views surface as orange intermediate nodes; ViewLineageExtractor auto-populates column-level lineage from DBC.TablesV.RequestText via SQLGlot; `--views` flag on populate_lineage.py
+- **Graph Usability:** Columns sorted alphabetically in all nodes and DetailPanel; cross-database cluster boxes guaranteed non-overlapping with upstream databases on left; multi-select (Cmd+click or toolbar) with group drag
+- **Performance Optimized:** Composite indexes, LOCKING hints, Web Worker ELKjs layout (142ms for 600-node graphs), Redis cache-aside with stampede prevention
+- **Impact Analysis:** Complete downstream impact visualization with TanStack Table UI
+- **Production Ready:** ~16,253 Python + ~23,031 TypeScript LOC; graceful degradation throughout; structured JSON logging
 
 ## Next Milestone Goals
 
@@ -37,6 +26,7 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - Performance Validation: Automated CI benchmarking and regression detection
 - Security Hardening: Authentication, rate limiting, input validation for multi-user deployment
 - Feature Expansion: Version tracking, batch operations, data quality metrics
+- BigQuery Compatibility: SELECT * EXCEPT, SELECT * REPLACE syntax (tracked as v4.0 requirements)
 
 ## Requirements
 
@@ -71,45 +61,56 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - ⚠️ Cache hit rate >70% (requires production monitoring) — v2.0
 - ⚠️ Repeated queries <2s (requires production timing measurement) — v2.0
 
+**v3.0 Requirements:**
+- ✓ `SELECT *` expanded to actual column names via batch DBC.ColumnsJQV metadata — v3.0
+- ✓ Ordinal position matching for `INSERT INTO...SELECT *` and `CREATE TABLE AS SELECT *` — v3.0
+- ✓ Qualified wildcards (`t1.*`, `t2.*`) resolved with schema evolution detection — v3.0
+- ✓ Per-expansion audit logging (table, column count, timestamp) — v3.0
+- ✓ Recursive view expansion (3 levels deep) with circular reference detection — v3.0
+- ✓ ViewLineageExtractor: view-chain column lineage from DBC.TablesV.RequestText via SQLGlot — v3.0
+- ✓ Cross-database cluster boxes non-overlapping with topological left-to-right ordering — v3.0
+- ✓ Multi-select and group move (Cmd+click or toolbar toggle, blue ring, group drag) — v3.0
+- ✓ Alphabetical column sort in all graph nodes and DetailPanel — v3.0
+
 ### Active
 
 <!-- Current scope. Building toward these. -->
 
-**v3.0 Wildcard Expansion:**
-- To be defined in REQUIREMENTS.md
+None — all phases complete. Use `/gsd:new-milestone` to start next milestone.
 
 ### Out of Scope
 
 <!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
 
 - Security hardening (auth, rate limiting, input validation) — Defer to future milestone; internal tool usage only for now
-- Missing features (version tracking, batch operations, quality metrics) — Defer to future milestone; focus on performance first
+- Missing features (version tracking, batch operations, quality metrics) — Defer to future milestone
 - Test coverage expansion — Will add tests as part of implementation but not as separate initiative
+- SELECT * EXCEPT / SELECT * REPLACE (BigQuery syntax) — Teradata-specific, tracked as v4.0 requirements
 
 ## Context
 
-**Codebase State (v2.0):**
-- Backend: Python Flask with layered architecture (repositories, services, blueprints)
-- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table
-- Database: Teradata with OpenLineage schema (OL_* tables) + 9 indexes on OL_COLUMN_LINEAGE
+**Codebase State (v3.0):**
+- Backend: Python Flask with layered architecture (repositories, services, blueprints) + WildcardResolver + ViewLineageExtractor
+- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table; multi-select with group drag, alphabetical column sort, cluster separation
+- Database: Teradata with OpenLineage schema (OL_* tables) + 9 indexes on OL_COLUMN_LINEAGE; views surfaced as intermediate nodes
 - Caching: Redis 7.0.1 with Flask-Caching 2.3.1 (cache-aside pattern, stampede prevention)
-- LOC: ~4,920 Python backend + ~440K total
-- Testing: 374 tests passing (73 DB + 20 API + 260+ frontend + 21 E2E)
+- LOC: ~16,253 Python + ~23,031 TypeScript
+- Testing: 400+ tests (73 DB + 20 API + 260+ frontend + 21 E2E + new wildcard/view tests)
 
 **Technical Stack:**
 - OpenLineage spec v2-0-2 implementation
-- DBQL-based lineage extraction using SQLGlot parser
+- DBQL-based lineage extraction using SQLGlot parser + WildcardResolver (batch DBC.ColumnsJQV)
+- ViewLineageExtractor: SQLGlot parsing of DBC.TablesV.RequestText for view-chain lineage
 - Recursive CTEs with composite index optimization, statistics collection, LOCKING hints
-- React Flow + ELKjs (Web Worker) for non-blocking graph layout
+- React Flow + ELKjs (Web Worker) for non-blocking graph layout with ELK partitioning
 - Loguru for structured JSON logging with correlation IDs
 - Redis cache-aside with hierarchical keys and distributed lock stampede prevention
 
-**Recent Changes (v2.0):**
-- **Database Layer:** Composite secondary indexes on (target_dataset, target_field) and (source_dataset, source_field), VARCHAR(500) path optimization, LOCKING ROW FOR ACCESS for concurrent queries
-- **Frontend Layer:** ELKjs offloaded to Web Worker (600-node graphs in 142ms), React Profiler instrumentation, CSS transition disabling for >200 nodes
-- **Caching Layer:** Redis cache-aside on all 3 LineageRepository methods, stampede prevention with redis-lock, pattern-based invalidation (POST /invalidate), cache monitoring (GET /stats)
-- **Testing:** All 374 tests maintained passing throughout optimization work
-- **Integration:** 15/15 integration points verified, 5/5 E2E user flows operational
+**Recent Changes (v3.0):**
+- **Wildcard Layer:** WildcardResolver batch-queries DBC.ColumnsJQV (100 tables/query), in-memory cache, confidence 0.70 for expanded lineage
+- **View Layer:** ViewLineageExtractor populates OL_COLUMN_LINEAGE from view SQL; `--views` flag added to populate_lineage.py; views rendered as orange nodes with VIEW badge
+- **Graph Layer:** ELK partitioning + topoSortDatabases (Kahn's) + post-layout separateDatabaseClusters() prevents overlap; ClusterBackground padding 20→60; alphabetical sort in layoutEngine + DetailPanel
+- **Interaction Layer:** isMultiSelectMode in Zustand store; useMultiSelect hook; Cmd+click or toolbar toggle; blue ring on selected nodes; group drag built-in; Escape to exit
 
 ## Constraints
 
@@ -144,6 +145,14 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | redis-lock for stampede prevention (v2.0) | Distributed locks prevent concurrent cache misses from overwhelming DB | ✓ Good — Production-safe concurrency pattern |
 | SCAN over KEYS for invalidation (v2.0) | Non-blocking iteration vs blocking KEYS * | ✓ Good — Production-safe Redis operations |
 | Defer Phase 7 CI automation (v2.0) | Focus on delivering optimizations, defer regression detection automation | ✓ Good — Structural work complete, monitoring can be manual initially |
+| In-memory dict cache for WildcardResolver (v3.0) | Single extraction run lifetime (<5 min); external cache adds complexity with no benefit | ✓ Good — Minimal overhead, no infra dependency |
+| Batch size 100 for DBC.ColumnsJQV queries (v3.0) | Prevents query explosion for large DBQL workloads; tunable based on production monitoring | ✓ Good — Safe default with explicit limit |
+| Confidence score 0.70 for wildcard-expanded lineage (v3.0) | Reflects expansion uncertainty vs explicit (0.95) and expression (0.85) lineage | ✓ Good — Graduated confidence model |
+| Skip multi-table unqualified SELECT * with warning (v3.0) | Ambiguous attribution — fail-safe over guessing wrong source | ✓ Good — Prevents silent incorrect lineage |
+| ELK partitioning + post-layout bounding-box shift (v3.0) | Partitioning alone cannot guarantee padded boxes don't overlap at same y-range | ✓ Good — Reliable non-overlap guarantee |
+| topoSortDatabases (Kahn's algorithm) for cluster ordering (v3.0) | Users expect upstream databases LEFT per lineage convention; alphabetical ordering violated this | ✓ Good — Intuitive left-to-right data flow |
+| multiSelectionKeyCode=null when toolbar multi-select active (v3.0) | RF treats every click as selection toggle without requiring Cmd modifier | ✓ Good — Consistent UX in toolbar mode |
+| REPLACE VIEW → CREATE VIEW normalization for SQLGlot (v3.0) | Teradata stores view definitions as REPLACE VIEW in RequestText, SQLGlot needs CREATE VIEW | ✓ Good — Required for correct parsing |
 
 ---
-*Last updated: 2026-02-18 after v3.0 milestone started*
+*Last updated: 2026-02-19 after v3.0 milestone*

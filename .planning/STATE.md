@@ -2,19 +2,18 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-18)
+See: .planning/PROJECT.md (updated 2026-02-19)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Phase 13 - Multi-select and group move in lineage graph (COMPLETE)
+**Current focus:** v3.0 complete — planning next milestone
 
 ## Current Position
 
-Phase: 13 of 13 (Multi-select and group move in lineage graph)
-Plan: 2 of 2 (complete)
-Status: Complete - All 13 phases done
-Last activity: 2026-02-19 — Plan 13-02 complete, SUMMARY.md written, all 13 phases done
+Phase: All 13 phases complete
+Status: v3.0 shipped and archived
+Last activity: 2026-02-19 — v3.0 milestone archived, ROADMAP.md reorganized, PROJECT.md evolved
 
-Progress: [██████████] 100% complete (13/13 phases done)
+Progress: [██████████] 100% complete — v3.0 archived, ready for next milestone
 
 ## Performance Metrics
 
@@ -52,32 +51,10 @@ Phase 13 complete - React Flow multi-select wired to Zustand store; Cmd+click or
 
 ## Accumulated Context
 
-### Roadmap Evolution
+### Milestone Archived
 
-- Phase 10 added: View lineage - show data flow through views to source tables
-- Phase 11 added: Sort columns alphabetically in lineage graph nodes
-- Phase 12 added: Prevent database cluster overlap in lineage graph visualization
-- Phase 13 added: Multi-select and group move in lineage graph
-
-### Decisions
-
-Decisions are logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- [Phase 13-01]: multiSelectionKeyCode=null when isMultiSelectMode active so RF treats every click as selection toggle (no modifier required)
-- [Phase 13-01]: Entering multi-select mode clears all highlight/selection state atomically to prevent dimming interfering with ring visibility
-- [Phase 13-01]: ring-blue-400 ring-offset-2 used for multi-select ring (lighter than border-blue-500 for column selection) to make them visually distinguishable
-- [Phase 13-01]: onNodeClick returns early on metaKey/ctrlKey/isMultiSelectMode to let React Flow manage selection natively
-- [Phase 13-01]: selectionOnDrag=false prevents accidental box-selection when panning
-- [Phase 13-02]: Double-click on table header opens detail panel; single click reserved for RF node selection ring (stopPropagation removed from header onClick)
-- [Phase 13-02]: useStoreApi().setState({ multiSelectionActive }) synced to isMultiSelectMode enables additive click-to-select and group drag in toolbar mode
-- [Phase 13-02]: All three graph components (LineageGraph, DatabaseLineageGraph, AllDatabasesLineageGraph) must receive multi-select props for consistent behavior
-- [Phase 12-01]: ELK partitioning applied only to hasCrossDatabaseEdges flat-layout branch; compound-node path unchanged
-- [Phase 12-01]: Post-layout separateDatabaseClusters() required because ELK partitioning alone cannot guarantee padded bounding boxes won't overlap at same y-range
-- [Phase 12-01]: topoSortDatabases() (Kahn's algorithm) replaces alphabetical sort - upstream databases assigned lower partition indices and placed LEFT
-- [Phase 12-01]: separateDatabaseClusters() accepts explicit dbOrder parameter to enforce lineage-flow ordering in post-layout shift step
-- [Phase 12-01]: ClusterBackground default padding increased from 20 to 60 flow units for visible gaps between clusters
-- [Phase 11-01]: Sort applied after .map() in transformToTableNodes so original columnNodes array is not mutated
+v3.0 archived 2026-02-19. All decisions logged in PROJECT.md Key Decisions table.
+See `.planning/milestones/v3.0-ROADMAP.md` for full phase details.
 - [Phase 11-01]: Sort happens before createElkPorts so ELK port indices automatically match sorted display order
 - [Phase 11-01]: DetailPanel sort uses columnName field (ColumnDetail type) vs layoutEngine sort using name field (ColumnDefinition type)
 - [Phase 10-02]: REPLACE VIEW -> CREATE VIEW normalization via regex before SQLGlot parse (Teradata stores definitions as REPLACE VIEW in RequestText)
@@ -125,7 +102,7 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-19
-Stopped at: Phase 13 Plan 02 — SUMMARY.md written, plan 13-02 fully complete, all phases done
+Stopped at: v3.0 milestone archived — ready for next milestone
 Resume file: None
 
 ## Performance Metrics (v3.0)
