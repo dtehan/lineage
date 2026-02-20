@@ -32,6 +32,14 @@ vi.mock('@xyflow/react', () => ({
     getNodes: vi.fn(() => []),
     getEdges: vi.fn(() => []),
   }),
+  useStoreApi: () => ({
+    getState: vi.fn(() => ({
+      unselectNodesAndEdges: vi.fn(),
+      multiSelectionActive: false,
+    })),
+    setState: vi.fn(),
+    subscribe: vi.fn(),
+  }),
   ConnectionMode: { Loose: 'loose' },
   Handle: () => null,
   Position: { Left: 'left', Right: 'right' },

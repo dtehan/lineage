@@ -203,11 +203,14 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   }, [datasetId, reset]);
 
   // Sync data fetch stage with TanStack Query loading state
+  // Also reset stage on error so the error UI can render (not blocked by showProgress)
   useEffect(() => {
     if (isLoading) {
       setStage('fetching');
+    } else if (error) {
+      reset();
     }
-  }, [isLoading, setStage]);
+  }, [isLoading, error, setStage, reset]);
 
   // Update nodes/edges when data changes
   useEffect(() => {
