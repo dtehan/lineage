@@ -61,12 +61,13 @@ class GraphEngine:
         self._lock = threading.RLock()
         self._ready = threading.Event()
         self._loader: GraphLoader | None = None
+        self._redis = None
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def initialize(self, connection) -> None:
+    def initialize(self, connection, redis_client=None) -> None:
         """
         Start the background warmup thread.
 
@@ -77,7 +78,12 @@ class GraphEngine:
 
         Args:
             connection: An open DBAPI-2 compatible database connection.
+            redis_client: Optional redis-py client. If provided, _warmup()
+                          will attempt to restore the graph from Redis before
+                          querying Teradata, and will persist the graph to
+                          Redis after a successful Teradata load.
         """
+        self._redis = redis_client
         self._loader = GraphLoader(connection)
         thread = threading.Thread(
             target=self._warmup,
@@ -199,6 +205,12 @@ class GraphEngine:
             logger.warning("Graph engine: invalidate() called but engine not initialized")
             return False
 
+        # Delete Redis snapshot BEFORE clearing ready so the rebuild thread
+        # does a fresh Teradata load and saves a new snapshot.
+        if self._redis is not None:
+            from graph.serializer import invalidate as redis_invalidate
+            redis_invalidate(self._redis)
+
         # Step 1: Clear ready event (atomic, no lock needed for Event)
         self._ready.clear()
         # Step 2: Clear store reference under lock
@@ -220,17 +232,44 @@ class GraphEngine:
 
     def _warmup(self) -> None:
         """
-        Background thread target: load graph and swap reference.
+        Background thread target: try Redis restore first, fall back to Teradata.
+
+        Fast path: if redis_client is set and a valid snapshot exists in Redis,
+        restore the DiGraph from Redis and return without touching Teradata.
+
+        Slow path: load from Teradata via self._loader.load(), then persist
+        the result to Redis for future restarts.
 
         On exception the ready event is NOT set, so the engine remains
         in fallback mode and all lineage requests continue via CTE.
         """
         try:
+            # Fast path: try Redis restore first
+            if self._redis is not None:
+                from graph.serializer import restore as redis_restore, save as redis_save
+                graph = redis_restore(self._redis)
+                if graph is not None:
+                    self._swap(graph)
+                    self._ready.set()
+                    logger.info(
+                        "Graph engine: restored from Redis",
+                        nodes=graph.number_of_nodes(),
+                        edges=graph.number_of_edges(),
+                    )
+                    return
+
+            # Slow path: Teradata load
             graph = self._loader.load()
             self._swap(graph)
+
+            # Persist to Redis for future restarts
+            if self._redis is not None:
+                from graph.serializer import save as redis_save
+                redis_save(graph, self._redis)
+
             self._ready.set()
             logger.info(
-                "Graph engine: warmup complete",
+                "Graph engine: warmup complete (Teradata load)",
                 nodes=graph.number_of_nodes(),
                 edges=graph.number_of_edges(),
             )
