@@ -114,13 +114,24 @@ export interface DatabaseInfo {
   tableCount: number;
 }
 
+export interface ColumnSearchResult {
+  fieldId: string;
+  fieldName: string;
+  fieldType?: string;
+  datasetId: string;
+  datasetName: string;
+  namespace: string;
+}
+
 export interface UnifiedSearchResponse {
   databases: DatabaseInfo[];
   datasets: OpenLineageDataset[];
+  columns: ColumnSearchResult[];
   query: string;
   totalCount: number;
   databaseCount: number;
   datasetCount: number;
+  columnCount: number;
 }
 
 // Direction type for lineage queries
@@ -158,6 +169,21 @@ export interface DatasetDDLResponse {
   truncated: boolean;
   tableComment?: string;
   columnComments?: Record<string, string>;
+}
+
+// Graph engine types
+export interface GraphStatusResponse {
+  ready: boolean;
+  node_count: number;
+  edge_count: number;
+  last_rebuild_time: number | null;
+  last_rebuild_iso: string | null;
+  memory_bytes: number;
+}
+
+export interface GraphReloadResponse {
+  rebuild_triggered: boolean;
+  status: GraphStatusResponse;
 }
 
 // Pagination parameters

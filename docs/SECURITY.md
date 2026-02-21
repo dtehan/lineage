@@ -72,6 +72,8 @@ Rate limiting MUST be configured at the proxy/gateway level.
 | `GET /api/v1/lineage/{id}` | 100/min | 300/min | Normal browsing |
 | `GET /api/v1/search` | 30/min | 60/min | Heavier database queries |
 | `GET /api/v1/lineage/{id}/impact` | 20/min | 40/min | Expensive recursive queries |
+| `GET /api/v2/graph/status` | 60/min | unlimited | Monitoring/health check (lightweight) |
+| `POST /api/v2/graph/reload` | 5/min | 10/min | Graph rebuild trigger (expensive) |
 | `GET /health` | 1000/min | unlimited | Monitoring systems |
 
 **Burst handling:**

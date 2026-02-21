@@ -131,6 +131,14 @@ class DatasetService:
         """
         result = self.dataset_repo.unified_search(query, limit)
         result["query"] = query
+        result["databaseCount"] = len(result["databases"])
+        result["datasetCount"] = len(result["datasets"])
+        result["columnCount"] = len(result["columns"])
+        result["totalCount"] = (
+            result["databaseCount"]
+            + result["datasetCount"]
+            + result["columnCount"]
+        )
         return result
 
     def get_dataset_statistics(self, dataset_id: str) -> dict:

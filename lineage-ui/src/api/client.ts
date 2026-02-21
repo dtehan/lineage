@@ -13,6 +13,8 @@ import type {
   OpenLineagePaginationParams,
   LineageQueryParams,
   ImpactAnalysisApiResponse,
+  GraphStatusResponse,
+  GraphReloadResponse,
 } from '../types/openlineage';
 
 export const apiClient = axios.create({
@@ -141,6 +143,17 @@ export const openLineageApi = {
       `/api/v2/openlineage/lineage/database/${encodeURIComponent(databaseName)}`,
       { params: { ...queryParams, ...(refresh ? { refresh: 'true' } : {}) } }
     );
+    return response.data;
+  },
+
+  // Graph engine management
+  async getGraphStatus(): Promise<GraphStatusResponse> {
+    const response = await apiClientV2.get<GraphStatusResponse>('/api/v2/graph/status');
+    return response.data;
+  },
+
+  async reloadGraph(): Promise<GraphReloadResponse> {
+    const response = await apiClientV2.post<GraphReloadResponse>('/api/v2/graph/reload');
     return response.data;
   },
 

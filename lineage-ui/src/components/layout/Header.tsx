@@ -1,15 +1,34 @@
-import { Menu, Search, Home } from 'lucide-react';
+import { useState } from 'react';
+import { Menu, Search, Home, RefreshCw } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useUIStore } from '../../stores/useUIStore';
+import { openLineageApi } from '../../api/client';
+import { Tooltip } from '../common/Tooltip';
 
 export function Header() {
   const { toggleSidebar, searchQuery, setSearchQuery } = useUIStore();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [isReloading, setIsReloading] = useState(false);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
       navigate(`/search?q=${encodeURIComponent(searchQuery)}`);
+    }
+  };
+
+  const handleReloadGraph = async () => {
+    setIsReloading(true);
+    try {
+      await openLineageApi.reloadGraph();
+      // Invalidate all TanStack Query caches so next navigation fetches fresh data
+      queryClient.invalidateQueries();
+    } catch (err) {
+      console.error('Failed to reload graph:', err);
+    } finally {
+      setIsReloading(false);
     }
   };
 
@@ -44,6 +63,18 @@ export function Header() {
       </form>
 
       <h1 className="text-lg font-semibold text-slate-800">Data Lineage</h1>
+
+      <Tooltip content="Reload lineage data from database" position="bottom">
+        <button
+          onClick={handleReloadGraph}
+          disabled={isReloading}
+          className="p-2 rounded hover:bg-slate-100 disabled:opacity-50 transition-colors"
+          aria-label="Reload lineage data from database"
+          data-testid="reload-graph-btn"
+        >
+          <RefreshCw className={`w-5 h-5 text-slate-600 ${isReloading ? 'animate-spin' : ''}`} />
+        </button>
+      </Tooltip>
     </header>
   );
 }

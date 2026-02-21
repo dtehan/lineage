@@ -56,7 +56,7 @@ pip install -r requirements.txt
 
 The Python environment is required for both the backend server and the database setup scripts.
 
-**Python dependencies installed:** `teradatasql`, `flask`, `flask-cors`, `requests`, `python-dotenv`, `sqlglot`, `loguru`.
+**Python dependencies installed:** `teradatasql`, `flask`, `flask-cors`, `requests`, `python-dotenv`, `sqlglot`, `loguru`, `networkx`, `psutil`.
 
 ### Step 3: Configure Environment
 
@@ -278,20 +278,31 @@ CACHE_TTL=3600  # Cache expiration in seconds (1 hour)
 
 **If Redis is not configured or unavailable**, the application automatically falls back to in-memory SimpleCache. This provides graceful degradation but does not share cache across requests.
 
-### 4.8 Cache Behavior
+### 4.8 Graph Engine Redis Persistence
+
+The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the networkx DiGraph in Redis, separate from the query cache:
+
+- **Redis key:** `lineage:engine:snapshot` (separate from `lineage:graph:*` query cache keys)
+- **On startup:** Engine tries Redis restore first (<20ms); falls back to Teradata load (2-4s) if no snapshot exists
+- **On cache invalidation:** Snapshot is deleted and rebuilt along with the in-memory graph
+- **No TTL:** Snapshot is invalidated explicitly only (not subject to `CACHE_TTL`)
+
+### 4.9 Cache Behavior
 
 **With Redis:**
-- First query: 2-4 seconds (database CTE execution)
-- Repeated queries: <100ms (cache hit)
+- Cold start (first ever): 2-4 seconds (Teradata load + graph build + Redis save)
+- Warm restart: <20ms (Redis graph restore)
+- All lineage queries after warmup: <50ms (in-memory BFS)
+- Repeated queries also cached at Redis query level: <100ms
 - Cache entries expire after 1 hour (configurable via `CACHE_TTL`)
 - Cache shared across all application instances
 
 **Without Redis (fallback to SimpleCache):**
-- All queries hit the database (2-4 seconds each)
-- No cross-request caching
+- First query: 2-4 seconds (database CTE execution)
+- No cross-request caching, no graph persistence
 - Application functions normally (no errors)
 
-### 4.9 Cache Management Endpoints
+### 4.10 Cache Management Endpoints
 
 The application provides REST API endpoints for cache management:
 
@@ -382,12 +393,15 @@ curl http://localhost:8080/health
 # Check API endpoint
 curl http://localhost:8080/api/v2/openlineage/namespaces
 
+# Check graph engine status (should show ready: true after warmup)
+curl http://localhost:8080/api/v2/graph/status
+
 # Access the frontend
 # Development: http://localhost:3000 or http://localhost:5173
 # Production: your configured domain
 ```
 
-A successful health check returns HTTP 200. The namespaces endpoint returns a JSON array of configured namespaces, confirming both the backend and database connection are working.
+A successful health check returns HTTP 200. The namespaces endpoint returns a JSON array of configured namespaces, confirming both the backend and database connection are working. The graph status endpoint shows whether the in-memory graph engine is ready (`ready: true` means BFS queries are active; `ready: false` means CTE fallback is in use during warmup).
 
 ### 5.4 Startup Order
 
@@ -520,7 +534,20 @@ Configure your log shipper (Fluentd, Logstash, Filebeat) to:
 3. Index the `record.extra.correlation_id` field for request tracing
 4. Create alerts on `record.level.name == "ERROR"`
 
-### 6.7 Log Levels
+### 6.7 Server-Timing Headers
+
+Every lineage API response includes a `Server-Timing` header with per-stage timing metrics. This enables performance debugging without parsing logs.
+
+**Metrics included:**
+- `bfs_upstream`, `bfs_downstream`, `bfs_total` — when the in-memory graph engine handles the query
+- `db_upstream`, `db_downstream`, `db_total` — when CTE fallback handles the query
+
+**How to use:**
+- In browser DevTools, open the Network tab and inspect any lineage API request's response headers
+- The `Server-Timing` header values are also displayed natively in Chrome DevTools' Timing tab
+- Use these metrics to distinguish backend query time from frontend layout/render time
+
+### 6.8 Log Levels
 
 The application uses the following log levels:
 
@@ -532,7 +559,7 @@ The application uses the following log levels:
 
 All levels are logged to both stdout and the file sink. To change the log level, modify `lineage-api/utils/logging_config.py` and restart the backend.
 
-### 6.8 Troubleshooting with Logs
+### 6.9 Troubleshooting with Logs
 
 **Find all errors in the last hour:**
 ```bash
@@ -781,6 +808,25 @@ export $(cat ../.env | grep -v '^#' | xargs) && python python_server.py
    npm run build
    ```
 4. If TypeScript errors persist, review the build output for specific file and line references
+
+### Graph Engine Not Ready
+
+**Symptoms:** Lineage queries slower than expected (2-4s instead of <50ms).
+
+**Cause:** The in-memory graph engine hasn't completed warmup or Redis restore.
+
+**Solution:**
+
+1. Check graph engine status:
+   ```bash
+   curl http://localhost:8080/api/v2/graph/status
+   ```
+2. If `ready: false`, wait for the graph to finish loading. First startup takes 2-4 seconds; subsequent restarts restore from Redis in <20ms
+3. If `ready` remains `false` after several seconds, check backend logs for Teradata connection errors or Redis connectivity issues
+4. To force a rebuild:
+   ```bash
+   curl -X POST http://localhost:8080/api/v2/graph/reload
+   ```
 
 ### Slow Graph Loading
 

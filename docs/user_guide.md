@@ -273,7 +273,21 @@ For larger graphs, timing information is displayed alongside the progress bar:
 - **Elapsed time**: How long the current operation has been running (e.g., "5s", "1m 30s")
 - **Estimated time remaining**: Approximate time until completion (e.g., "~10s"), shown once progress reaches at least 10%
 
+After loading completes, a timing summary appears below the graph: "Loaded in: Fetch Xms / Layout Xms / Render Xms". This shows the duration of each processing stage, helping you understand where time is spent when loading large graphs.
+
 The progress bar appears automatically when loading lineage data and disappears when the graph is fully rendered. A simple loading spinner is used separately in the Asset Browser sidebar for loading database/table/column lists.
+
+### Progressive Loading
+
+When loading column lineage, a depth-1 graph appears instantly (typically under 200ms), giving you immediate context while the full-depth graph loads in the background.
+
+**How it works:**
+- A depth-1 query is fired immediately, rendering direct upstream and downstream connections
+- The full-depth query runs in the background and expands the graph automatically when complete
+- A thin blue banner appears at the top of the graph: "Expanding to full depth..." during the background fetch
+- Once the full graph loads, the banner disappears and the complete lineage is displayed
+
+**Note:** Table-level lineage uses the existing single-query path (no progressive loading). Progressive loading applies only to column-level lineage queries.
 
 ### Detail Panel
 
@@ -343,7 +357,7 @@ When an edge (connection line) is selected instead of a column, the panel displa
 
 ### Impact Analysis
 
-Access the Impact Analysis page by navigating to `/impact/:assetId`. This shows the downstream effects of changes to a column.
+Access the Impact Analysis page by navigating to `/impact/:assetId`. This shows the effects of changes to a column, including both upstream and downstream lineage paths for comprehensive change assessment.
 
 **Summary Cards (4 metrics):**
 
@@ -889,6 +903,8 @@ Searches for assets by name.
 **Solutions:**
 1. Reduce traversal depth (use 3-5 instead of 10)
 2. Check database indexes exist on lineage tables
+3. Check graph engine status: `curl http://localhost:8080/api/v2/graph/status` — if `ready: true`, queries use fast in-memory BFS (<50ms); if `ready: false`, queries fall back to slower CTE (2-4s)
+4. For subsequent visits after a server restart, the graph engine should restore from Redis in <20ms
 
 ### Graph Rendering Issues
 
@@ -1070,9 +1086,9 @@ The application includes comprehensive test suites for all components.
 |------------|-------|-------------|
 | Database (Python) | 73 | Schema validation, data extraction, recursive CTEs |
 | Backend API (Python) | 20 | API endpoint validation |
-| Frontend Unit (Vitest) | ~558 | Component, hook, and utility tests |
+| Frontend Unit (Vitest) | ~597 | Component, hook, and utility tests |
 | Frontend E2E (Playwright) | 34 | End-to-end user flow tests |
-| **Total** | **685+** | |
+| **Total** | **724+** | |
 
 ### Database Tests
 
@@ -1169,8 +1185,8 @@ npm run test:coverage
  ✓ src/components/domain/LineageGraph/LineageGraph.test.tsx (18 tests)
  ... (32 test files total)
 
- Test Files  32 passed (32)
-      Tests  ~558 passed
+ Test Files  36 passed (36)
+      Tests  ~597 passed
 ```
 
 **Test Coverage:**
@@ -1261,9 +1277,9 @@ npx playwright test
 **Expected Results:**
 - Database tests: 44 passed, 29 skipped (ClearScape limitations)
 - Backend API tests: 20 passed
-- Frontend unit tests: ~558 passed
+- Frontend unit tests: ~597 passed
 - Frontend E2E tests: 34 passed
-- **Total: 656+ tests passed**
+- **Total: 695+ tests passed**
 
 ### Playwright Configuration
 

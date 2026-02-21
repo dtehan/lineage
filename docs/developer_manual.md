@@ -96,6 +96,8 @@ pip install -r requirements.txt
 - `python-dotenv` — Environment variable loading
 - `sqlglot` — SQL parsing for DBQL lineage extraction
 - `loguru` — Structured JSON logging
+- `networkx` — In-memory graph engine for BFS traversal
+- `psutil` — Memory usage tracking for graph engine
 
 **Caching dependencies (optional, Phase 6):**
 - `Flask-Caching` — Redis cache integration
@@ -149,7 +151,7 @@ The project has four test suites covering database, API, frontend unit, and end-
 |-------|-------|---------|----------|
 | Database | 73 | `cd database && python tests/run_tests.py` | Teradata connection |
 | API | 20 | `cd lineage-api && python tests/run_api_tests.py` | Backend running on :8080 |
-| Frontend Unit | ~558 | `cd lineage-ui && npm test` | Nothing (runs in jsdom) |
+| Frontend Unit | ~597 | `cd lineage-ui && npm test` | Nothing (runs in jsdom) |
 | E2E | 34 | `cd lineage-ui && npx playwright test` | Backend on :8080 + auto-starts frontend |
 
 ### 3.1 Database Tests (73 tests)
@@ -191,7 +193,7 @@ python python_server.py
 
 **What it validates:** All REST API endpoints (v1 and v2), response shapes, error handling, and search functionality.
 
-### 3.3 Frontend Unit Tests (~558 tests)
+### 3.3 Frontend Unit Tests (~597 tests)
 
 **Commands:**
 
@@ -214,7 +216,7 @@ npm run test:coverage
 
 **Configuration:** `vitest.config.ts` sets the jsdom environment with a setup file at `src/test/setup.ts`. Coverage uses the v8 provider.
 
-**Note:** The test count changes as tests are added; currently ~558 tests across 32 test files. Some tests may have known failures (accessibility tests). Use watch mode during development for the fastest feedback loop.
+**Note:** The test count changes as tests are added; currently ~597 tests across 36+ test files. Some tests may have known failures (accessibility tests). Use watch mode during development for the fastest feedback loop.
 
 ### 3.4 E2E Tests (34 tests)
 
@@ -300,11 +302,22 @@ lineage-api/
 ├── routes/                        # Flask Blueprints
 │   ├── health.py                  # Health check endpoints
 │   ├── openlineage.py            # OpenLineage v2 API routes
-│   └── cache.py                  # Cache management endpoints
+│   ├── cache.py                  # Cache management endpoints
+│   └── graph.py                  # Graph engine status and reload endpoints
 ├── repositories/                  # Data access layer
 │   ├── base.py                   # Base repository with connection pooling
 │   ├── lineage_repository.py     # Lineage CTE queries with caching
 │   └── dataset_repository.py     # Dataset metadata queries
+├── services/                     # Business logic layer
+│   ├── lineage_service.py       # Lineage graph construction with dual-path routing
+│   ├── dataset_service.py       # Dataset metadata operations
+│   └── impact_service.py        # Impact analysis with upstream lineage
+├── graph/                        # In-memory graph engine (Phase 14)
+│   ├── __init__.py              # Package exports: GraphStore, GraphLoader, GraphEngine, graph_engine
+│   ├── store.py                 # GraphStore dataclass with build() and memory tracking
+│   ├── loader.py                # GraphLoader: loads OL_COLUMN_LINEAGE into networkx DiGraph
+│   ├── engine.py                # GraphEngine singleton: BFS traversal, blue-green swap, status
+│   └── serializer.py            # Redis DiGraph persistence (save/restore/invalidate)
 ├── cache/                        # Caching layer (optional, requires Redis)
 │   ├── __init__.py              # Flask-Caching with graceful degradation
 │   ├── keys.py                  # Hierarchical cache key generation
@@ -313,7 +326,8 @@ lineage-api/
 │   └── metrics.py               # Cache hit rate monitoring
 ├── middleware/                   # Request/response middleware
 │   ├── correlation_id.py        # UUID per request for tracing
-│   └── error_handlers.py        # Exception hierarchy and handlers
+│   ├── error_handlers.py        # Exception hierarchy and handlers
+│   └── timing.py                # Server-Timing header middleware (Phase 17)
 └── tests/
     └── run_api_tests.py          # 20 API integration tests
 ```
@@ -340,11 +354,13 @@ These modules are invoked by `populate_lineage.py` during DBQL extraction (Wildc
 
 ### 5.2 Layered Architecture
 
-**Routes (Flask Blueprints)** → **Repositories (Data Access)** → **Teradata Database**
+**Routes** → **Services** → **[GraphEngine (BFS) | Repositories (CTE)]** → **Teradata Database**
 
-- **Routes:** Handle HTTP requests, validate input, call repositories, format responses
+- **Routes:** Handle HTTP requests, validate input, call services, format responses
+- **Services:** Business logic layer — LineageService delegates to GraphEngine (BFS) when ready, falls back to repositories (CTE) when not
+- **Graph Engine:** In-memory networkx DiGraph with BFS traversal; dual-path routing falls back to CTE when graph is not ready
 - **Repositories:** Execute database queries, apply caching, map results to domain objects
-- **Middleware:** Correlation IDs, error handling, CORS
+- **Middleware:** Correlation IDs, error handling, CORS, Server-Timing headers
 - **Cache layer:** Optional Redis caching (2-4s queries → <100ms cache hits)
 
 ### 5.3 Performance Optimizations
@@ -363,9 +379,28 @@ These modules are invoked by `populate_lineage.py` during DBQL extraction (Wildc
 - 1-hour TTL (configurable via `CACHE_TTL` environment variable)
 - Cache management API: POST `/api/v2/cache/invalidate`, GET `/api/v2/cache/stats`
 
+**In-Memory Graph Engine (Phase 14):**
+- networkx DiGraph loaded from OL_COLUMN_LINEAGE at startup
+- BFS traversal replaces recursive CTE for all lineage queries when graph is warm
+- Blue-green swap pattern: new graph built in background, swapped atomically
+- Dual-path routing: LineageService delegates to GraphEngine when ready, falls back to CTE
+- `GET /api/v2/graph/status` endpoint for monitoring readiness
+
+**Cache Invalidation with Graph Rebuild (Phase 15):**
+- `POST /api/v2/cache/invalidate` now triggers three-layer consistency: Redis flush + in-memory graph rebuild
+- CTE fallback active during rebuild window (zero stale data risk)
+
+**Redis Graph Persistence (Phase 18):**
+- DiGraph serialized to Redis via `nx.node_link_data()` JSON
+- Cold restart restores from Redis in <20ms instead of querying Teradata
+- Snapshot key `lineage:engine:snapshot` kept separate from `lineage:graph:*` cache keys
+
 **Expected performance:**
-- First query: 2-4 seconds (database CTE with optimized indexes)
-- Repeated queries: <100ms (Redis cache hit)
+- First startup: 2-4 seconds (Teradata load → graph build → Redis save)
+- Subsequent restarts: <20ms (Redis restore)
+- All queries after warmup: <50ms (in-memory BFS)
+- CTE fallback during warmup: 2-4 seconds
+- Repeated queries also cached at Redis query level: <100ms
 - 600-node graphs: <15 seconds database, <100ms cached
 
 ### 5.4 Key Patterns
@@ -375,6 +410,10 @@ These modules are invoked by `populate_lineage.py` during DBQL extraction (Wildc
 - **Recursive CTEs:** Lineage traversal uses optimized recursive common table expressions with cycle detection
 - **Correlation IDs:** UUID per request enables distributed tracing across logs
 - **Graceful degradation:** Application works without Redis (falls back to in-memory cache)
+- **Dual-path routing:** LineageService checks `graph_engine.is_ready` — BFS when True, CTE when False
+- **Blue-green swap:** Graph rebuilt in background thread; lock only held during reference assignment
+- **Server-Timing headers:** Every lineage response includes timing metrics (bfs_upstream/db_upstream durations)
+- **Three-layer cache:** Redis query cache + in-memory graph + CTE fallback
 
 ---
 
@@ -418,6 +457,7 @@ lineage-ui/src/
 │       │   ├── LineageGraph.tsx
 │       │   ├── TableNode/, ColumnNode.tsx, LineageEdge.tsx
 │       │   ├── Toolbar.tsx, DetailPanel.tsx, Legend.tsx
+│       │   ├── ProgressBanner.tsx  # Progressive depth loading banner (Phase 16)
 │       │   ├── DetailPanel/ (ColumnsTab, StatisticsTab, DDLTab)
 │       │   ├── LineageTableView/
 │       │   └── hooks/ (useLineageHighlight, useDatabaseClusters, useMultiSelect, etc.)
@@ -437,7 +477,7 @@ lineage-ui/src/
 │   └── useUIStore.ts           # UI state (sidebar, panels, view mode)
 │
 ├── hooks/                      # SHARED HOOKS
-│   └── useLoadingProgress.ts   # Loading stage tracking
+│   └── useLoadingProgress.ts   # Loading stage tracking with stageDurations and formatMs
 │
 ├── types/                      # TYPE DEFINITIONS
 │   └── openlineage.ts          # OpenLineage API types
@@ -468,6 +508,8 @@ Data flows through the frontend in a consistent pattern:
 - **Multi-select via store + hook (Phase 13).** `isMultiSelectMode` in Zustand controls whether toolbar multi-select is active. The `useMultiSelect` hook syncs this state with React Flow's internal `multiSelectionActive` property via `useStoreApi`. When active, `multiSelectionKeyCode` is set to `null` so every click toggles selection without requiring a modifier key. Selected nodes display a blue ring and can be dragged as a group.
 - **Alphabetical column sorting (Phase 11).** Columns within table nodes are sorted by `name.localeCompare()` in the layout engine before being assigned to table groups. The Detail Panel's Columns tab uses the same ordering.
 - **Topological cluster ordering (Phase 12).** Database clusters are ordered left-to-right using Kahn's algorithm (`topoSortDatabases`) based on edge direction, placing upstream databases on the left. A post-layout `separateDatabaseClusters` pass shifts bounding boxes to guarantee non-overlap with 60px padding.
+- **Progressive depth loading (Phase 16).** `useProgressiveLineage` fires a depth-1 query immediately and chains the full-depth query behind it. The depth-1 graph renders instantly (<200ms), and the full graph expands automatically in the background. A thin blue `ProgressBanner` shows "Expanding to full depth..." during the background fetch.
+- **Per-stage timing display (Phase 17).** After a graph loads, a subtle timing bar shows "Loaded in: Fetch Xms / Layout Xms / Render Xms". The `useLoadingProgress` hook tracks stage durations via `performance.now()`. Server-Timing headers from the API are available in browser DevTools.
 
 ### 6.5 Performance Optimizations (Phase 5)
 
@@ -571,6 +613,8 @@ The backend serves two API versions:
 | GET | `/api/v2/openlineage/lineage/{datasetId}/{fieldName}` | Get lineage graph for a column |
 | GET | `/api/v2/openlineage/lineage/table/{datasetId}` | Get lineage graph for a table |
 | GET | `/api/v2/openlineage/lineage/database/{databaseName}` | Get lineage graph for all tables in a database |
+| GET | `/api/v2/graph/status` | Get in-memory graph engine status (ready, node_count, edge_count, memory_bytes, last_rebuild_time) |
+| POST | `/api/v2/graph/reload` | Trigger in-memory graph rebuild from database |
 
 All endpoints return JSON. Error responses use standard HTTP status codes with a JSON body containing an `error` field.
 
@@ -686,6 +730,8 @@ When making changes, use this table to find the relevant code:
 | What You're Changing | Where to Look |
 |---------------------|---------------|
 | API endpoint | `lineage-api/routes/` (Blueprints) or `lineage-api/python_server.py` (app factory) |
+| Graph engine | `lineage-api/graph/` (engine, loader, store, serializer) |
+| Service layer | `lineage-api/services/` (lineage, dataset, impact) |
 | UI component | `lineage-ui/src/components/domain/` |
 | Graph behavior | `lineage-ui/src/components/domain/LineageGraph/` |
 | Graph layout | `lineage-ui/src/utils/graph/layoutEngine.ts` |

@@ -28,13 +28,13 @@ export function SearchPage() {
       <div className="max-w-3xl mx-auto p-6">
         <div className="flex items-center gap-4 mb-6">
           <BackButton />
-          <h1 className="text-2xl font-bold text-slate-900">Search Datasets</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Search</h1>
         </div>
 
         <SearchBar
           value={query}
           onChange={setQuery}
-          placeholder="Search databases and tables..."
+          placeholder="Search databases, tables, and columns..."
         />
 
         <div className="mt-6">
@@ -42,11 +42,12 @@ export function SearchPage() {
             <div className="flex justify-center py-8">
               <LoadingSpinner />
             </div>
-          ) : data && (data.databases.length > 0 || data.datasets.length > 0) ? (
+          ) : data && ((data.databases?.length ?? 0) > 0 || (data.datasets?.length ?? 0) > 0 || (data.columns?.length ?? 0) > 0) ? (
             <SearchResults
-              databases={data.databases}
-              datasets={data.datasets}
-              totalCount={data.totalCount}
+              databases={data.databases ?? []}
+              datasets={data.datasets ?? []}
+              columns={data.columns ?? []}
+              totalCount={data.totalCount ?? (data.databases?.length ?? 0) + (data.datasets?.length ?? 0) + (data.columns?.length ?? 0)}
             />
           ) : query.length >= 2 ? (
             <div className="text-center py-8 text-slate-500">

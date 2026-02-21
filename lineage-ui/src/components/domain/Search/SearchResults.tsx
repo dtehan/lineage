@@ -1,12 +1,13 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Columns, ChevronRight, ChevronDown, Database } from 'lucide-react';
-import type { OpenLineageDataset, DatabaseInfo } from '../../../types/openlineage';
+import type { OpenLineageDataset, DatabaseInfo, ColumnSearchResult as ColumnSearchResultType } from '../../../types/openlineage';
 import { useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 
 interface SearchResultsProps {
   databases: DatabaseInfo[];
   datasets: OpenLineageDataset[];
+  columns: ColumnSearchResultType[];
   totalCount: number;
 }
 
@@ -16,7 +17,7 @@ const parseTableFromDatasetName = (datasetName: string): string => {
   return parts.length > 1 ? parts.slice(1).join('.') : datasetName;
 };
 
-export function SearchResults({ databases, datasets, totalCount }: SearchResultsProps) {
+export function SearchResults({ databases, datasets, columns, totalCount }: SearchResultsProps) {
   const [expandedDatasets, setExpandedDatasets] = useState<Set<string>>(new Set());
   const [expandedDatabases, setExpandedDatabases] = useState<Set<string>>(new Set());
 
@@ -44,7 +45,7 @@ export function SearchResults({ databases, datasets, totalCount }: SearchResults
     });
   };
 
-  if (databases.length === 0 && datasets.length === 0) {
+  if (databases.length === 0 && datasets.length === 0 && columns.length === 0) {
     return (
       <div className="text-center py-8 text-slate-500">
         No results found
@@ -52,13 +53,16 @@ export function SearchResults({ databases, datasets, totalCount }: SearchResults
     );
   }
 
+  const parts: string[] = [];
+  if (databases.length > 0) parts.push(`${databases.length} database${databases.length !== 1 ? 's' : ''}`);
+  if (datasets.length > 0) parts.push(`${datasets.length} table${datasets.length !== 1 ? 's' : ''}`);
+  if (columns.length > 0) parts.push(`${columns.length} column${columns.length !== 1 ? 's' : ''}`);
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-slate-600">
         {totalCount} result{totalCount !== 1 ? 's' : ''} found
-        {databases.length > 0 && ` (${databases.length} database${databases.length !== 1 ? 's' : ''}`}
-        {databases.length > 0 && datasets.length > 0 && ', '}
-        {datasets.length > 0 && `${datasets.length} table${datasets.length !== 1 ? 's' : ''})`}
+        {parts.length > 0 && ` (${parts.join(', ')})`}
       </p>
 
       {databases.length > 0 && (
@@ -89,6 +93,17 @@ export function SearchResults({ databases, datasets, totalCount }: SearchResults
                 isExpanded={expandedDatasets.has(dataset.id)}
                 onToggle={() => toggleDataset(dataset.id)}
               />
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {columns.length > 0 && (
+        <div>
+          <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Columns</h3>
+          <ul className="space-y-2">
+            {columns.map((column) => (
+              <ColumnSearchResult key={`${column.datasetId}-${column.fieldName}`} column={column} />
             ))}
           </ul>
         </div>
@@ -279,6 +294,45 @@ function DatasetSearchResult({ dataset, isExpanded, onToggle }: DatasetSearchRes
           </div>
         )}
       </div>
+    </li>
+  );
+}
+
+function ColumnSearchResult({ column }: { column: ColumnSearchResultType }) {
+  const navigate = useNavigate();
+
+  const tableName = parseTableFromDatasetName(column.datasetName);
+
+  const handleClick = () => {
+    navigate(`/lineage/${encodeURIComponent(column.datasetId)}/${encodeURIComponent(column.fieldName)}`);
+  };
+
+  return (
+    <li>
+      <button
+        onClick={handleClick}
+        className="w-full bg-white rounded-lg border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all"
+      >
+        <div className="flex items-center gap-3 p-3">
+          <Columns className="w-5 h-5 text-purple-500 flex-shrink-0" />
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-medium text-slate-900 truncate">
+              {column.fieldName}
+            </p>
+            <p className="text-xs text-slate-500 truncate">
+              {column.datasetName} &middot; {tableName}
+            </p>
+          </div>
+          {column.fieldType && (
+            <span className="text-xs text-slate-400 flex-shrink-0">
+              {column.fieldType}
+            </span>
+          )}
+          <span className="text-xs text-slate-400 flex-shrink-0">
+            Column
+          </span>
+        </div>
+      </button>
     </li>
   );
 }

@@ -264,22 +264,22 @@ class DatasetRepository(BaseRepository):
 
     def unified_search(self, query: str, limit: int = 50):
         """
-        Unified search for both databases and datasets.
+        Unified search across databases, datasets, and columns.
 
-        Extracts unique databases from dataset names and filters by query.
+        Searches OL_DATASET names/descriptions and OL_DATASET_FIELD names.
+        Extracts unique databases from all matched dataset names.
 
         Args:
             query: Search query string
-            limit: Maximum number of dataset results
+            limit: Maximum number of results per category
 
         Returns:
-            dict: Contains databases list and datasets list with keys:
-                 databases, datasets
+            dict: Contains databases, datasets, and columns lists
         """
         search_pattern = f"%{query}%"
 
         with self.connection.cursor() as cur:
-            # Search datasets
+            # Search datasets by name/description
             cur.execute(f"""
                 SELECT TOP {limit}
                     d.dataset_id,
@@ -311,29 +311,70 @@ class DatasetRepository(BaseRepository):
                 for row in dataset_rows
             ]
 
-            # Extract unique databases from dataset names and filter by query
+            # Search columns by field name
+            cur.execute(f"""
+                SELECT TOP {limit}
+                    f.field_id,
+                    f.field_name,
+                    f.field_type,
+                    f.dataset_id,
+                    d."name" AS dataset_name,
+                    d.namespace_id,
+                    n.namespace_uri
+                FROM OL_DATASET_FIELD f
+                JOIN OL_DATASET d ON f.dataset_id = d.dataset_id
+                JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                WHERE f.field_name LIKE ?
+                ORDER BY d."name", f.field_name
+            """, [search_pattern])
+
+            column_rows = cur.fetchall()
+            columns = [
+                {
+                    "fieldId": self._strip(row[0]) if row[0] else "",
+                    "fieldName": self._strip(row[1]) if row[1] else "",
+                    "fieldType": self._strip(row[2]) if row[2] else None,
+                    "datasetId": self._strip(row[3]) if row[3] else "",
+                    "datasetName": self._strip(row[4]) if row[4] else "",
+                    "namespace": self._strip(row[6]) if row[6] else ""
+                }
+                for row in column_rows
+            ]
+
+            # Extract unique databases from ALL matched results
             databases_dict = {}
-            for dataset in datasets:
-                # Parse database name from dataset name (e.g., "demo_user.customer" -> "demo_user")
-                parts = dataset["name"].split(".")
+            all_dataset_names = (
+                [d["name"] for d in datasets]
+                + [c["datasetName"] for c in columns]
+            )
+            for name in all_dataset_names:
+                parts = name.split(".")
                 if len(parts) > 1:
                     db_name = parts[0]
-                    # Only include if database name matches query
                     if query.lower() in db_name.lower():
                         if db_name not in databases_dict:
                             databases_dict[db_name] = {
                                 "name": db_name,
-                                "namespace": dataset["namespace"],
+                                "namespace": "",
                                 "tableCount": 0
                             }
                         databases_dict[db_name]["tableCount"] += 1
+
+            # Fill namespace from datasets if available
+            for dataset in datasets:
+                parts = dataset["name"].split(".")
+                if len(parts) > 1:
+                    db_name = parts[0]
+                    if db_name in databases_dict and not databases_dict[db_name]["namespace"]:
+                        databases_dict[db_name]["namespace"] = dataset["namespace"]
 
             databases = list(databases_dict.values())
             databases.sort(key=lambda x: x["name"])
 
         return {
             "databases": databases,
-            "datasets": datasets
+            "datasets": datasets,
+            "columns": columns
         }
 
     def get_dataset_statistics(self, dataset_id: str):
