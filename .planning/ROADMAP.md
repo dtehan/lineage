@@ -88,7 +88,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 15-01-PLAN.md — Add GraphEngine.invalidate() method, wire into cache endpoint, add three-layer consistency unit tests
+- [x] 15-01-PLAN.md — Add GraphEngine.invalidate() method, wire into cache endpoint, add three-layer consistency unit tests
 
 #### Phase 16: Progressive Depth Loading
 
@@ -166,7 +166,7 @@ Plans:
 | 12. Cluster Overlap Prevention | v3.0 | 1/1 | Complete | 2026-02-19 |
 | 13. Multi-Select & Group Move | v3.0 | 2/2 | Complete | 2026-02-19 |
 | 14. In-Memory Graph Engine | v4.0 | 3/3 | Complete | 2026-02-20 |
-| 15. Cache Integration | v4.0 | 0/1 | Not started | - |
+| 15. Cache Integration | v4.0 | 1/1 | Complete | 2026-02-20 |
 | 16. Progressive Depth Loading | v4.0 | 0/2 | Not started | - |
 | 17. Observability | v4.0 | 0/2 | Not started | - |
 | 18. Redis Serialization | v4.0 | 0/1 | Not started | - |
