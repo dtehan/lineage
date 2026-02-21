@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 15 of 18 (Cache Integration)
-Plan: 0 of 1 in current phase
-Status: Ready to plan
-Last activity: 2026-02-20 — Phase 14 complete (3/3 plans, verified 14/14 must-haves)
+Plan: 1 of 1 in current phase
+Status: Phase complete
+Last activity: 2026-02-20 — Phase 15 complete (1/1 plans, verified 5 must-haves)
 
 Progress: [██████░░░░] 64% (14/22 phases complete across all milestones)
 
@@ -39,6 +39,7 @@ Progress: [██████░░░░] 64% (14/22 phases complete across all
 | Phase 14-in-memory-graph-engine P01 | 2min | 1 tasks | 4 files |
 | Phase 14-in-memory-graph-engine P02 | 2min | 2 tasks | 4 files |
 | Phase 14-in-memory-graph-engine P03 | 2min | 2 tasks | 4 files |
+| Phase 15-cache-integration P01 | 2min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -58,6 +59,9 @@ Progress: [██████░░░░] 64% (14/22 phases complete across all
 - [14-02]: graph_engine.initialize() is non-blocking by design: daemon thread warmup, app serves CTE immediately
 - [14-03]: BFS traversal uses subgraph reachability (single_source_shortest_path_length + induced subgraph) instead of nx.bfs_edges — correctly returns diamond convergence edges that BFS tree traversal misses
 - [14-03]: Engine test injection pattern: set engine._store = GraphStore.build(G) and engine._ready.set() to simulate warm engine without DB connection
+- [15-01]: invalidate() ordering: _ready.clear() must happen before thread.start() to avoid race where fast rebuild completes before clear undoes _ready.set()
+- [15-01]: GatedLoader pattern: threading.Event gate for deterministic rebuild timing in tests — test controls release, no time.sleep() dependency
+- [15-01]: Redis flush before graph rebuild: graph_engine.invalidate() called after Redis flush completes to ensure Redis is always cleared first
 
 ### Pending Todos
 
@@ -71,5 +75,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-20
-Stopped at: Phase 14 complete, verified, ready for Phase 15 planning
+Stopped at: Completed 15-01-PLAN.md — Phase 15 complete
 Resume file: None
