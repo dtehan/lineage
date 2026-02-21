@@ -174,6 +174,41 @@ class GraphEngine:
             "memory_bytes": store.memory_bytes,
         }
 
+    def invalidate(self) -> bool:
+        """
+        Trigger an in-memory graph rebuild.
+
+        Atomically clears the active GraphStore and ready Event, then
+        starts a background thread to rebuild the graph from OL_COLUMN_LINEAGE.
+
+        During the rebuild window, is_ready returns False and all traversal
+        calls return [], causing LineageService to fall back to CTE queries.
+        Once rebuild completes, _swap() sets the new store and _ready.set()
+        re-enables BFS traversal.
+
+        Returns:
+            bool: True if rebuild was triggered, False if no loader is
+                  configured (engine was never initialized).
+        """
+        if self._loader is None:
+            logger.warning("Graph engine: invalidate() called but engine not initialized")
+            return False
+
+        # Step 1: Clear ready event (atomic, no lock needed for Event)
+        self._ready.clear()
+        # Step 2: Clear store reference under lock
+        with self._lock:
+            self._store = None
+        # Step 3: Start rebuild thread OUTSIDE lock
+        thread = threading.Thread(
+            target=self._warmup,
+            daemon=True,
+            name="graph-rebuild",
+        )
+        thread.start()
+        logger.info("Graph engine: rebuild triggered by cache invalidation")
+        return True
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------

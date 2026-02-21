@@ -7,6 +7,7 @@ and cache statistics monitoring.
 
 from flask import Blueprint, jsonify, request
 from loguru import logger
+from graph.engine import graph_engine
 
 cache_bp = Blueprint('cache', __name__, url_prefix='/api/v2/cache')
 
@@ -54,7 +55,13 @@ def invalidate_cache():
             'error': 'Provide dataset_name, database_name, or all=true'
         }), 400
 
-    return jsonify({'deleted_keys': deleted})
+    # Trigger in-memory graph rebuild after Redis flush
+    rebuild_triggered = graph_engine.invalidate()
+
+    return jsonify({
+        'deleted_keys': deleted,
+        'graph_rebuild_triggered': rebuild_triggered,
+    })
 
 
 @cache_bp.route('/stats', methods=['GET'])
