@@ -225,6 +225,25 @@ class GraphEngine:
         """
         Run BFS from source and return edge dicts in CTE result format.
 
+        Uses a reachability-based approach rather than nx.bfs_edges tree
+        traversal. nx.bfs_edges only yields BFS tree edges, which causes
+        "convergence" edges in diamond patterns (A->B, A->C, B->D, C->D)
+        to be silently dropped — specifically, the edge from the second
+        path that converges into an already-visited node.
+
+        Instead:
+          1. Compute all nodes reachable within max_depth hops using
+             single_source_shortest_path_length (on the reversed graph
+             for upstream traversal).
+          2. Return all edges of the original graph whose both endpoints
+             are in the reachable set.
+
+        This correctly handles:
+          - Linear chains (single path, same as BFS tree)
+          - Diamond patterns (both convergence edges returned)
+          - Fan-outs (all target edges returned)
+          - Cycles (BFS visited-set prevents infinite loops)
+
         Args:
             G: The DiGraph to traverse.
             source: Starting node ID.
@@ -238,20 +257,22 @@ class GraphEngine:
                         Namespace fields are intentionally absent — callers
                         must add them via LineageService._enrich_bfs_results().
         """
+        # Traverse on the correct graph direction to find reachable nodes.
+        # For upstream: walk the reversed graph from source.
+        traversal_graph = G.reverse(copy=False) if reverse else G
+        reachable = set(
+            nx.single_source_shortest_path_length(
+                traversal_graph, source, cutoff=max_depth
+            ).keys()
+        )
+
+        # Return all edges in the original graph whose both endpoints are
+        # within the reachable set. This includes all "convergence" edges
+        # that BFS tree traversal would miss.
         results = []
+        subgraph = G.subgraph(reachable)
 
-        for u, v in nx.bfs_edges(G, source=source, reverse=reverse, depth_limit=max_depth):
-            if reverse:
-                # When traversing upstream with reverse=True, nx.bfs_edges yields
-                # (parent, child) where parent is in the direction we're going.
-                # The actual edge in the graph runs from v -> u (downstream direction),
-                # so the lineage edge is: src_node=v (source), tgt_node=u (target).
-                src_node, tgt_node = v, u
-            else:
-                src_node, tgt_node = u, v
-
-            edge_data = G[src_node][tgt_node]
-
+        for src_node, tgt_node, edge_data in subgraph.edges(data=True):
             # Node IDs are "dataset_name.field_name" — use rsplit to handle
             # dataset names that themselves contain dots (e.g. "demo_user.orders").
             src_dataset, src_field = src_node.rsplit(".", 1)
