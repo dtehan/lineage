@@ -10,13 +10,13 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 18 of 18 (Redis Serialization)
-Plan: 0 of 1 in current phase
-Status: Ready to plan
-Last activity: 2026-02-20 — Phase 17 complete (2/2 plans, verified 6/6 must-haves)
+Plan: 1 of 1 in current phase
+Status: Complete
+Last activity: 2026-02-21 — Phase 18 complete (1/1 plans)
 
-Progress: [█████████░] 77% (17/22 phases complete across all milestones)
+Progress: [██████████] 100% (18/18 phases complete across all milestones)
 
-v4.0: ████████░░ 80% (4/5 phases)
+v4.0: ██████████ 100% (5/5 phases)
 
 ## Performance Metrics
 
@@ -46,6 +46,7 @@ v4.0: ████████░░ 80% (4/5 phases)
 | Phase 16-progressive-depth-loading P02 | 5min | 2 tasks | 3 files |
 | Phase 17-observability P01 | 3min | 2 tasks | 5 files |
 | Phase 17-observability P02 | 8min | 2 tasks | 5 files |
+| Phase 18-redis-serialization P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,10 @@ v4.0: ████████░░ 80% (4/5 phases)
 - [17-02]: stageStartTimeRef set inside setStageState updater to access guaranteed-correct prevStage — avoids race with stale closure
 - [17-02]: formatMs is a separate export from formatDuration — formatMs for per-stage (ms/s display), formatDuration for total elapsed (s/m display)
 - [17-02]: Post-render timing bar shows only when stage=complete AND stageDurations has at least one entry — no flicker for empty loads
+- [18-01]: GraphSerializer uses module-level functions (not classmethods) — consistent with existing codebase style; lazy imports inside _warmup conditional on self._redis to avoid circular import risk
+- [18-01]: GRAPH_KEY = "lineage:engine:snapshot" — outside lineage:graph:* namespace so invalidate_all() (pattern lineage:graph:*) does not accidentally delete the engine snapshot
+- [18-01]: No TTL on Redis snapshot — snapshot persists until explicitly invalidated by ETL so routine restarts after idle periods restore from Redis
+- [18-01]: redis_client extraction in try/except in python_server.py — if Redis unavailable (SimpleCache fallback), engine operates without Redis persistence transparently
 
 ### Pending Todos
 
@@ -91,6 +96,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Phase 17 complete, verified, ready for Phase 18 planning
+Last session: 2026-02-21
+Stopped at: Completed 18-redis-serialization/18-01-PLAN.md — Phase 18 and v4.0 milestone complete
 Resume file: None
