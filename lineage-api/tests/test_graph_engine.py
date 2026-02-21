@@ -93,6 +93,32 @@ def make_engine_with_graph(G: nx.DiGraph) -> GraphEngine:
     return engine
 
 
+class GatedLoader:
+    """Loader that blocks load() on a threading.Event — test controls when rebuild proceeds."""
+    def __init__(self):
+        self._gate = threading.Event()
+        self._graph = nx.DiGraph()
+
+    def release(self, G: nx.DiGraph = None):
+        """Allow load() to proceed, optionally with a specific graph."""
+        if G is not None:
+            self._graph = G
+        self._gate.set()
+
+    def load(self) -> nx.DiGraph:
+        self._gate.wait()
+        return self._graph
+
+
+class InMemoryLoader:
+    """Returns a pre-built DiGraph synchronously — for testing rebuild completion."""
+    def __init__(self, G: nx.DiGraph):
+        self._graph = G
+
+    def load(self) -> nx.DiGraph:
+        return self._graph
+
+
 # ---------------------------------------------------------------------------
 # TestGraphStore
 # ---------------------------------------------------------------------------
@@ -416,6 +442,73 @@ class TestGraphEngine(unittest.TestCase):
         # Together they cover the whole chain
         combined = upstream_set | downstream_set
         self.assertEqual(len(combined), 2)
+
+
+class TestGraphEngineInvalidate(unittest.TestCase):
+    """Tests for GraphEngine.invalidate() three-layer consistency."""
+
+    def test_invalidate_clears_ready_immediately(self):
+        """After invalidate(), is_ready is False before rebuild completes."""
+        G = build_test_graph([("db.a.x", "db.b.x", "DIRECT")])
+        engine = make_engine_with_graph(G)
+        self.assertTrue(engine.is_ready)
+
+        # Use GatedLoader so rebuild blocks until we release it
+        engine._loader = GatedLoader()
+        engine.invalidate()
+        self.assertFalse(engine.is_ready)
+        # Release the gate so the thread doesn't hang after test
+        engine._loader.release()
+
+    def test_invalidate_clears_store_to_none(self):
+        """After invalidate(), _store is None and status shows zeroed counters."""
+        G = build_test_graph([("db.a.x", "db.b.x", "DIRECT")])
+        engine = make_engine_with_graph(G)
+        engine._loader = GatedLoader()
+        engine.invalidate()
+
+        status = engine.status
+        self.assertFalse(status["ready"])
+        self.assertEqual(status["node_count"], 0)
+        self.assertIsNone(status["last_rebuild_time"])
+        # Release the gate so the thread doesn't hang after test
+        engine._loader.release()
+
+    def test_invalidate_traverse_returns_empty_during_rebuild(self):
+        """While rebuilding, traverse_upstream/downstream return [] (CTE fallback)."""
+        G = build_test_graph([("db.a.x", "db.b.x", "DIRECT")])
+        engine = make_engine_with_graph(G)
+        engine._loader = GatedLoader()
+        engine.invalidate()
+
+        self.assertEqual(engine.traverse_upstream("db.b.x", 5), [])
+        self.assertEqual(engine.traverse_downstream("db.a.x", 5), [])
+        # Release the gate so the thread doesn't hang after test
+        engine._loader.release()
+
+    def test_invalidate_returns_false_without_loader(self):
+        """invalidate() on uninitialized engine returns False."""
+        engine = GraphEngine()
+        result = engine.invalidate()
+        self.assertFalse(result)
+
+    def test_rebuild_completes_and_restores_ready(self):
+        """After rebuild thread completes, is_ready is True and traversal works."""
+        G = build_test_graph([("db.a.x", "db.b.x", "DIRECT")])
+        engine = make_engine_with_graph(G)
+
+        # Use InMemoryLoader that returns a known graph immediately
+        engine._loader = InMemoryLoader(G)
+        engine.invalidate()
+
+        # Wait for rebuild to complete (max 2 seconds)
+        engine._ready.wait(timeout=2.0)
+        self.assertTrue(engine.is_ready)
+
+        result = engine.traverse_downstream("db.a.x", 5)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["source_field"], "x")
+        self.assertEqual(result[0]["target_field"], "x")
 
 
 if __name__ == "__main__":
