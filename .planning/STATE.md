@@ -5,21 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v4.0 Phase 17 — Observability
+**Current focus:** v4.0 Phase 18 — Redis Serialization
 
 ## Current Position
 
-Phase: 17 of 18 (Observability)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-21 — Phase 17 Plan 02 complete (per-stage timing display in frontend)
+Phase: 18 of 18 (Redis Serialization)
+Plan: 0 of 1 in current phase
+Status: Ready to plan
+Last activity: 2026-02-20 — Phase 17 complete (2/2 plans, verified 6/6 must-haves)
 
 Progress: [█████████░] 77% (17/22 phases complete across all milestones)
+
+v4.0: ████████░░ 80% (4/5 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 33 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 6)
+- Total plans completed: 35 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 8)
 - v3.0 average plan duration: ~200s
 - Recent plans range: 78s (fast) to ~45min (complex with fixes)
 
@@ -89,6 +91,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Completed 17-observability 17-02-PLAN.md (per-stage timing display in frontend)
+Last session: 2026-02-20
+Stopped at: Phase 17 complete, verified, ready for Phase 18 planning
 Resume file: None

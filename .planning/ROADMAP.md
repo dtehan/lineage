@@ -127,8 +127,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 17-01-PLAN.md — Server-Timing middleware, LineageService instrumentation, graph status enhancement, timing unit tests
-- [ ] 17-02-PLAN.md — useLoadingProgress stageDurations, ProgressBanner timing display, post-render timing summary
+- [x] 17-01-PLAN.md — Server-Timing middleware, LineageService instrumentation, graph status enhancement, timing unit tests
+- [x] 17-02-PLAN.md — useLoadingProgress stageDurations, ProgressBanner timing display, post-render timing summary
 
 #### Phase 18: Redis Serialization
 
@@ -168,5 +168,5 @@ Plans:
 | 14. In-Memory Graph Engine | v4.0 | 3/3 | Complete | 2026-02-20 |
 | 15. Cache Integration | v4.0 | 1/1 | Complete | 2026-02-20 |
 | 16. Progressive Depth Loading | v4.0 | 2/2 | Complete | 2026-02-20 |
-| 17. Observability | v4.0 | 0/2 | Not started | - |
+| 17. Observability | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 18. Redis Serialization | v4.0 | 0/1 | Not started | - |
