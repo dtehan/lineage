@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useLoadingProgress, STAGE_CONFIG, formatDuration } from './useLoadingProgress';
+import { useLoadingProgress, STAGE_CONFIG, formatDuration, formatMs } from './useLoadingProgress';
 
 describe('formatDuration', () => {
   it('returns <1s for durations under 1 second', () => {
@@ -25,6 +25,21 @@ describe('formatDuration', () => {
     expect(formatDuration(90000)).toBe('1m 30s');
     expect(formatDuration(125000)).toBe('2m 5s');
     expect(formatDuration(189000)).toBe('3m 9s');
+  });
+});
+
+describe('formatMs', () => {
+  it('formats milliseconds under 1000 with ms suffix', () => {
+    expect(formatMs(85)).toBe('85ms');
+    expect(formatMs(500)).toBe('500ms');
+    expect(formatMs(0)).toBe('0ms');
+    expect(formatMs(999)).toBe('999ms');
+  });
+
+  it('formats milliseconds 1000 and over with seconds and one decimal', () => {
+    expect(formatMs(1000)).toBe('1.0s');
+    expect(formatMs(1200)).toBe('1.2s');
+    expect(formatMs(2500)).toBe('2.5s');
   });
 });
 
@@ -375,6 +390,116 @@ describe('useLoadingProgress', () => {
       });
 
       expect(result.current.elapsedTime).toBe(0);
+    });
+  });
+
+  describe('stageDurations', () => {
+    let performanceNowValue = 0;
+
+    beforeEach(() => {
+      performanceNowValue = 0;
+      vi.spyOn(performance, 'now').mockImplementation(() => performanceNowValue);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('starts empty', () => {
+      const { result } = renderHook(() => useLoadingProgress());
+
+      expect(result.current.stageDurations).toEqual({});
+    });
+
+    it('records fetching duration on transition to layout', () => {
+      const { result } = renderHook(() => useLoadingProgress());
+
+      // Start fetching at t=0
+      performanceNowValue = 0;
+      act(() => {
+        result.current.setStage('fetching');
+      });
+
+      // Advance to t=100 then transition to layout
+      performanceNowValue = 100;
+      act(() => {
+        result.current.setStage('layout');
+      });
+
+      expect(result.current.stageDurations.fetching).toBe(100);
+    });
+
+    it('records layout duration on transition to rendering', () => {
+      const { result } = renderHook(() => useLoadingProgress());
+
+      performanceNowValue = 0;
+      act(() => {
+        result.current.setStage('fetching');
+      });
+
+      performanceNowValue = 100;
+      act(() => {
+        result.current.setStage('layout');
+      });
+
+      performanceNowValue = 150;
+      act(() => {
+        result.current.setStage('rendering');
+      });
+
+      expect(result.current.stageDurations.fetching).toBe(100);
+      expect(result.current.stageDurations.layout).toBe(50);
+    });
+
+    it('accumulates durations across all stages', () => {
+      const { result } = renderHook(() => useLoadingProgress());
+
+      performanceNowValue = 0;
+      act(() => {
+        result.current.setStage('fetching');
+      });
+
+      performanceNowValue = 100;
+      act(() => {
+        result.current.setStage('layout');
+      });
+
+      performanceNowValue = 150;
+      act(() => {
+        result.current.setStage('rendering');
+      });
+
+      performanceNowValue = 180;
+      act(() => {
+        result.current.setStage('complete');
+      });
+
+      expect(result.current.stageDurations.fetching).toBe(100);
+      expect(result.current.stageDurations.layout).toBe(50);
+      expect(result.current.stageDurations.rendering).toBe(30);
+    });
+
+    it('clears stageDurations on reset', () => {
+      const { result } = renderHook(() => useLoadingProgress());
+
+      performanceNowValue = 0;
+      act(() => {
+        result.current.setStage('fetching');
+      });
+
+      performanceNowValue = 100;
+      act(() => {
+        result.current.setStage('layout');
+      });
+
+      // Verify we have a duration
+      expect(result.current.stageDurations.fetching).toBe(100);
+
+      act(() => {
+        result.current.reset();
+      });
+
+      expect(result.current.stageDurations).toEqual({});
     });
   });
 

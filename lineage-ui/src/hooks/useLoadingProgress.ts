@@ -1,6 +1,17 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 
 /**
+ * Formats a duration in milliseconds for per-stage display
+ * Examples: "85ms", "1.2s"
+ */
+export function formatMs(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/**
  * Loading stages for graph visualization
  */
 export type LoadingStage = 'idle' | 'fetching' | 'layout' | 'rendering' | 'complete';
@@ -76,6 +87,8 @@ export interface UseLoadingProgressReturn {
   setProgress: (progress: number) => void;
   /** Reset to idle state */
   reset: () => void;
+  /** Duration in ms for each completed stage (populated when stage exits) */
+  stageDurations: Partial<Record<LoadingStage, number>>;
 }
 
 /**
@@ -94,6 +107,8 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
   const [startTime, setStartTime] = useState<number | null>(null);
   const [elapsedTime, setElapsedTime] = useState<number>(0);
   const prevStageRef = useRef<LoadingStage>('idle');
+  const stageStartTimeRef = useRef<number | null>(null);
+  const [stageDurations, setStageDurations] = useState<Partial<Record<LoadingStage, number>>>({});
 
   const message = useMemo(() => STAGE_CONFIG[stage].message, [stage]);
 
@@ -122,12 +137,28 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
       if (prevStage === 'idle' && newStage !== 'idle') {
         setStartTime(Date.now());
         setElapsedTime(0);
+        // Start timing for the new stage
+        stageStartTimeRef.current = performance.now();
       }
       // Clear timing when loading completes or resets
       if (newStage === 'complete' || newStage === 'idle') {
         setStartTime(null);
         setElapsedTime(0);
       }
+
+      // Record duration of the previous stage when transitioning away from it
+      if (prevStage !== 'idle' && stageStartTimeRef.current !== null) {
+        const elapsed = performance.now() - stageStartTimeRef.current;
+        setStageDurations((prev) => ({ ...prev, [prevStage]: Math.round(elapsed) }));
+      }
+
+      // Set stageStartTimeRef for the new stage
+      if (newStage !== 'idle' && newStage !== 'complete') {
+        stageStartTimeRef.current = performance.now();
+      } else {
+        stageStartTimeRef.current = null;
+      }
+
       prevStageRef.current = prevStage;
       return newStage;
     });
@@ -145,6 +176,8 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
     setProgressState(0);
     setStartTime(null);
     setElapsedTime(0);
+    setStageDurations({});
+    stageStartTimeRef.current = null;
   }, []);
 
   // Update elapsed time while loading
@@ -196,5 +229,6 @@ export function useLoadingProgress(): UseLoadingProgressReturn {
     setStage,
     setProgress,
     reset,
+    stageDurations,
   };
 }
