@@ -27,7 +27,7 @@ import { Toolbar } from './Toolbar';
 import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
 import { LoadingProgress } from '../../common/LoadingProgress';
-import { useLoadingProgress } from '../../../hooks/useLoadingProgress';
+import { useLoadingProgress, formatMs } from '../../../hooks/useLoadingProgress';
 import { Map, ChevronUp, ChevronDown } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
@@ -173,6 +173,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     setStage,
     setProgress,
     reset,
+    stageDurations,
   } = useLoadingProgress();
 
   // Use smart viewport hook for size-aware positioning
@@ -759,7 +760,18 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
       <ProgressBanner
         message="Expanding to full depth..."
         visible={!isTableView && isFetchingFullDepth}
+        stageDurations={stageDurations}
       />
+
+      {/* Post-render timing summary — subtle per-stage timing after graph fully loads */}
+      {stage === 'complete' && Object.keys(stageDurations).length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1 text-[10px] text-slate-400 font-mono border-b border-slate-100">
+          <span>Loaded in:</span>
+          {stageDurations.fetching !== undefined && <span>Fetch {formatMs(stageDurations.fetching)}</span>}
+          {stageDurations.layout !== undefined && <span>/ Layout {formatMs(stageDurations.layout)}</span>}
+          {stageDurations.rendering !== undefined && <span>/ Render {formatMs(stageDurations.rendering)}</span>}
+        </div>
+      )}
 
       {/* Graph View */}
       {viewMode === 'graph' && (

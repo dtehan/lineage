@@ -4,12 +4,22 @@ import { render } from '../../../test/test-utils';
 import { LineageGraph } from './LineageGraph';
 import * as useOpenLineageModule from '../../../api/hooks/useOpenLineage';
 import * as useLineageStoreModule from '../../../stores/useLineageStore';
+import * as useLoadingProgressModule from '../../../hooks/useLoadingProgress';
 
 // Mock the useOpenLineage hooks
 vi.mock('../../../api/hooks/useOpenLineage');
 
 // Mock the useLineageStore
 vi.mock('../../../stores/useLineageStore');
+
+// Mock useLoadingProgress to control stage and stageDurations in tests
+vi.mock('../../../hooks/useLoadingProgress', async (importOriginal) => {
+  const actual = await importOriginal<typeof useLoadingProgressModule>();
+  return {
+    ...actual,
+    useLoadingProgress: vi.fn(),
+  };
+});
 
 // Mock ReactFlow components
 vi.mock('@xyflow/react', () => ({
@@ -87,12 +97,29 @@ const defaultProgressiveResult = {
   error: null,
 };
 
+// Default loading progress mock — idle state, no durations
+const defaultLoadingProgressResult = {
+  stage: 'idle' as useLoadingProgressModule.LoadingStage,
+  progress: 0,
+  message: '',
+  isLoading: false,
+  elapsedTime: 0,
+  estimatedTimeRemaining: null,
+  setStage: vi.fn(),
+  setProgress: vi.fn(),
+  reset: vi.fn(),
+  stageDurations: {} as Partial<Record<useLoadingProgressModule.LoadingStage, number>>,
+};
+
 describe('LineageGraph Component', () => {
   const mockSetGraph = vi.fn();
   const mockSetHighlightedNodeIds = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
+
+    // Default: idle state with empty stageDurations
+    vi.mocked(useLoadingProgressModule.useLoadingProgress).mockReturnValue(defaultLoadingProgressResult);
 
     // Default mock: no data, not loading (table lineage)
     vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue(
@@ -581,6 +608,65 @@ describe('LineageGraph Component', () => {
       await waitFor(() => {
         expect(mockSetGraph.mock.calls.length).toBeGreaterThan(firstCallCount);
       });
+    });
+  });
+
+  // Per-stage timing display tests
+  describe('Per-stage Timing Display', () => {
+    it('ProgressBanner shows stage durations during full-depth fetch', async () => {
+      vi.mocked(useLoadingProgressModule.useLoadingProgress).mockReturnValue({
+        ...defaultLoadingProgressResult,
+        stage: 'complete',
+        stageDurations: { fetching: 85, layout: 12 },
+      });
+
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        depth1Query: { ...defaultQueryResult, data: mockLineageData, isLoading: false, isSuccess: true, isFetching: false },
+        fullDepthQuery: { ...defaultQueryResult, isLoading: true, isFetching: true },
+        isDepth1Ready: true,
+        isFullDepthReady: false,
+        finalData: null,
+        isLoading: false,
+        isFetchingFullDepth: true,
+        error: null,
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      // The ProgressBanner timing span combines stages with "|" separators
+      await waitFor(() => {
+        expect(screen.getByText(/Fetch: 85ms \| Layout: 12ms/)).toBeInTheDocument();
+      });
+    });
+
+    it('post-render timing summary appears after graph loads', async () => {
+      vi.mocked(useLoadingProgressModule.useLoadingProgress).mockReturnValue({
+        ...defaultLoadingProgressResult,
+        stage: 'complete',
+        stageDurations: { fetching: 100, layout: 200, rendering: 30 },
+      });
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="_all" />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Loaded in:')).toBeInTheDocument();
+      });
+    });
+
+    it('no timing summary when stageDurations is empty', async () => {
+      vi.mocked(useLoadingProgressModule.useLoadingProgress).mockReturnValue({
+        ...defaultLoadingProgressResult,
+        stage: 'complete',
+        stageDurations: {},
+      });
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="_all" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Loaded in:')).not.toBeInTheDocument();
     });
   });
 });
