@@ -75,6 +75,18 @@ const defaultQueryResult = {
   isSuccess: false,
 };
 
+// Default progressive lineage result — no data, not loading
+const defaultProgressiveResult = {
+  depth1Query: { ...defaultQueryResult },
+  fullDepthQuery: { ...defaultQueryResult },
+  isDepth1Ready: false,
+  isFullDepthReady: false,
+  finalData: null,
+  isLoading: false,
+  isFetchingFullDepth: false,
+  error: null,
+};
+
 describe('LineageGraph Component', () => {
   const mockSetGraph = vi.fn();
   const mockSetHighlightedNodeIds = vi.fn();
@@ -82,12 +94,13 @@ describe('LineageGraph Component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Default mock: no data, not loading
+    // Default mock: no data, not loading (table lineage)
     vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue(
       defaultQueryResult as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>
     );
-    vi.mocked(useOpenLineageModule.useOpenLineageGraph).mockReturnValue(
-      defaultQueryResult as ReturnType<typeof useOpenLineageModule.useOpenLineageGraph>
+    // Default mock: no data, not loading (column progressive lineage)
+    vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue(
+      defaultProgressiveResult as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>
     );
 
     vi.mocked(useLineageStoreModule.useLineageStore).mockReturnValue({
@@ -409,6 +422,165 @@ describe('LineageGraph Component', () => {
       });
 
       // The component uses useEdgesState which provides onEdgesChange
+    });
+  });
+
+  // Progressive Depth Loading Tests
+  describe('Progressive Depth Loading', () => {
+    it('shows loading spinner during depth-1 fetch', () => {
+      // Column lineage: depth-1 is loading
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        ...defaultProgressiveResult,
+        isLoading: true,
+        isDepth1Ready: false,
+        depth1Query: { ...defaultQueryResult, isLoading: true },
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      expect(screen.getByRole('progressbar', { name: /loading/i })).toBeInTheDocument();
+      expect(screen.queryByTestId('react-flow')).not.toBeInTheDocument();
+    });
+
+    it('spinner dismisses when depth-1 resolves even while full-depth is still loading (the blocker fix)', async () => {
+      // This is the KEY test: depth-1 has resolved, full-depth is still in flight.
+      // The component should use depth1Query.data as `data`, triggering layout, dismissing spinner.
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        depth1Query: { ...defaultQueryResult, data: mockLineageData, isLoading: false, isSuccess: true, isFetching: false },
+        fullDepthQuery: { ...defaultQueryResult, isLoading: true, isFetching: true },
+        isDepth1Ready: true,
+        isFullDepthReady: false,
+        finalData: null,
+        isLoading: false,
+        isFetchingFullDepth: true,
+        error: null,
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      // Full-screen spinner should NOT be shown — depth-1 resolved, graph should render
+      // (layout will fire because data = depth1Query.data which is non-null)
+      await waitFor(() => {
+        expect(screen.queryByRole('progressbar', { name: /loading/i })).not.toBeInTheDocument();
+      });
+    });
+
+    it('shows ProgressBanner during full-depth background fetch but not full-screen spinner', async () => {
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        depth1Query: { ...defaultQueryResult, data: mockLineageData, isLoading: false, isSuccess: true, isFetching: false },
+        fullDepthQuery: { ...defaultQueryResult, isLoading: true, isFetching: true },
+        isDepth1Ready: true,
+        isFullDepthReady: false,
+        finalData: null,
+        isLoading: false,
+        isFetchingFullDepth: true,
+        error: null,
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      // Wait for layout/render cycle to complete (spinner dismissed)
+      await waitFor(() => {
+        expect(screen.queryByRole('progressbar', { name: /loading/i })).not.toBeInTheDocument();
+      });
+
+      // ProgressBanner should be visible with the background fetch message
+      await waitFor(() => {
+        expect(screen.getByText(/Expanding to full depth/i)).toBeInTheDocument();
+      });
+    });
+
+    it('does not show ProgressBanner for table-level lineage (fieldName="_all")', async () => {
+      // Table lineage: isTableView=true, so isFetchingFullDepth is not passed to ProgressBanner
+      vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue({
+        ...defaultQueryResult,
+        data: undefined,
+        isLoading: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="_all" />);
+
+      // ProgressBanner should never appear for table lineage
+      expect(screen.queryByText(/Expanding to full depth/i)).not.toBeInTheDocument();
+    });
+
+    it('layout fires when depth-1 data becomes available', async () => {
+      // depth-1 ready: component derives data = depth1Query.data (non-null) → layout fires → setGraph called
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        depth1Query: { ...defaultQueryResult, data: mockLineageData, isLoading: false, isSuccess: true, isFetching: false },
+        fullDepthQuery: { ...defaultQueryResult, isLoading: true, isFetching: true },
+        isDepth1Ready: true,
+        isFullDepthReady: false,
+        finalData: null,
+        isLoading: false,
+        isFetchingFullDepth: true,
+        error: null,
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      // setGraph should be called — layout fired on depth-1 data
+      await waitFor(() => {
+        expect(mockSetGraph).toHaveBeenCalled();
+      });
+    });
+
+    it('layout re-fires when full-depth data arrives after depth-1', async () => {
+      const fullDepthData = {
+        ...mockLineageData,
+        maxDepth: 5,
+        graph: {
+          nodes: [
+            ...mockLineageData.graph.nodes,
+            { id: 'field-upstream', type: 'field' as const, name: 'source_id', dataset: 'sales_db.source' },
+          ],
+          edges: [
+            ...mockLineageData.graph.edges,
+            { id: 'edge-2', source: 'field-upstream', target: 'field-1', transformationType: 'DIRECT' as const },
+          ],
+        },
+      };
+
+      // Start with depth-1 ready, full-depth still loading
+      const { rerender } = render(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        depth1Query: { ...defaultQueryResult, data: mockLineageData, isLoading: false, isSuccess: true, isFetching: false },
+        fullDepthQuery: { ...defaultQueryResult, isLoading: true, isFetching: true },
+        isDepth1Ready: true,
+        isFullDepthReady: false,
+        finalData: null,
+        isLoading: false,
+        isFetchingFullDepth: true,
+        error: null,
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      rerender(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      await waitFor(() => {
+        expect(mockSetGraph).toHaveBeenCalled();
+      });
+
+      const firstCallCount = mockSetGraph.mock.calls.length;
+
+      // Now full-depth arrives
+      vi.mocked(useOpenLineageModule.useProgressiveLineage).mockReturnValue({
+        depth1Query: { ...defaultQueryResult, data: mockLineageData, isLoading: false, isSuccess: true, isFetching: false },
+        fullDepthQuery: { ...defaultQueryResult, data: fullDepthData, isLoading: false, isSuccess: true, isFetching: false },
+        isDepth1Ready: true,
+        isFullDepthReady: true,
+        finalData: fullDepthData,
+        isLoading: false,
+        isFetchingFullDepth: false,
+        error: null,
+      } as ReturnType<typeof useOpenLineageModule.useProgressiveLineage>);
+
+      rerender(<LineageGraph datasetId="test-dataset-id" fieldName="order_id" />);
+
+      // setGraph should be called again with the full-depth data
+      await waitFor(() => {
+        expect(mockSetGraph.mock.calls.length).toBeGreaterThan(firstCallCount);
+      });
     });
   });
 });
