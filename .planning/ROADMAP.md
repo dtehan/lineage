@@ -124,11 +124,11 @@ Plans:
 2. `GET /api/v2/graph/status` (or equivalent metrics endpoint) returns current node count, edge count, last rebuild timestamp, and process memory usage — accessible without connecting to the server host
 3. The frontend loading progress display shows per-stage timing (fetch duration, layout duration, render duration) visible to the user during graph load
 
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 17-01: API timing headers (X-Timing-*) and graph metrics endpoint enhancement
-- [ ] 17-02: Frontend per-stage timing display in loading progress indicator
+- [ ] 17-01-PLAN.md — Server-Timing middleware, LineageService instrumentation, graph status enhancement, timing unit tests
+- [ ] 17-02-PLAN.md — useLoadingProgress stageDurations, ProgressBanner timing display, post-render timing summary
 
 #### Phase 18: Redis Serialization
 
