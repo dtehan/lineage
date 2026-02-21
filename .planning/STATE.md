@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 17 of 18 (Observability)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-02-20 — Phase 16 complete (2/2 plans, verified 6/6 must-haves)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-21 — Phase 17 Plan 01 complete (Server-Timing middleware + LineageService instrumentation)
 
 Progress: [████████░░] 73% (16/22 phases complete across all milestones)
 
@@ -42,6 +42,7 @@ Progress: [████████░░] 73% (16/22 phases complete across all
 | Phase 15-cache-integration P01 | 2min | 2 tasks | 3 files |
 | Phase 16-progressive-depth-loading P01 | 3min | 1 tasks | 4 files |
 | Phase 16-progressive-depth-loading P02 | 5min | 2 tasks | 3 files |
+| Phase 17-observability P01 | 3min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,9 @@ Progress: [████████░░] 73% (16/22 phases complete across all
 - [16-01]: appendGraph uses Set-based deduplication for O(n) merge with existing-first ordering
 - [16-02]: columnData = isFullDepthReady ? columnFinalData : (isDepth1Ready ? depth1Query.data : null) — spinner dismisses on depth-1 arrival, layout fires twice (both near-instant via deterministic topological algorithm)
 - [16-02]: ProgressBanner placed below showProgress early-return so it only renders when depth-1 graph is visible; ProgressBanner accessible name requires aria-label not text content for role=status
+- [17-01]: record_timing() catches RuntimeError (not just hasattr) for no-op outside Flask app context — required for tests calling service methods without app context
+- [17-01]: Table lineage uses single aggregate metric (bfs_total/db_total) for entire field loop — one header entry per request, not per field, keeps Server-Timing header readable
+- [17-01]: expose_headers=['Server-Timing'] added to existing CORS() call — JavaScript can read Server-Timing in cross-origin requests
 
 ### Pending Todos
 
@@ -81,6 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Phase 16 complete, verified, ready for Phase 17 planning
+Last session: 2026-02-21
+Stopped at: Completed 17-observability 17-01-PLAN.md (Server-Timing middleware + LineageService instrumentation)
 Resume file: None
