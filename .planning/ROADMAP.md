@@ -68,9 +68,9 @@ See archive: `.planning/milestones/v3.0-ROADMAP.md`
 **Plans:** 3 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — GraphStore dataclass, GraphLoader database-to-DiGraph, graph package, requirements.txt
-- [ ] 14-02-PLAN.md — GraphEngine singleton with BFS traversal, blue-green swap, dual-path routing in LineageService
-- [ ] 14-03-PLAN.md — Graph status endpoint, blueprint registration, BFS/CTE equivalence unit tests
+- [x] 14-01-PLAN.md — GraphStore dataclass, GraphLoader database-to-DiGraph, graph package, requirements.txt
+- [x] 14-02-PLAN.md — GraphEngine singleton with BFS traversal, blue-green swap, dual-path routing in LineageService
+- [x] 14-03-PLAN.md — Graph status endpoint, blueprint registration, BFS/CTE equivalence unit tests
 
 #### Phase 15: Cache Integration
 
@@ -165,7 +165,7 @@ Plans:
 | 11. Alphabetical Column Sort | v3.0 | 1/1 | Complete | 2026-02-19 |
 | 12. Cluster Overlap Prevention | v3.0 | 1/1 | Complete | 2026-02-19 |
 | 13. Multi-Select & Group Move | v3.0 | 2/2 | Complete | 2026-02-19 |
-| 14. In-Memory Graph Engine | v4.0 | 0/3 | Not started | - |
+| 14. In-Memory Graph Engine | v4.0 | 3/3 | Complete | 2026-02-20 |
 | 15. Cache Integration | v4.0 | 0/1 | Not started | - |
 | 16. Progressive Depth Loading | v4.0 | 0/2 | Not started | - |
 | 17. Observability | v4.0 | 0/2 | Not started | - |
