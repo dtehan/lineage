@@ -23,6 +23,7 @@ from services.impact_service import ImpactService
 from routes.health import health_bp
 from routes.openlineage import openlineage_bp
 from routes.cache import cache_bp
+from routes.graph import graph_bp
 from routes import openlineage as openlineage_routes
 from utils.logging_config import configure_logging
 from middleware.correlation_id import init_correlation_id_middleware
@@ -93,6 +94,7 @@ def create_app():
     app.register_blueprint(health_bp)
     app.register_blueprint(openlineage_bp)
     app.register_blueprint(cache_bp)
+    app.register_blueprint(graph_bp)
 
     # Step 3: Register error handlers LAST (after all routes are registered)
     register_error_handlers(app)
