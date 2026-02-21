@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 14 of 18 (In-Memory Graph Engine)
-Plan: 2 of 3 in current phase
-Status: In progress
-Last activity: 2026-02-21 — Plan 14-02 complete: GraphEngine singleton with BFS traversal and dual-path routing in LineageService
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-21 — Plan 14-03 complete: Graph status endpoint, 20 BFS unit tests, fixed diamond convergence edge bug in _bfs_edges
 
 Progress: [██████░░░░] 59% (13/22 phases complete across all milestones)
 
@@ -38,6 +38,7 @@ Progress: [██████░░░░] 59% (13/22 phases complete across all
 |------|----------|-------|-------|
 | Phase 14-in-memory-graph-engine P01 | 2min | 1 tasks | 4 files |
 | Phase 14-in-memory-graph-engine P02 | 2min | 2 tasks | 4 files |
+| Phase 14-in-memory-graph-engine P03 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -55,6 +56,8 @@ Progress: [██████░░░░] 59% (13/22 phases complete across all
 - [14-02]: BFS results intentionally omit namespace fields; _enrich_bfs_results() resolves them with per-request cache to avoid N+1 queries
 - [14-02]: Database-level lineage continues using CTE path — batch dataset query pattern doesn't map cleanly to per-field BFS
 - [14-02]: graph_engine.initialize() is non-blocking by design: daemon thread warmup, app serves CTE immediately
+- [14-03]: BFS traversal uses subgraph reachability (single_source_shortest_path_length + induced subgraph) instead of nx.bfs_edges — correctly returns diamond convergence edges that BFS tree traversal misses
+- [14-03]: Engine test injection pattern: set engine._store = GraphStore.build(G) and engine._ready.set() to simulate warm engine without DB connection
 
 ### Pending Todos
 
@@ -68,5 +71,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 14-in-memory-graph-engine-02-PLAN.md
+Stopped at: Completed 14-in-memory-graph-engine-03-PLAN.md
 Resume file: None
