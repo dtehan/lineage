@@ -12,6 +12,7 @@ import type { ImpactAsset } from '../../../types/openlineage';
 
 interface ImpactTableProps {
   data: ImpactAsset[];
+  direction?: 'upstream' | 'downstream';
 }
 
 const columnHelper = createColumnHelper<ImpactAsset>();
@@ -65,7 +66,7 @@ const columns = [
   }),
 ];
 
-export function ImpactTable({ data }: ImpactTableProps) {
+export function ImpactTable({ data, direction }: ImpactTableProps) {
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const table = useReactTable({
@@ -129,7 +130,7 @@ export function ImpactTable({ data }: ImpactTableProps) {
         </tbody>
       </table>
       <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 text-sm text-slate-600">
-        Showing {data.length} impacted asset{data.length !== 1 ? 's' : ''}
+        Showing {data.length} {direction === 'upstream' ? 'upstream source' : direction === 'downstream' ? 'downstream dependency' : 'impacted asset'}{data.length !== 1 ? 's' : ''}
       </div>
     </div>
   );

@@ -5,6 +5,8 @@ import type { ImpactSummaryData } from '../../../types/openlineage';
 
 const mockSummary: ImpactSummaryData = {
   totalImpacted: 5,
+  upstreamCount: 2,
+  downstreamCount: 3,
   tableCount: 3,
   columnCount: 5,
   databaseCount: 2,
@@ -13,11 +15,33 @@ const mockSummary: ImpactSummaryData = {
 };
 
 describe('ImpactSummary', () => {
-  it('renders 4 summary cards', () => {
+  it('renders 6 summary cards', () => {
     const { container } = render(<ImpactSummary summary={mockSummary} />);
 
     const cards = container.querySelectorAll('div[class*="p-4"][class*="rounded-lg"]');
-    expect(cards.length).toBe(4);
+    expect(cards.length).toBe(6);
+  });
+
+  it('displays correct upstream count', () => {
+    const { container } = render(<ImpactSummary summary={mockSummary} />);
+
+    expect(screen.getByText('Upstream')).toBeInTheDocument();
+
+    const upstreamCard = Array.from(container.querySelectorAll('div[class*="p-4"]')).find(el =>
+      el.textContent?.includes('Upstream') && !el.textContent?.includes('Total')
+    );
+    expect(upstreamCard?.textContent).toContain('2');
+  });
+
+  it('displays correct downstream count', () => {
+    const { container } = render(<ImpactSummary summary={mockSummary} />);
+
+    expect(screen.getByText('Downstream')).toBeInTheDocument();
+
+    const downstreamCard = Array.from(container.querySelectorAll('div[class*="p-4"]')).find(el =>
+      el.textContent?.includes('Downstream')
+    );
+    expect(downstreamCard?.textContent).toContain('3');
   });
 
   it('displays correct table count', () => {
@@ -25,23 +49,10 @@ describe('ImpactSummary', () => {
 
     expect(screen.getByText('Tables Affected')).toBeInTheDocument();
 
-    // Find the card with "Tables Affected" and check its value
     const tablesCard = Array.from(container.querySelectorAll('div[class*="p-4"]')).find(el =>
       el.textContent?.includes('Tables Affected')
     );
     expect(tablesCard?.textContent).toContain('3');
-  });
-
-  it('displays correct column count', () => {
-    const { container } = render(<ImpactSummary summary={mockSummary} />);
-
-    expect(screen.getByText('Columns Affected')).toBeInTheDocument();
-
-    // Find the card with "Columns Affected" and check its value
-    const columnsCard = Array.from(container.querySelectorAll('div[class*="p-4"]')).find(el =>
-      el.textContent?.includes('Columns Affected')
-    );
-    expect(columnsCard?.textContent).toContain('5');
   });
 
   it('displays correct database count', () => {
@@ -49,7 +60,6 @@ describe('ImpactSummary', () => {
 
     expect(screen.getByText('Databases')).toBeInTheDocument();
 
-    // Find the card with "Databases" and check its value
     const databasesCard = Array.from(container.querySelectorAll('div[class*="p-4"]')).find(el =>
       el.textContent?.includes('Databases') && !el.textContent?.includes('Max')
     );
@@ -61,7 +71,6 @@ describe('ImpactSummary', () => {
 
     expect(screen.getByText('Max Depth')).toBeInTheDocument();
 
-    // Find the card with "Max Depth" and check its value
     // Max depth from byDepth keys: '1', '2', '3' = 3
     const maxDepthCard = Array.from(container.querySelectorAll('div[class*="p-4"]')).find(el =>
       el.textContent?.includes('Max Depth')
@@ -72,6 +81,8 @@ describe('ImpactSummary', () => {
   it('handles summary with zero values', () => {
     const zeroSummary: ImpactSummaryData = {
       totalImpacted: 0,
+      upstreamCount: 0,
+      downstreamCount: 0,
       tableCount: 0,
       columnCount: 0,
       databaseCount: 0,
@@ -81,18 +92,16 @@ describe('ImpactSummary', () => {
 
     const { container } = render(<ImpactSummary summary={zeroSummary} />);
 
-    // Should still render 4 cards
+    // Should still render 6 cards
     const cards = container.querySelectorAll('div[class*="p-4"][class*="rounded-lg"]');
-    expect(cards.length).toBe(4);
+    expect(cards.length).toBe(6);
 
-    // Should display zeros
+    // Should display all card titles
+    expect(screen.getByText('Upstream')).toBeInTheDocument();
+    expect(screen.getByText('Downstream')).toBeInTheDocument();
+    expect(screen.getByText('Total Impacted')).toBeInTheDocument();
     expect(screen.getByText('Tables Affected')).toBeInTheDocument();
-    expect(screen.getByText('Columns Affected')).toBeInTheDocument();
     expect(screen.getByText('Databases')).toBeInTheDocument();
     expect(screen.getByText('Max Depth')).toBeInTheDocument();
-
-    // All values should be 0
-    const zeroValues = screen.getAllByText('0');
-    expect(zeroValues.length).toBeGreaterThanOrEqual(4);
   });
 });

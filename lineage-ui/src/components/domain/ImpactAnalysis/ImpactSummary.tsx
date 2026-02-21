@@ -6,16 +6,26 @@ interface ImpactSummaryProps {
 
 export function ImpactSummary({ summary }: ImpactSummaryProps) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <SummaryCard
+        title="Upstream"
+        value={summary.upstreamCount}
+        color="indigo"
+      />
+      <SummaryCard
+        title="Downstream"
+        value={summary.downstreamCount}
+        color="orange"
+      />
+      <SummaryCard
+        title="Total Impacted"
+        value={summary.totalImpacted}
+        color="red"
+      />
       <SummaryCard
         title="Tables Affected"
         value={summary.tableCount}
         color="blue"
-      />
-      <SummaryCard
-        title="Columns Affected"
-        value={summary.columnCount}
-        color="red"
       />
       <SummaryCard
         title="Databases"
@@ -34,7 +44,7 @@ export function ImpactSummary({ summary }: ImpactSummaryProps) {
 interface SummaryCardProps {
   title: string;
   value: number;
-  color: 'blue' | 'red' | 'green' | 'purple';
+  color: 'blue' | 'red' | 'green' | 'purple' | 'indigo' | 'orange';
 }
 
 const colorClasses = {
@@ -42,6 +52,8 @@ const colorClasses = {
   red: 'bg-red-50 border-red-200 text-red-600',
   green: 'bg-green-50 border-green-200 text-green-600',
   purple: 'bg-purple-50 border-purple-200 text-purple-600',
+  indigo: 'bg-indigo-50 border-indigo-200 text-indigo-600',
+  orange: 'bg-orange-50 border-orange-200 text-orange-600',
 };
 
 function SummaryCard({ title, value, color }: SummaryCardProps) {

@@ -177,6 +177,8 @@ export interface ImpactAsset {
 
 export interface ImpactSummaryData {
   totalImpacted: number;
+  upstreamCount: number;
+  downstreamCount: number;
   tableCount: number;
   columnCount: number;
   databaseCount: number;
@@ -192,6 +194,7 @@ export interface ImpactSourceAsset {
 
 export interface ImpactAnalysisApiResponse {
   sourceAsset: ImpactSourceAsset;
-  impactedAssets: ImpactAsset[];
+  upstreamAssets: ImpactAsset[];
+  impactedAssets: ImpactAsset[]; // downstream (kept for backward compatibility)
   summary: ImpactSummaryData;
 }

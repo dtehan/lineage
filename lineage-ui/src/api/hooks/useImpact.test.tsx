@@ -45,9 +45,12 @@ describe('useImpactAnalysis', () => {
         datasetName: 'demo_user.STG_SALES',
         fieldName: 'sale_amount',
       },
+      upstreamAssets: [],
       impactedAssets: [],
       summary: {
         totalImpacted: 0,
+        upstreamCount: 0,
+        downstreamCount: 0,
         tableCount: 0,
         columnCount: 0,
         databaseCount: 0,
@@ -96,6 +99,7 @@ describe('useImpactAnalysis', () => {
         datasetName: 'demo_user.STG_SALES',
         fieldName: 'sale_amount',
       },
+      upstreamAssets: [],
       impactedAssets: [
         {
           databaseName: 'demo_user',
@@ -107,6 +111,8 @@ describe('useImpactAnalysis', () => {
       ],
       summary: {
         totalImpacted: 1,
+        upstreamCount: 0,
+        downstreamCount: 1,
         tableCount: 1,
         columnCount: 1,
         databaseCount: 1,

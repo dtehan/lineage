@@ -76,7 +76,7 @@ def test_impact_endpoint_returns_200(results):
 
 
 def test_impact_response_has_required_fields(results):
-    """TC-IMPACT-002: Impact response has required fields"""
+    """TC-IMPACT-002: Impact response has required fields (including upstreamAssets)"""
     try:
         _, dataset_id, field_name = get_test_dataset_and_field()
         if not dataset_id or not field_name:
@@ -90,6 +90,7 @@ def test_impact_response_has_required_fields(results):
         )
         data = response.json()
         passed = ("sourceAsset" in data and
+                 "upstreamAssets" in data and
                  "impactedAssets" in data and
                  "summary" in data)
         results.add_result("TC-IMPACT-002: Response has required fields", passed,
@@ -147,7 +148,8 @@ def test_summary_has_all_fields(results):
         data = response.json()
         summary = data.get("summary", {})
 
-        required_fields = ["totalImpacted", "tableCount", "columnCount",
+        required_fields = ["totalImpacted", "upstreamCount", "downstreamCount",
+                          "tableCount", "columnCount",
                           "databaseCount", "byDatabase", "byDepth"]
         passed = all(field in summary for field in required_fields)
         results.add_result("TC-IMPACT-004: Summary has all fields", passed,
