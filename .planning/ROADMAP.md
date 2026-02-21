@@ -108,8 +108,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 16-01-PLAN.md — useProgressiveLineage TanStack Query hook with enabled chaining, Zustand appendGraph action, unit tests
-- [ ] 16-02-PLAN.md — Wire progressive loading into LineageGraph, ProgressBanner component, deferred ELK layout on finalData
+- [x] 16-01-PLAN.md — useProgressiveLineage TanStack Query hook with enabled chaining, Zustand appendGraph action, unit tests
+- [x] 16-02-PLAN.md — Wire progressive loading into LineageGraph, ProgressBanner component, deferred ELK layout on finalData
 
 #### Phase 17: Observability
 
@@ -167,6 +167,6 @@ Plans:
 | 13. Multi-Select & Group Move | v3.0 | 2/2 | Complete | 2026-02-19 |
 | 14. In-Memory Graph Engine | v4.0 | 3/3 | Complete | 2026-02-20 |
 | 15. Cache Integration | v4.0 | 1/1 | Complete | 2026-02-20 |
-| 16. Progressive Depth Loading | v4.0 | 0/2 | Not started | - |
+| 16. Progressive Depth Loading | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 17. Observability | v4.0 | 0/2 | Not started | - |
 | 18. Redis Serialization | v4.0 | 0/1 | Not started | - |

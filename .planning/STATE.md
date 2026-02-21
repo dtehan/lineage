@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v4.0 Phase 17 — (next phase)
+**Current focus:** v4.0 Phase 17 — Observability
 
 ## Current Position
 
-Phase: 16 of 18 (Progressive Depth Loading) — COMPLETE
-Plan: 2 of 2 in current phase
-Status: Phase complete, advancing to Phase 17
-Last activity: 2026-02-21 — Phase 16 Plan 02 complete (useProgressiveLineage wired into LineageGraph, ProgressBanner, 6 new tests, all green)
+Phase: 17 of 18 (Observability)
+Plan: 0 of 2 in current phase
+Status: Ready to plan
+Last activity: 2026-02-20 — Phase 16 complete (2/2 plans, verified 6/6 must-haves)
 
-Progress: [███████░░░] 68% (15/22 phases complete across all milestones)
+Progress: [████████░░] 73% (16/22 phases complete across all milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 31 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 4)
+- Total plans completed: 33 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 6)
 - v3.0 average plan duration: ~200s
 - Recent plans range: 78s (fast) to ~45min (complex with fixes)
 
@@ -30,7 +30,7 @@ Progress: [███████░░░] 68% (15/22 phases complete across all
 | v1.0 Code Quality | 3 | 12 | Complete |
 | v2.0 Performance | 3 | 8 | Complete |
 | v3.0 Wildcard Expansion | 7 | 7 | Complete |
-| v4.0 First-Time Load | 5 | 4 | In progress |
+| v4.0 First-Time Load | 5 | 6 | In progress |
 
 *Updated after each plan completion*
 
@@ -81,6 +81,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: Completed 16-progressive-depth-loading/16-02-PLAN.md
+Last session: 2026-02-20
+Stopped at: Phase 16 complete, verified, ready for Phase 17 planning
 Resume file: None
