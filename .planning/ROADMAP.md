@@ -143,10 +143,10 @@ Plans:
 2. A cold restart with an empty Redis falls back to Teradata load — the application starts and warms up correctly without any manual intervention
 3. Process memory (RSS) is stable — not monotonically growing — after 3 simulated ETL rebuild cycles that each swap the in-memory graph
 
-**Plans:** TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 18-01: Redis graph serialization on warm-up (nx.node_link_data → JSON → Redis) and restore on cold start
+- [ ] 18-01-PLAN.md — GraphSerializer module, Redis-aware engine warmup/invalidation, python_server wiring, comprehensive tests
 
 ## Progress
 
