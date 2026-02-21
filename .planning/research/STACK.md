@@ -1,385 +1,339 @@
-# Stack Research: Wildcard Expansion in SQL Lineage Extraction
+# Technology Stack: In-Memory Graph Engine & Progressive Depth Loading
 
-**Domain:** SQL wildcard expansion for DBQL-based column lineage extraction
-**Researched:** 2026-02-18
+**Project:** Lineage — Column-Level Data Lineage for Teradata
+**Milestone:** In-memory graph engine with BFS/DFS traversal and progressive depth loading
+**Researched:** 2026-02-20
 **Confidence:** HIGH
 
 ## Context
 
-This research focuses ONLY on stack additions/changes needed for wildcard expansion (`SELECT *`, `SELECT t.*`, `SELECT * EXCEPT`) in existing DBQL lineage extraction. The system already has:
-- SQLGlot parser (>=25.0.0) for SQL parsing
-- DBC.ColumnsJQV queries for table/view metadata
-- OpenLineage schema (OL_* tables) for lineage storage
-- populate_lineage.py + dbql_extractor.py for DBQL extraction
+This research covers only NEW stack additions for the in-memory graph engine milestone. The following are already validated and are NOT re-researched here:
 
-## Recommended Stack
+- Python Flask 3.x backend with layered architecture
+- React 18 + TypeScript + React Flow (@xyflow/react ^12)
+- TanStack Query v5 + Zustand for state management
+- Teradata + OpenLineage schema (OL_* tables)
+- Redis 7.0.1 + Flask-Caching 2.3.1 (cache-aside, stampede prevention)
+- Loguru structured logging, ELKjs Web Worker for graph layout
 
-### Core: SQLGlot Optimizer for Star Expansion
+**Problem being solved:** Recursive CTEs take 150ms–15s+ for first-time queries. OL_COLUMN_LINEAGE has ~165 rows in test and up to 100K rows in production. Load the full graph into memory once at startup, traverse it with BFS/DFS instead of hitting Teradata per request.
 
-| Technology | Version | Purpose | Why Recommended |
-|------------|---------|---------|-----------------|
-| sqlglot | >=28.0.0 | SQL parser with optimizer for star expansion | Version 28+ includes mature star expansion via `qualify()` function with `expand_stars=True` parameter. Already in use for parsing, now extending to use optimizer module. |
-| sqlglot.optimizer.qualify | Built-in | Normalize and expand SELECT * to column lists | Official SQLGlot method for star expansion. Requires schema catalog to resolve wildcards. Handles `SELECT *`, `SELECT t.*`, and dialect-specific exclusions. |
-| sqlglot.schema.MappingSchema | Built-in | In-memory schema catalog for star expansion | Lightweight schema representation supporting 3-level hierarchy (catalog.database.table.column). No external dependencies. |
+---
 
-**Why sqlglot.optimizer.qualify:**
-- Native SQLGlot feature, zero additional dependencies
-- Handles all wildcard patterns: `*`, `table.*`, qualified table references
-- Schema-aware expansion respects table context in JOINs
-- Returns expanded AST for existing lineage extraction logic
+## Recommended Stack Additions
 
-**Why NOT custom regex/string parsing:**
-- Wildcards in complex queries (CTEs, subqueries, JOINs) require semantic understanding
-- Schema context needed to resolve `t.*` when `t` is an alias
-- SQLGlot AST already parsed, optimizer extends existing workflow
+### Backend: Python Graph Library
 
-### Supporting: Schema Population from Teradata Metadata
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| networkx | >=3.6.1 | In-memory directed graph engine: BFS/DFS traversal, depth-limited expansion | Best fit for this scale. `nx.DiGraph` stores the full OL_COLUMN_LINEAGE table as an adjacency structure. `bfs_edges(depth_limit=N)` is a generator, enabling progressive depth-by-depth streaming. Pure Python, no compilation required. Production/Stable status, maintained by NumFOCUS. |
 
-| Component | Source | Purpose | Integration Point |
-|-----------|--------|---------|-------------------|
-| DBC.ColumnsJQV query | Teradata system view | Retrieve complete column lists for all tables/views in query | Called during DBQL extraction before SQL parsing |
-| Schema caching | Python dict | In-memory cache of table → columns mapping | Populated once per extraction batch, reused across queries |
-| QVCI requirement | Teradata DB config | Enable DBC.ColumnsJQV access for view column metadata | Already documented in CLAUDE.md, confirmed working |
+**Why networkx over alternatives:**
 
-**Why DBC.ColumnsJQV:**
-- Already in use for `populate_openlineage_fields()` (line 198 of populate_lineage.py)
-- Returns complete column metadata including views (unlike DBC.ColumnsV)
-- Single query retrieves all columns for all referenced tables
-- Provides column order (ColumnId) for correct expansion sequence
+- **vs. rustworkx 0.17.1:** Rustworkx is 3–100x faster for compute-intensive algorithms on large graphs (millions of nodes). At 10K–100K edges, the traversal latency will be dominated by Flask response serialization and ELKjs layout — not BFS. Rustworkx adds a Rust compilation dependency and a different API. The performance gain is not justified for this scale. (LOW confidence claim: "not justified" — revisit if profiling shows BFS > 5ms at 100K edges.)
+- **vs. custom dict adjacency list:** A plain `dict[str, list[str]]` works for BFS but requires reimplementing cycle detection, reverse traversal, depth tracking, and path recording. `networkx.DiGraph` provides all of this as tested library code. Estimated 100 bytes per edge: 100K edges = ~10 MB — well within Flask process memory budget.
+- **vs. graph databases (Neo4j, Memgraph):** Adds infrastructure dependency. Current Teradata + Redis is already the source of truth. No need for a third persistent store for this scale.
 
-**Schema Query Pattern:**
-```sql
--- Extract all columns for tables referenced in DBQL queries
-SELECT
-    TRIM(DatabaseName) as db_name,
-    TRIM(TableName) as tbl_name,
-    TRIM(ColumnName) as col_name,
-    ColumnId as ordinal
-FROM DBC.ColumnsJQV
-WHERE (DatabaseName, TableName) IN (
-    -- Subquery: extract unique table references from DBQL query batch
-    SELECT source_db, source_table FROM extracted_tables
-)
-ORDER BY DatabaseName, TableName, ColumnId
+**Memory estimate:**
+- 10K edges: ~1 MB (well within budget)
+- 100K edges: ~10 MB (still within budget — a Flask process has 256 MB+ available)
+- NetworkX dict-of-dict overhead is ~100 bytes per edge; acceptable for this application
+
+### Backend: Graph Engine Initialization Pattern
+
+No new library needed. Use the existing Flask `create_app()` factory pattern.
+
+| Pattern | Why |
+|---------|-----|
+| Module-level `GraphEngine` singleton instantiated inside `create_app()` | Consistent with how `LineageRepository`, `LineageService`, and Redis cache are already initialized. Single-process Flask dev server means no multi-process memory sharing issues. If Gunicorn multi-worker is added later, use `preload_app = True` or move to Redis-backed graph (per the pitfalls doc). |
+
+```python
+# lineage-api/graph/engine.py  (new module)
+import networkx as nx
+from loguru import logger
+
+class GraphEngine:
+    """In-memory lineage graph with BFS/DFS traversal."""
+
+    def __init__(self):
+        self._graph: nx.DiGraph = nx.DiGraph()
+        self._loaded = False
+
+    def load(self, connection) -> int:
+        """Load all active edges from OL_COLUMN_LINEAGE into memory."""
+        with connection.cursor() as cur:
+            cur.execute("""
+                LOCKING ROW FOR ACCESS
+                SELECT
+                    source_dataset, source_field,
+                    target_dataset, target_field,
+                    transformation_type, source_namespace, target_namespace
+                FROM OL_COLUMN_LINEAGE
+                WHERE is_active = 'Y'
+            """)
+            rows = cur.fetchall()
+
+        self._graph.clear()
+        for row in rows:
+            src = f"{row[0].strip()}.{row[1].strip()}"
+            tgt = f"{row[2].strip()}.{row[3].strip()}"
+            self._graph.add_edge(src, tgt,
+                transformation_type=row[4] or "DIRECT",
+                source_namespace=row[5] or "",
+                target_namespace=row[6] or ""
+            )
+
+        self._loaded = True
+        logger.info("Graph engine loaded", nodes=self._graph.number_of_nodes(),
+                    edges=self._graph.number_of_edges())
+        return self._graph.number_of_edges()
+
+    def bfs_upstream(self, node: str, depth: int):
+        """Yield edges in BFS order traversing upstream (reverse direction)."""
+        return nx.bfs_edges(self._graph, node, reverse=True, depth_limit=depth)
+
+    def bfs_downstream(self, node: str, depth: int):
+        """Yield edges in BFS order traversing downstream."""
+        return nx.bfs_edges(self._graph, node, depth_limit=depth)
+
+    @property
+    def loaded(self) -> bool:
+        return self._loaded
 ```
 
-### Integration: Wildcard Expansion Workflow
+### Backend: Progressive/Streaming HTTP Response
 
-| Step | Technology | Method | Purpose |
-|------|------------|--------|---------|
-| 1. Parse SQL | sqlglot | `sqlglot.parse_one(sql, dialect="teradata")` | Already implemented in `TeradataSQLParser._parse_with_sqlglot()` |
-| 2. Extract table refs | sqlglot AST | `parsed.find_all(exp.Table)` | Identify tables needing column metadata |
-| 3. Query metadata | Teradata | DBC.ColumnsJQV | Build schema catalog for referenced tables only |
-| 4. Build schema | sqlglot.schema.MappingSchema | `MappingSchema(nested_dict)` | Create schema object for qualify() |
-| 5. Expand stars | sqlglot.optimizer.qualify | `qualify(parsed, schema=schema, expand_stars=True)` | Replace * with column lists in AST |
-| 6. Extract lineage | Existing logic | `_extract_insert_lineage(expanded_ast)` | Proceed with existing column mapping logic |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Flask `Response` + `stream_with_context` | Flask 3.x (built-in) | Stream BFS results depth-by-depth as NDJSON | Zero new dependency. Flask's generator-based streaming supports chunked transfer encoding natively. `stream_with_context` keeps request context alive across generator yields. |
+| NDJSON format (`application/x-ndjson`) | Standard | Wire format for progressive graph chunks | Each depth level yields one JSON object per line. Client parses incrementally. Simpler than SSE (no event parsing overhead) and avoids the "multiple JSON objects in one chunk" parsing bug. |
 
-**Modified Code Location:**
-- `lineage-api/utils/sql_parser.py` → Add `_expand_wildcards()` helper method
-- `database/scripts/populate/dbql_extractor.py` → Add schema caching before query processing loop
+**Why NDJSON over SSE:**
+- SSE (Server-Sent Events via `EventSource`) adds a structured event envelope (`data:`, `event:`, `id:` fields) and requires the client to use `EventSource` or a custom fetch loop with header parsing. For a depth-by-depth graph load, the structure is: yield depth-1 data, yield depth-2 data, yield done signal. This is a simple stream, not a real-time event feed. NDJSON over regular `fetch` is less code and no new browser API surface.
+- SSE also adds automatic reconnection behavior, which is counterproductive for a one-shot graph load query.
+- `EventSource` doesn't support custom request headers (needed for future auth).
+
+**Why not WebSockets:**
+WebSockets are bidirectional and require connection lifecycle management. Graph loading is a one-shot server-to-client stream. WebSocket adds complexity (connection handshake, keepalive) with no benefit for this use case.
+
+**Flask streaming pattern:**
+```python
+# lineage-api/routes/openlineage.py (modified)
+from flask import Response, stream_with_context, request
+import json
+
+@openlineage_bp.route('/api/v2/openlineage/lineage/<dataset_id>/<field_name>/stream')
+def stream_column_lineage(dataset_id, field_name):
+    direction = request.args.get('direction', 'both')
+    max_depth = int(request.args.get('maxDepth', 5))
+
+    def generate():
+        for depth in range(1, max_depth + 1):
+            chunk = graph_engine.get_depth_slice(dataset_id, field_name, direction, depth)
+            yield json.dumps({"depth": depth, "nodes": chunk["nodes"], "edges": chunk["edges"]}) + "\n"
+        yield json.dumps({"depth": "done", "nodes": [], "edges": []}) + "\n"
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype='application/x-ndjson'
+    )
+```
+
+### Frontend: Incremental Graph Rendering
+
+No new libraries required. Use the existing React Flow + TanStack Query + Zustand stack.
+
+| Pattern | Technology | Why |
+|---------|------------|-----|
+| Depth-by-depth accumulation | `fetch` + `ReadableStream` + custom hook | Axios does not natively support streaming. Use native `fetch` with `response.body.getReader()` to consume NDJSON. Parse each newline-delimited JSON object as it arrives. |
+| Incremental node/edge accumulation | Zustand `useLineageStore.setGraph()` | Existing store already holds `nodes` and `edges`. Extend with an `appendGraph(newNodes, newEdges)` action that merges depth slices into the existing graph state without replacing it. |
+| Progressive React Flow rendering | `useReactFlow().setNodes()` + `hidden` property | React Flow's `hidden` property defers rendering of nodes not yet visible. As each depth arrives, toggle `hidden: false` for new nodes. O(1) node access via `getNode()`. |
+| No layout re-run on each depth | ELKjs Web Worker (existing) | Run ELKjs layout once after all depths loaded, or after each depth with incremental addition. Avoid running layout for every single node addition — batch by depth. |
+
+**Why native `fetch` over Axios for streaming:**
+Axios buffers the entire response before resolving the Promise. For streaming NDJSON, use `fetch()` with `response.body.getReader()`. The existing Axios `apiClient` remains for all non-streaming endpoints (search, metadata, impact analysis). Add one custom hook for the streaming lineage endpoint only.
+
+**Frontend streaming hook pattern:**
+```typescript
+// lineage-ui/src/api/hooks/useLineageStream.ts (new file)
+import { useCallback, useRef } from 'react';
+import { useLineageStore } from '../../stores/useLineageStore';
+
+export function useLineageStream() {
+  const appendGraph = useLineageStore((s) => s.appendGraph);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const streamLineage = useCallback(async (
+    datasetId: string,
+    fieldName: string,
+    direction: string,
+    maxDepth: number
+  ) => {
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
+    const url = `/api/v2/openlineage/lineage/${encodeURIComponent(datasetId)}/${encodeURIComponent(fieldName)}/stream?direction=${direction}&maxDepth=${maxDepth}`;
+    const response = await fetch(url, { signal: ctrl.signal });
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';  // Keep incomplete last line
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const chunk = JSON.parse(line);
+        if (chunk.depth !== 'done') {
+          appendGraph(chunk.nodes, chunk.edges);
+        }
+      }
+    }
+  }, [appendGraph]);
+
+  return { streamLineage, abort: () => abortRef.current?.abort() };
+}
+```
+
+---
+
+## What NOT to Add
+
+| Library | Why to Avoid |
+|---------|-------------|
+| rustworkx | Overkill at 10K–100K edges. Adds Rust compilation build dependency. Different API from networkx. Performance gain materializes only at millions of nodes and when BFS is the bottleneck. |
+| Flask-SSE (singingwolfboy/flask-sse) | Requires Redis pub/sub for SSE. Already have Redis, but SSE adds complexity for a use case (one-shot graph load) that plain NDJSON serves better. |
+| WebSockets (Flask-SocketIO) | Bidirectional protocol with connection lifecycle overhead. Graph loading is server-to-client one-shot stream. Wrong tool. |
+| graph-tool | C++ extension, complex installation, GPL license. Research-oriented library. Not suited for a Flask service needing simple BFS. |
+| igraph (python-igraph) | Better performance than networkx, but requires C library. Installation on macOS/Linux varies. Benefit doesn't justify the dev environment complexity at this scale. |
+| ndjson-readablestream (npm) | Unnecessary npm dependency. Native `fetch` + manual line splitting handles NDJSON with ~10 lines of TypeScript. |
+| TanStack DB | Experimental (v0.5 as of 2026). Designed for synchronized client-side collections, not one-shot graph streaming. Current TanStack Query v5 handles the progressive loading pattern via `appendGraph`. |
+| GraphQL subscriptions | Architectural overhaul. The existing REST API is a deliberate and correct choice for this application. |
+
+---
 
 ## Installation
 
-**No new dependencies required.** All components are either:
-- Already installed: `sqlglot>=25.0.0` (in requirements.txt)
-- Built-in to sqlglot: `sqlglot.optimizer.qualify`, `sqlglot.schema`
-- Existing infrastructure: DBC.ColumnsJQV queries, Teradata connection
-
-**Version Upgrade (Recommended):**
 ```bash
-# Update requirements.txt
-sqlglot>=28.0.0  # Up from >=25.0.0
+# Backend: Add networkx to requirements.txt
+# No other new Python dependencies required
 
-# Install
-pip install --upgrade sqlglot
+pip install networkx>=3.6.1
+
+# Frontend: No new npm packages required
+# Native fetch API handles NDJSON streaming
+# Existing React Flow, Zustand, TanStack Query handle incremental rendering
 ```
 
-**Rationale for 28.0.0:**
-- Version 25.0.0 has star expansion, but 28.x includes bug fixes and Teradata dialect improvements
-- Latest stable: 28.10.1 (released 2026-02-09)
-- Backward compatible with existing parsing code
-
-## Alternatives Considered
-
-| Recommended | Alternative | Why Not Alternative |
-|-------------|-------------|---------------------|
-| sqlglot.optimizer.qualify | Manual regex wildcard detection + string replacement | Complex queries (CTEs, subqueries) break regex patterns. No schema context for `t.*` resolution. |
-| DBC.ColumnsJQV metadata query | Parse SHOW TABLE output | Requires N additional queries (one per table). No column order guarantee. |
-| Schema caching per batch | Query metadata per SQL statement | 1000+ queries in batch → 1000+ metadata round-trips. 50x slower. |
-| MappingSchema (dict-based) | Custom schema class | MappingSchema is official API, handles 3-level hierarchy, well-tested. |
-
-## What NOT to Use
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| DBC.ColumnsV | Returns NULL for view column types. Insufficient for view lineage. | DBC.ColumnsJQV (requires QVCI enabled) |
-| sqlglot < 25.0.0 | Older versions lack mature star expansion. Teradata dialect incomplete. | sqlglot >= 28.0.0 |
-| HELP COLUMN commands | Legacy Teradata metadata access. Requires N queries per table. Slow. | DBC.ColumnsJQV bulk query |
-| Persistent schema database | Adds complexity, staleness issues. This is point-in-time extraction. | In-memory dict cache per batch |
-
-## Teradata-Specific Considerations
-
-### Antiselect Function (Column Exclusion)
-
-**Status:** Teradata uses `Antiselect` function, NOT `SELECT * EXCEPT` syntax
-```sql
--- Teradata column exclusion syntax
-SELECT * FROM Antiselect (ON table_name USING Exclude ('col1','col2')) AS anti
+**Updated requirements.txt additions:**
+```
+# In-memory graph engine for BFS/DFS lineage traversal
+networkx>=3.6.1
 ```
 
-**SQLGlot Support:** UNKNOWN confidence (not documented in search results)
+---
 
-**Recommendation:**
-- Phase 1 (wildcard expansion): Handle `SELECT *` and `SELECT t.*` only
-- Phase 2 (optional): Research SQLGlot's Antiselect parsing support
-- Antiselect is advanced feature, less common than basic wildcards
+## Integration Points with Existing Architecture
 
-**Sources:**
-- [Teradata Antiselect (DWH Pro)](https://www.dwhpro.com/teradata-antiselect/)
-- [Teradata Antiselect (Medium)](https://medium.com/@r.wenzlofsky/teradata-antiselect-2bebe8457739)
+### Backend Integration
 
-### QVCI Requirement
+| Existing Component | Change |
+|-------------------|--------|
+| `python_server.py` → `create_app()` | Add `GraphEngine` instantiation after `init_cache(app)`. Call `graph_engine.load(connection)` at startup. Pass `graph_engine` to a new `GraphLineageService` (or extend `LineageService`). |
+| `LineageService` | Add new methods that delegate to `GraphEngine` instead of `LineageRepository` CTEs. Keep CTE methods as fallback if graph not loaded. |
+| `LineageRepository` (CTE methods) | Retain as-is. Used for cache warm-up fallback and correctness verification during development. |
+| Redis cache | Graph engine bypasses Redis for traversal (in-memory is faster). Redis remains for expensive metadata queries (dataset info, field types). Cache invalidation: call `graph_engine.load()` after lineage mutation (populate_lineage.py runs). |
+| Routes (`routes/openlineage.py`) | Add new streaming endpoints alongside existing endpoints. Existing endpoints remain unchanged — they serve cached or CTE results. |
 
-**Critical Dependency:** DBC.ColumnsJQV requires QVCI (Queryable View Column Index) enabled
+### Frontend Integration
 
-**Validation:**
-```sql
--- Check QVCI status (error 9719 = disabled)
-SELECT TOP 1 * FROM DBC.ColumnsJQV;
-```
+| Existing Component | Change |
+|-------------------|--------|
+| `useLineageStore` | Add `appendGraph(nodes, edges)` action that merges new nodes/edges deduplicating by `id`. Add `isStreaming: boolean` and `streamingDepth: number` state. |
+| `useLineage.ts` | Keep existing `useQuery`-based hook. Add new `useLineageStream.ts` hook for streaming endpoint. Caller chooses which to use based on feature flag or depth. |
+| `LineageGraph` component | No change to React Flow rendering logic. The `setGraph`/`appendGraph` state updates trigger existing React Flow re-renders. |
+| ELKjs Web Worker | Run layout after each complete depth batch, not per-node. Existing worker interface unchanged — just call it more frequently during streaming. |
 
-**Documented:** CLAUDE.md section "Teradata QVCI Requirements"
-
-**Fallback:** If QVCI disabled, use DBC.ColumnsV + HELP COLUMN (slower, already documented in codebase history)
-
-## Stack Integration Example
-
-```python
-# lineage-api/utils/sql_parser.py
-
-from sqlglot import exp
-from sqlglot.optimizer import qualify
-from sqlglot.schema import MappingSchema
-from typing import Dict, List, Tuple
-
-class TeradataSQLParser:
-    def __init__(self, default_database: str = None):
-        self.default_database = default_database or self.DEFAULT_DATABASE
-        self._table_aliases: Dict[str, Tuple[str, str]] = {}
-        self._schema_cache: Optional[MappingSchema] = None  # NEW
-
-    def set_schema(self, schema_dict: Dict[str, Dict[str, Dict[str, str]]]):
-        """Set schema catalog for wildcard expansion.
-
-        Args:
-            schema_dict: Nested dict {db: {table: {column: type}}}
-        """
-        self._schema_cache = MappingSchema(schema_dict)
-
-    def _parse_with_sqlglot(self, sql: str) -> List[ColumnLineage]:
-        """Parse SQL using SQLGlot and extract lineage."""
-        self._table_aliases = {}
-
-        # Parse with Teradata dialect
-        parsed = sqlglot.parse_one(sql, dialect="teradata")
-        if parsed is None:
-            return []
-
-        # NEW: Expand wildcards if schema available
-        if self._schema_cache:
-            parsed = self._expand_wildcards(parsed)
-
-        # Continue with existing lineage extraction...
-        if isinstance(parsed, exp.Insert):
-            return self._extract_insert_lineage(parsed)
-        # ... rest of existing code
-
-    def _expand_wildcards(self, parsed: exp.Expression) -> exp.Expression:
-        """Expand SELECT * using sqlglot optimizer.
-
-        Args:
-            parsed: SQLGlot AST
-
-        Returns:
-            AST with wildcards expanded to explicit column lists
-        """
-        try:
-            expanded = qualify(
-                parsed,
-                schema=self._schema_cache,
-                dialect="teradata",
-                expand_stars=True,
-                qualify_columns=True,
-                validate_qualify_columns=False,  # Don't fail on unresolved refs
-            )
-            return expanded
-        except Exception as e:
-            # Fallback: return original AST if expansion fails
-            # Log warning but don't block lineage extraction
-            return parsed
-```
-
-```python
-# database/scripts/populate/dbql_extractor.py
-
-class DBQLExtractor:
-    def extract_lineage(self, since: Optional[datetime] = None, full: bool = False) -> int:
-        """Extract column lineage from DBQL."""
-
-        # Fetch queries from DBQL
-        queries = self.fetch_queries(since)
-        if not queries:
-            return 0
-
-        # NEW: Build schema catalog for all referenced tables
-        schema_dict = self._build_schema_catalog(queries)
-        self.parser.set_schema(schema_dict)
-
-        # Process each query (existing logic continues)
-        for query_id, stmt_type, query_text, query_time, default_db, sql_length in queries:
-            # Existing processing with wildcard expansion now enabled...
-            records = self.parser.extract_column_lineage(query_text, stmt_type)
-            # ... rest of existing code
-
-    def _build_schema_catalog(self, queries: List[Tuple]) -> Dict:
-        """Build schema catalog from DBC.ColumnsJQV for all referenced tables.
-
-        Args:
-            queries: List of DBQL query tuples
-
-        Returns:
-            Nested dict {database: {table: {column: type}}}
-        """
-        # Extract unique table references from all queries
-        table_refs = set()
-        for _, _, query_text, _, _, _ in queries:
-            if not query_text:
-                continue
-            try:
-                parsed = sqlglot.parse_one(query_text, dialect="teradata")
-                for table in parsed.find_all(exp.Table):
-                    db = table.db or self.parser.default_database
-                    table_refs.add((db, table.name))
-            except:
-                continue  # Skip unparseable queries
-
-        if not table_refs:
-            return {}
-
-        # Query DBC.ColumnsJQV for all referenced tables
-        placeholders = ','.join([f"('{db}','{tbl}')" for db, tbl in table_refs])
-        query = f"""
-            SELECT
-                TRIM(DatabaseName) as db_name,
-                TRIM(TableName) as tbl_name,
-                TRIM(ColumnName) as col_name,
-                TRIM(ColumnType) as col_type
-            FROM DBC.ColumnsJQV
-            WHERE (DatabaseName, TableName) IN ({placeholders})
-            ORDER BY DatabaseName, TableName, ColumnId
-        """
-
-        self.cursor.execute(query)
-        rows = self.cursor.fetchall()
-
-        # Build nested dict structure
-        schema = {}
-        for db, table, column, col_type in rows:
-            if db not in schema:
-                schema[db] = {}
-            if table not in schema[db]:
-                schema[db][table] = {}
-            schema[db][table][column] = col_type or "VARCHAR(1000)"  # Default type
-
-        return schema
-```
+---
 
 ## Version Compatibility
 
-| Package | Current Version | Recommended Version | Notes |
-|---------|----------------|---------------------|-------|
-| sqlglot | >=25.0.0 | >=28.0.0 | Star expansion available in 25.x, but 28.x more stable. Latest: 28.10.1 (2026-02-09) |
-| Python | 3.x | >=3.9 | SQLGlot 28.x requires Python 3.9+ |
-| teradatasql | >=17.20.0 | (unchanged) | No conflicts with SQLGlot upgrade |
+| Package | Current | Recommended | Notes |
+|---------|---------|-------------|-------|
+| networkx | not installed | >=3.6.1 | Latest stable: 3.6.1 (Dec 8, 2025). Requires Python >=3.11. Flask app already on Python 3.x — verify >=3.11. |
+| Flask | >=3.0.0 | unchanged | `stream_with_context` and generator responses are stable in Flask 3.x. |
+| @xyflow/react | ^12.0.0 | unchanged | `setNodes`, `addNodes`, `hidden` property all available in v12. |
+| @tanstack/react-query | ^5.17.0 | unchanged | Not used for streaming endpoint; `useLineageStream` uses native fetch. |
 
-**Breaking Changes:** None. SQLGlot 28.x is backward compatible with 25.x parsing API.
+**Python version check:** networkx 3.6.1 requires Python !=3.14.1, >=3.11. Confirm Flask server uses Python 3.11+.
 
-## Performance Considerations
+---
 
-### Schema Query Cost
+## Alternatives Considered
 
-**Baseline:** DBQL extraction processes 1000+ queries per batch (based on codebase analysis)
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Graph library | networkx 3.6.1 | rustworkx 0.17.1 | 3–100x faster but only matters at millions of edges; adds Rust build dependency; different API |
+| Graph library | networkx 3.6.1 | custom dict adjacency | Saves ~10 MB RAM at 100K edges but requires reimplementing BFS, cycle detection, reverse traversal, path tracking |
+| Streaming format | NDJSON over HTTP | SSE (EventSource) | SSE structured protocol overhead unnecessary; EventSource doesn't support custom headers; auto-reconnect counterproductive for one-shot loads |
+| Streaming format | NDJSON over HTTP | WebSocket | Bidirectional connection overhead for a unidirectional stream; requires Flask-SocketIO |
+| Frontend streaming | native fetch | Axios streaming | Axios buffers full response before resolving; native fetch with ReadableStream is the correct API for streaming |
+| Graph init | startup singleton in `create_app()` | lazy load on first request | First request still bears Teradata load latency. Startup load amortizes cost; consistent with how Redis cache is initialized. |
 
-**With Schema Catalog:**
-- **One-time cost:** Single DBC.ColumnsJQV query for all tables in batch
-- **Per-query cost:** In-memory schema lookup (negligible)
+---
 
-**Estimated Impact:**
-- Schema query: +0.5-2 seconds per batch (one query for N tables)
-- Wildcard expansion: +0.01-0.05 seconds per query (AST transformation)
-- **Net benefit:** Queries with wildcards now produce lineage (currently skipped)
+## Confidence Assessment
 
-**Optimization:** Build schema catalog only for tables referenced in batch, not all database tables
+| Area | Confidence | Basis |
+|------|------------|-------|
+| networkx as graph library | HIGH | Official docs, PyPI (3.6.1 Dec 2025), verified BFS API with depth_limit |
+| NDJSON over Flask generator | HIGH | Official Flask streaming docs, NDJSON spec, pattern proven in production LLM streaming |
+| native fetch for streaming | HIGH | MDN ReadableStream API, well-established pattern |
+| Memory estimate (100 bytes/edge) | MEDIUM | NetworkX mailing list, community analysis — not official benchmark |
+| rustworkx performance claim (3–100x) | HIGH | Official rustworkx benchmark page, academic paper |
+| "networkx sufficient at 100K edges" | MEDIUM | Extrapolated from lineage analysis article (9s for 100K traversals with BFS — likely overkill for single-column traversal) |
+| Multi-worker memory sharing caution | HIGH | Gunicorn official documentation, Flask deployment docs |
 
-### Memory Considerations
-
-**Schema Size:**
-- 1000 tables × 50 columns average = 50,000 entries
-- Dict overhead: ~100 bytes per entry = ~5 MB
-- MappingSchema wrapper: negligible
-
-**Acceptable:** DBQL extraction already loads query text (32KB per query), schema adds <10 MB
-
-## Migration Path
-
-### Phase 1: Core Wildcard Expansion (SELECT *, SELECT t.*)
-1. Add `_expand_wildcards()` to `sql_parser.py`
-2. Add `_build_schema_catalog()` to `dbql_extractor.py`
-3. Update `extract_lineage()` to call schema builder before query loop
-4. Test with existing unit tests (should pass, wildcards now expanded)
-
-### Phase 2: Validation (optional)
-5. Add unit tests for wildcard expansion with mock schema
-6. Add integration test with real DBC.ColumnsJQV query
-7. Compare lineage output before/after expansion (should be superset)
-
-### Phase 3: Antiselect Support (future enhancement)
-8. Research SQLGlot Antiselect parsing (not covered in this research)
-9. Extend `_expand_wildcards()` if SQLGlot supports Antiselect
-10. Otherwise, manual AST transformation for Antiselect patterns
-
-## Open Questions (for implementation phase)
-
-1. **SQLGlot Antiselect Support:** Does sqlglot.parse_one() recognize Teradata's Antiselect function? (requires testing)
-2. **Error Handling:** Should wildcard expansion failures block lineage extraction or log warning + continue? (recommend: log + continue)
-3. **Schema Staleness:** How to handle schema changes mid-batch? (recommend: acceptable, extraction is point-in-time)
-4. **Partial Schema:** How to handle queries referencing tables not in DBC.ColumnsJQV result? (recommend: qualify() has fallback, existing skip logic continues)
+---
 
 ## Sources
 
-**SQLGlot Core:**
-- [SQLGlot GitHub](https://github.com/tobymao/sqlglot) — Official repository (HIGH confidence)
-- [SQLGlot PyPI](https://pypi.org/project/sqlglot/) — Latest version 28.10.1, requires Python >=3.9 (HIGH confidence)
-- [SQLGlot API: qualify](https://sqlglot.com/sqlglot/optimizer/qualify.html) — Star expansion API documentation (HIGH confidence)
-- [SQLGlot API: schema](https://sqlglot.com/sqlglot/schema.html) — MappingSchema class documentation (HIGH confidence)
+**NetworkX:**
+- [networkx PyPI — Latest version 3.6.1, Dec 2025](https://pypi.org/project/networkx/) (HIGH confidence)
+- [NetworkX bfs_edges API — depth_limit parameter](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.traversal.breadth_first_search.bfs_edges.html) (HIGH confidence)
+- [Data Lineage Analysis with Python and NetworkX — Rittman Mead, 2024](https://www.rittmanmead.com/blog/2024/08/data-lineage-analysis-with-python-and-networkx/) (MEDIUM confidence — real-world lineage use case with BFS performance data)
+- [NetworkX memory overhead discussion — Google Groups](https://groups.google.com/g/networkx-discuss/c/5zZ_OBu-wYA) (MEDIUM confidence)
 
-**Star Expansion Research:**
-- [DataHub: Extracting Column-Level Lineage from SQL](https://blog.datahubproject.io/extracting-column-level-lineage-from-sql-779b8ce17567) — SQLGlot star expansion use case (MEDIUM confidence)
-- [GitHub: sqlglot/optimizer/qualify_columns.py](https://github.com/tobymao/sqlglot/blob/main/sqlglot/optimizer/qualify_columns.py) — Star expansion implementation details (HIGH confidence)
+**rustworkx:**
+- [rustworkx PyPI — Version 0.17.1, Aug 2025](https://pypi.org/project/rustworkx/) (HIGH confidence)
+- [rustworkx Benchmark Comparisons](https://www.rustworkx.org/benchmarks.html) (HIGH confidence)
+- [rustworkx GitHub — Qiskit/rustworkx](https://github.com/Qiskit/rustworkx) (HIGH confidence)
 
-**Teradata Metadata:**
-- [Teradata: ColumnsV[X] Documentation](https://docs.teradata.com/r/oiS9ixs9ixs2ypIQvjTUOJfgoA/fQ8NslP6DDESV0ZiODLlIw) — DBC.ColumnsV documentation (HIGH confidence)
-- [Teradata: Getting View Column Information](https://docs.teradata.com/r/Teradata-VantageCloud-Lake/Database-Reference/Database-Administration/Working-with-Tables-and-Views-Application-DBAs/Working-with-Views/Getting-View-Column-Information) — DBC.ColumnsJQV and QVCI (HIGH confidence)
-- [DBMSTutorials: Teradata Metadata Queries](https://dbmstutorials.com/teradata/teradata_data_dictionary_queries.html) — DBC views query patterns (MEDIUM confidence)
+**Flask Streaming:**
+- [Flask Streaming Documentation — Official 3.1.x](https://flask.palletsprojects.com/en/stable/patterns/streaming/) (HIGH confidence)
+- [Streaming JSON with Flask — Al4 Blog](https://blog.al4.co.nz/2016/01/streaming-json-with-flask/) (MEDIUM confidence)
+- [NDJSON 101: Streaming Over HTTP — APIdog](https://apidog.com/blog/ndjson/) (MEDIUM confidence)
 
-**Teradata Antiselect:**
-- [DWH Pro: Teradata Antiselect](https://www.dwhpro.com/teradata-antiselect/) — Antiselect function documentation (MEDIUM confidence)
-- [Medium: Teradata Antiselect](https://medium.com/@r.wenzlofsky/teradata-antiselect-2bebe8457739) — Antiselect usage examples (MEDIUM confidence)
+**Frontend Streaming:**
+- [Streaming Data with Fetch and NDJSON — David Walsh](https://davidwalsh.name/streaming-data-fetch-ndjson) (MEDIUM confidence)
+- [Fetching JSON over Streaming HTTP — Pamela Fox](http://blog.pamelafox.org/2023/08/fetching-json-over-streaming-http.html) (MEDIUM confidence)
+- [MDN: Using Readable Streams](https://developer.mozilla.org/en-US/docs/Web/API/Streams_API/Using_readable_streams) (HIGH confidence)
 
-**SQLGlot Changelog:**
-- [SQLGlot CHANGELOG.md](https://github.com/tobymao/sqlglot/blob/main/CHANGELOG.md) — Version history and breaking changes (HIGH confidence)
+**React Flow:**
+- [React Flow Performance Documentation](https://reactflow.dev/learn/advanced-use/performance) (HIGH confidence)
+- [React Flow Large Graph Discussion](https://github.com/xyflow/xyflow/discussions/4975) (MEDIUM confidence)
+
+**Multi-worker Memory:**
+- [Sharing data across Gunicorn workers — JG Lee, Medium](https://medium.com/@jgleeee/sharing-data-across-workers-in-a-gunicorn-flask-application-2ad698591875) (MEDIUM confidence)
+- [Flask Gunicorn Deployment Docs](https://flask.palletsprojects.com/en/stable/deploying/gunicorn/) (HIGH confidence)
 
 ---
-*Stack research for: Wildcard expansion in DBQL lineage extraction*
-*Researched: 2026-02-18*
-*Confidence: HIGH — SQLGlot star expansion verified with official docs and API references. DBC.ColumnsJQV already in use. Zero new dependencies required.*
+
+*Stack research for: In-memory graph engine with BFS/DFS traversal and progressive depth loading*
+*Researched: 2026-02-20*
+*Confidence: HIGH for core choices (networkx, Flask NDJSON streaming, native fetch). MEDIUM for memory estimates at production scale.*
