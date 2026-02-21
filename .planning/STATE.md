@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-20)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v4.0 Phase 16 — Progressive Depth Loading
+**Current focus:** v4.0 Phase 17 — (next phase)
 
 ## Current Position
 
-Phase: 16 of 18 (Progressive Depth Loading)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-21 — Phase 16 Plan 01 complete (useProgressiveLineage hook + appendGraph store action, 13 new tests green)
+Phase: 16 of 18 (Progressive Depth Loading) — COMPLETE
+Plan: 2 of 2 in current phase
+Status: Phase complete, advancing to Phase 17
+Last activity: 2026-02-21 — Phase 16 Plan 02 complete (useProgressiveLineage wired into LineageGraph, ProgressBanner, 6 new tests, all green)
 
 Progress: [███████░░░] 68% (15/22 phases complete across all milestones)
 
@@ -41,6 +41,7 @@ Progress: [███████░░░] 68% (15/22 phases complete across all
 | Phase 14-in-memory-graph-engine P03 | 2min | 2 tasks | 4 files |
 | Phase 15-cache-integration P01 | 2min | 2 tasks | 3 files |
 | Phase 16-progressive-depth-loading P01 | 3min | 1 tasks | 4 files |
+| Phase 16-progressive-depth-loading P02 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Progress: [███████░░░] 68% (15/22 phases complete across all
 - [16-01]: useProgressiveLineage uses TanStack Query enabled chaining (enabled: isEnabled && !!depth1Query.data && maxDepth > 1) — no custom state machine required
 - [16-01]: When maxDepth=1, fullDepthQuery shares the same cache key as depth1Query so no second network request fires (enabled guard prevents fetch), TanStack serves cached data
 - [16-01]: appendGraph uses Set-based deduplication for O(n) merge with existing-first ordering
+- [16-02]: columnData = isFullDepthReady ? columnFinalData : (isDepth1Ready ? depth1Query.data : null) — spinner dismisses on depth-1 arrival, layout fires twice (both near-instant via deterministic topological algorithm)
+- [16-02]: ProgressBanner placed below showProgress early-return so it only renders when depth-1 graph is visible; ProgressBanner accessible name requires aria-label not text content for role=status
 
 ### Pending Todos
 
@@ -79,5 +82,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 16-progressive-depth-loading/16-01-PLAN.md
+Stopped at: Completed 16-progressive-depth-loading/16-02-PLAN.md
 Resume file: None
