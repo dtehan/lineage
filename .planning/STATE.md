@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 14 of 18 (In-Memory Graph Engine)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-21 — Plan 14-01 complete: graph package with GraphStore and GraphLoader
+Last activity: 2026-02-21 — Plan 14-02 complete: GraphEngine singleton with BFS traversal and dual-path routing in LineageService
 
 Progress: [██████░░░░] 59% (13/22 phases complete across all milestones)
 
@@ -37,6 +37,7 @@ Progress: [██████░░░░] 59% (13/22 phases complete across all
 | Plan | Duration | Tasks | Files |
 |------|----------|-------|-------|
 | Phase 14-in-memory-graph-engine P01 | 2min | 1 tasks | 4 files |
+| Phase 14-in-memory-graph-engine P02 | 2min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -50,6 +51,10 @@ Progress: [██████░░░░] 59% (13/22 phases complete across all
 - [Research]: BFS/CTE semantic equivalence tests must be written and passing before CTE path is retired
 - [14-01]: GraphStore.build() uses psutil process RSS for memory_bytes — consistent baseline for monitoring reload growth, not graph-scoped heap
 - [14-01]: fetchall() inside cursor context, loop outside — avoids holding cursor open during DiGraph construction
+- [14-02]: Lock held only for reference copy/swap operations — never during BFS traversal or GraphStore.build()
+- [14-02]: BFS results intentionally omit namespace fields; _enrich_bfs_results() resolves them with per-request cache to avoid N+1 queries
+- [14-02]: Database-level lineage continues using CTE path — batch dataset query pattern doesn't map cleanly to per-field BFS
+- [14-02]: graph_engine.initialize() is non-blocking by design: daemon thread warmup, app serves CTE immediately
 
 ### Pending Todos
 
@@ -63,5 +68,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 14-in-memory-graph-engine-01-PLAN.md
+Stopped at: Completed 14-in-memory-graph-engine-02-PLAN.md
 Resume file: None
