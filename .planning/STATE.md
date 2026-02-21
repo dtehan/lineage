@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 16 of 18 (Progressive Depth Loading)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-02-20 — Phase 15 complete (1/1 plans, verified 5/5 must-haves)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-21 — Phase 16 Plan 01 complete (useProgressiveLineage hook + appendGraph store action, 13 new tests green)
 
 Progress: [███████░░░] 68% (15/22 phases complete across all milestones)
 
@@ -40,6 +40,7 @@ Progress: [███████░░░] 68% (15/22 phases complete across all
 | Phase 14-in-memory-graph-engine P02 | 2min | 2 tasks | 4 files |
 | Phase 14-in-memory-graph-engine P03 | 2min | 2 tasks | 4 files |
 | Phase 15-cache-integration P01 | 2min | 2 tasks | 3 files |
+| Phase 16-progressive-depth-loading P01 | 3min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -62,6 +63,9 @@ Progress: [███████░░░] 68% (15/22 phases complete across all
 - [15-01]: invalidate() ordering: _ready.clear() must happen before thread.start() to avoid race where fast rebuild completes before clear undoes _ready.set()
 - [15-01]: GatedLoader pattern: threading.Event gate for deterministic rebuild timing in tests — test controls release, no time.sleep() dependency
 - [15-01]: Redis flush before graph rebuild: graph_engine.invalidate() called after Redis flush completes to ensure Redis is always cleared first
+- [16-01]: useProgressiveLineage uses TanStack Query enabled chaining (enabled: isEnabled && !!depth1Query.data && maxDepth > 1) — no custom state machine required
+- [16-01]: When maxDepth=1, fullDepthQuery shares the same cache key as depth1Query so no second network request fires (enabled guard prevents fetch), TanStack serves cached data
+- [16-01]: appendGraph uses Set-based deduplication for O(n) merge with existing-first ordering
 
 ### Pending Todos
 
@@ -74,6 +78,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: Phase 15 complete, verified, ready for Phase 16 planning
+Last session: 2026-02-21
+Stopped at: Completed 16-progressive-depth-loading/16-01-PLAN.md
 Resume file: None
