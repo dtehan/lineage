@@ -34,6 +34,7 @@ Usage:
 """
 
 import threading
+from datetime import datetime, timezone
 
 import networkx as nx
 from loguru import logger
@@ -163,6 +164,7 @@ class GraphEngine:
                 "node_count": 0,
                 "edge_count": 0,
                 "last_rebuild_time": None,
+                "last_rebuild_iso": None,
                 "memory_bytes": 0,
             }
 
@@ -171,6 +173,9 @@ class GraphEngine:
             "node_count": store.node_count,
             "edge_count": store.edge_count,
             "last_rebuild_time": store.loaded_at,
+            "last_rebuild_iso": datetime.fromtimestamp(
+                store.loaded_at, tz=timezone.utc
+            ).isoformat() if store.loaded_at is not None else None,
             "memory_bytes": store.memory_bytes,
         }
 

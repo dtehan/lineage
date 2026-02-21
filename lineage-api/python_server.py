@@ -28,6 +28,7 @@ from routes import openlineage as openlineage_routes
 from utils.logging_config import configure_logging
 from middleware.correlation_id import init_correlation_id_middleware
 from middleware.error_handlers import register_error_handlers
+from middleware.timing import init_timing_middleware
 from graph.engine import graph_engine
 
 
@@ -60,10 +61,13 @@ def create_app():
         "http://localhost:3001",
         "http://localhost:3004",
         "http://localhost:5173"
-    ])
+    ], expose_headers=["Server-Timing"])
 
     # Step 2: Initialize correlation ID middleware (after CORS, before routes)
     init_correlation_id_middleware(app)
+
+    # Step 2a: Initialize Server-Timing middleware (after correlation ID, before routes)
+    init_timing_middleware(app)
 
     # Step 2.5: Initialize cache (before repositories, after CORS)
     init_cache(app)
