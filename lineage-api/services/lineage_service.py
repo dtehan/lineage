@@ -3,11 +3,22 @@ Lineage Service
 
 Orchestrates lineage graph building for column, table, and database level lineage.
 Delegates to LineageRepository and DatasetRepository for data access.
+
+Dual-path routing:
+    When graph_engine.is_ready is True, column and table lineage requests use
+    in-memory BFS traversal (graph_engine.traverse_upstream/downstream) for
+    sub-100ms latency. When the graph is not ready (still warming up or failed),
+    the existing recursive CTE path is used transparently.
+
+    BFS results omit namespace fields, so _enrich_bfs_results() resolves them
+    via dataset_repo.get_dataset_metadata() with per-request caching to avoid
+    N+1 queries. Database-level lineage continues to use CTE exclusively.
 """
 
 from repositories.lineage_repository import LineageRepository
 from repositories.dataset_repository import DatasetRepository
 from exceptions import DatasetNotFoundError
+from graph.engine import graph_engine
 
 
 class LineageService:
@@ -67,18 +78,33 @@ class LineageService:
         nodes = {}
         edges = []
 
+        # Determine traversal path once: BFS when graph is warm, CTE when not
+        use_graph = graph_engine.is_ready
+
         # Get upstream lineage if requested
         if direction in ("upstream", "both"):
-            upstream_records = self.lineage_repo.get_upstream_lineage(
-                dataset_name, field_name, max_depth
-            )
+            if use_graph:
+                bfs_edges = graph_engine.traverse_upstream(
+                    f"{dataset_name}.{field_name}", max_depth
+                )
+                upstream_records = self._enrich_bfs_results(bfs_edges)
+            else:
+                upstream_records = self.lineage_repo.get_upstream_lineage(
+                    dataset_name, field_name, max_depth
+                )
             self._add_lineage_results(upstream_records, nodes, edges, source_type_cache)
 
         # Get downstream lineage if requested
         if direction in ("downstream", "both"):
-            downstream_records = self.lineage_repo.get_downstream_lineage(
-                dataset_name, field_name, max_depth
-            )
+            if use_graph:
+                bfs_edges = graph_engine.traverse_downstream(
+                    f"{dataset_name}.{field_name}", max_depth
+                )
+                downstream_records = self._enrich_bfs_results(bfs_edges)
+            else:
+                downstream_records = self.lineage_repo.get_downstream_lineage(
+                    dataset_name, field_name, max_depth
+                )
             self._add_lineage_results(downstream_records, nodes, edges, source_type_cache)
 
         # Add the root field node if not already present
@@ -138,6 +164,9 @@ class LineageService:
         # Pre-seed cache with root dataset to avoid redundant lookups
         source_type_cache = {dataset_name: source_type}
 
+        # Determine traversal path once for all fields: BFS when graph is warm, CTE when not
+        use_graph = graph_engine.is_ready
+
         # For each field, get its lineage
         for field_name in fields:
             # Add the field as a root node
@@ -149,16 +178,28 @@ class LineageService:
 
             # Get upstream lineage if requested
             if direction in ("upstream", "both"):
-                upstream_records = self.lineage_repo.get_upstream_lineage(
-                    dataset_name, field_name, max_depth
-                )
+                if use_graph:
+                    bfs_edges = graph_engine.traverse_upstream(
+                        f"{dataset_name}.{field_name}", max_depth
+                    )
+                    upstream_records = self._enrich_bfs_results(bfs_edges)
+                else:
+                    upstream_records = self.lineage_repo.get_upstream_lineage(
+                        dataset_name, field_name, max_depth
+                    )
                 self._add_lineage_results(upstream_records, nodes, edges, source_type_cache)
 
             # Get downstream lineage if requested
             if direction in ("downstream", "both"):
-                downstream_records = self.lineage_repo.get_downstream_lineage(
-                    dataset_name, field_name, max_depth
-                )
+                if use_graph:
+                    bfs_edges = graph_engine.traverse_downstream(
+                        f"{dataset_name}.{field_name}", max_depth
+                    )
+                    downstream_records = self._enrich_bfs_results(bfs_edges)
+                else:
+                    downstream_records = self.lineage_repo.get_downstream_lineage(
+                        dataset_name, field_name, max_depth
+                    )
                 self._add_lineage_results(downstream_records, nodes, edges, source_type_cache)
 
         return {
@@ -359,6 +400,57 @@ class LineageService:
                 "edges": edges
             }
         }
+
+    def _resolve_namespace(self, dataset_name: str, namespace_cache: dict) -> str:
+        """
+        Resolve the namespace URI for a dataset, using a per-request cache.
+
+        The cache avoids repeated dataset_repo lookups for the same dataset
+        across multiple edges in a single BFS result set — most edges share
+        a small number of distinct datasets.
+
+        Args:
+            dataset_name: Fully qualified dataset name (e.g. "demo_user.orders").
+            namespace_cache: Dict mapping dataset name -> namespace URI string.
+
+        Returns:
+            str: Namespace URI, or "" if the dataset is not found.
+        """
+        if dataset_name in namespace_cache:
+            return namespace_cache[dataset_name]
+
+        meta = self.dataset_repo.get_dataset_metadata(dataset_name)
+        namespace = meta["namespace"] if meta else ""
+        namespace_cache[dataset_name] = namespace
+        return namespace
+
+    def _enrich_bfs_results(self, bfs_edges: list[dict]) -> list[dict]:
+        """
+        Add source_namespace and target_namespace to BFS edge dicts.
+
+        BFS results from GraphEngine omit namespace fields because the
+        in-memory graph stores only dataset+field node IDs. This method
+        resolves namespaces from dataset_repo so BFS results match the
+        CTE result format expected by _add_lineage_results().
+
+        Args:
+            bfs_edges: List of edge dicts from traverse_upstream/downstream.
+                       Each dict has source_dataset, source_field,
+                       target_dataset, target_field, transformation_type.
+
+        Returns:
+            list[dict]: Same dicts with source_namespace and target_namespace
+                        added in-place. The input list is mutated and returned.
+        """
+        namespace_cache: dict = {}
+        for edge in bfs_edges:
+            edge["source_namespace"] = self._resolve_namespace(
+                edge["source_dataset"], namespace_cache
+            )
+            edge["target_namespace"] = self._resolve_namespace(
+                edge["target_dataset"], namespace_cache
+            )
+        return bfs_edges
 
     def _build_node(self, key: str, field_name: str, dataset_name: str, namespace: str, source_type: str = "TABLE") -> dict:
         """

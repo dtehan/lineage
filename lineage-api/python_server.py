@@ -27,6 +27,7 @@ from routes import openlineage as openlineage_routes
 from utils.logging_config import configure_logging
 from middleware.correlation_id import init_correlation_id_middleware
 from middleware.error_handlers import register_error_handlers
+from graph.engine import graph_engine
 
 
 def create_app():
@@ -68,6 +69,13 @@ def create_app():
 
     # Create database connection (shared across all repositories)
     connection = get_db_connection()
+
+    # Initialize in-memory graph engine (background warmup thread)
+    # Starts a daemon thread that loads OL_COLUMN_LINEAGE into a networkx DiGraph.
+    # Does NOT block — app immediately proceeds to serve requests via CTE fallback.
+    # Once warmup completes, column and table lineage requests switch to BFS traversal.
+    graph_engine.initialize(connection)
+    logger.info("Graph engine: background warmup initiated")
 
     # Instantiate repositories
     lineage_repo = LineageRepository(connection)
