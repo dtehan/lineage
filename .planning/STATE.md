@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 17 of 18 (Observability)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-21 — Phase 17 Plan 01 complete (Server-Timing middleware + LineageService instrumentation)
+Plan: 2 of 2 in current phase
+Status: Phase complete
+Last activity: 2026-02-21 — Phase 17 Plan 02 complete (per-stage timing display in frontend)
 
-Progress: [████████░░] 73% (16/22 phases complete across all milestones)
+Progress: [█████████░] 77% (17/22 phases complete across all milestones)
 
 ## Performance Metrics
 
@@ -43,6 +43,7 @@ Progress: [████████░░] 73% (16/22 phases complete across all
 | Phase 16-progressive-depth-loading P01 | 3min | 1 tasks | 4 files |
 | Phase 16-progressive-depth-loading P02 | 5min | 2 tasks | 3 files |
 | Phase 17-observability P01 | 3min | 2 tasks | 5 files |
+| Phase 17-observability P02 | 8min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -73,6 +74,9 @@ Progress: [████████░░] 73% (16/22 phases complete across all
 - [17-01]: record_timing() catches RuntimeError (not just hasattr) for no-op outside Flask app context — required for tests calling service methods without app context
 - [17-01]: Table lineage uses single aggregate metric (bfs_total/db_total) for entire field loop — one header entry per request, not per field, keeps Server-Timing header readable
 - [17-01]: expose_headers=['Server-Timing'] added to existing CORS() call — JavaScript can read Server-Timing in cross-origin requests
+- [17-02]: stageStartTimeRef set inside setStageState updater to access guaranteed-correct prevStage — avoids race with stale closure
+- [17-02]: formatMs is a separate export from formatDuration — formatMs for per-stage (ms/s display), formatDuration for total elapsed (s/m display)
+- [17-02]: Post-render timing bar shows only when stage=complete AND stageDurations has at least one entry — no flicker for empty loads
 
 ### Pending Todos
 
@@ -86,5 +90,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-21
-Stopped at: Completed 17-observability 17-01-PLAN.md (Server-Timing middleware + LineageService instrumentation)
+Stopped at: Completed 17-observability 17-02-PLAN.md (per-stage timing display in frontend)
 Resume file: None
