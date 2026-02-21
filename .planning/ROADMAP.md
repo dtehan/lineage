@@ -105,11 +105,11 @@ Plans:
 4. ELKjs layout runs exactly once per graph load — only after the final depth data arrives, not after each intermediate depth
 5. A loading indicator shows the two-stage progress: depth-1 complete, then full-depth expanding
 
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 16-01: Two-request polling model in TanStack Query — depth-1 fetch then full-depth prefetch
-- [ ] 16-02: Frontend progressive merge — Zustand appendGraph(), deferred ELKjs layout to final depth, progress indicator
+- [ ] 16-01-PLAN.md — useProgressiveLineage TanStack Query hook with enabled chaining, Zustand appendGraph action, unit tests
+- [ ] 16-02-PLAN.md — Wire progressive loading into LineageGraph, ProgressBanner component, deferred ELK layout on finalData
 
 #### Phase 17: Observability
 
