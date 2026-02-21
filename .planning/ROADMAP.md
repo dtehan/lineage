@@ -65,12 +65,12 @@ See archive: `.planning/milestones/v3.0-ROADMAP.md`
 4. BFS traversal produces identical nodes, edges, and transformation types to the existing CTE query for CYCLE5, NESTED_DIAMOND, and FANOUT10 test patterns at all depth values
 5. `GET /api/v2/graph/status` returns node count, edge count, last rebuild time, memory usage, and current warm-up status
 
-**Plans:** TBD
+**Plans:** 3 plans
 
 Plans:
-- [ ] 14-01: GraphStore, GraphLoader, and LineageRepository.load_all_lineage() — in-memory data structure with Teradata load
-- [ ] 14-02: GraphEngine singleton with BFS traversal, blue-green swap, and dual-path routing in LineageService
-- [ ] 14-03: Graph status endpoint, startup warm-up thread, and BFS/CTE equivalence tests
+- [ ] 14-01-PLAN.md — GraphStore dataclass, GraphLoader database-to-DiGraph, graph package, requirements.txt
+- [ ] 14-02-PLAN.md — GraphEngine singleton with BFS traversal, blue-green swap, dual-path routing in LineageService
+- [ ] 14-03-PLAN.md — Graph status endpoint, blueprint registration, BFS/CTE equivalence unit tests
 
 #### Phase 15: Cache Integration
 
