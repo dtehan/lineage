@@ -72,34 +72,34 @@ Deferred to later milestones. Tracked but not in current roadmap.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| GRAPH-01 | — | Pending |
-| GRAPH-02 | — | Pending |
-| GRAPH-03 | — | Pending |
-| GRAPH-04 | — | Pending |
-| GRAPH-05 | — | Pending |
-| GRAPH-06 | — | Pending |
-| GRAPH-07 | — | Pending |
-| GRAPH-08 | — | Pending |
-| PROG-01 | — | Pending |
-| PROG-02 | — | Pending |
-| PROG-03 | — | Pending |
-| PROG-04 | — | Pending |
-| PROG-05 | — | Pending |
-| CACHE-01 | — | Pending |
-| CACHE-02 | — | Pending |
-| CACHE-03 | — | Pending |
-| OBS-01 | — | Pending |
-| OBS-02 | — | Pending |
-| OBS-03 | — | Pending |
-| REDIS-01 | — | Pending |
-| REDIS-02 | — | Pending |
-| REDIS-03 | — | Pending |
+| GRAPH-01 | Phase 14 | Pending |
+| GRAPH-02 | Phase 14 | Pending |
+| GRAPH-03 | Phase 14 | Pending |
+| GRAPH-04 | Phase 14 | Pending |
+| GRAPH-05 | Phase 14 | Pending |
+| GRAPH-06 | Phase 14 | Pending |
+| GRAPH-07 | Phase 14 | Pending |
+| GRAPH-08 | Phase 14 | Pending |
+| PROG-01 | Phase 16 | Pending |
+| PROG-02 | Phase 16 | Pending |
+| PROG-03 | Phase 16 | Pending |
+| PROG-04 | Phase 16 | Pending |
+| PROG-05 | Phase 16 | Pending |
+| CACHE-01 | Phase 15 | Pending |
+| CACHE-02 | Phase 15 | Pending |
+| CACHE-03 | Phase 15 | Pending |
+| OBS-01 | Phase 17 | Pending |
+| OBS-02 | Phase 17 | Pending |
+| OBS-03 | Phase 17 | Pending |
+| REDIS-01 | Phase 18 | Pending |
+| REDIS-02 | Phase 18 | Pending |
+| REDIS-03 | Phase 18 | Pending |
 
 **Coverage:**
 - v4.0 requirements: 22 total
-- Mapped to phases: 0
-- Unmapped: 22 ⚠️
+- Mapped to phases: 22
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-20*
-*Last updated: 2026-02-20 after initial definition*
+*Last updated: 2026-02-20 — traceability mapped to Phases 14-18*
