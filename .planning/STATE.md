@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-20)
 ## Current Position
 
 Phase: 14 of 18 (In-Memory Graph Engine)
-Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-02-20 — v4.0 roadmap created, Phase 14 ready for plan-phase
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-21 — Plan 14-01 complete: graph package with GraphStore and GraphLoader
 
 Progress: [██████░░░░] 59% (13/22 phases complete across all milestones)
 
@@ -30,9 +30,13 @@ Progress: [██████░░░░] 59% (13/22 phases complete across all
 | v1.0 Code Quality | 3 | 12 | Complete |
 | v2.0 Performance | 3 | 8 | Complete |
 | v3.0 Wildcard Expansion | 7 | 7 | Complete |
-| v4.0 First-Time Load | 5 | 0 | Not started |
+| v4.0 First-Time Load | 5 | 1 | In progress |
 
 *Updated after each plan completion*
+
+| Plan | Duration | Tasks | Files |
+|------|----------|-------|-------|
+| Phase 14-in-memory-graph-engine P01 | 2min | 1 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -44,6 +48,8 @@ Progress: [██████░░░░] 59% (13/22 phases complete across all
 - [Research]: Defer ELKjs layout to final depth only — prevents layout jitter, avoids re-render storm, no position-stability algorithm needed
 - [Research]: Gunicorn worker model (--preload or --workers 1 --threads N) must be decided and validated in Phase 14 before any other phase begins
 - [Research]: BFS/CTE semantic equivalence tests must be written and passing before CTE path is retired
+- [14-01]: GraphStore.build() uses psutil process RSS for memory_bytes — consistent baseline for monitoring reload growth, not graph-scoped heap
+- [14-01]: fetchall() inside cursor context, loop outside — avoids holding cursor open during DiGraph construction
 
 ### Pending Todos
 
@@ -56,6 +62,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-20
-Stopped at: v4.0 roadmap created — ready to plan Phase 14
+Last session: 2026-02-21
+Stopped at: Completed 14-in-memory-graph-engine-01-PLAN.md
 Resume file: None
