@@ -5,7 +5,7 @@
 - ✅ **v1.0 Code Quality & Missing Features** — Phases 1-3 (shipped 2026-02-15)
 - ✅ **v2.0 Performance Optimization** — Phases 4-6 (shipped 2026-02-16)
 - ✅ **v3.0 Wildcard Expansion & Graph Enhancements** — Phases 7-13 (shipped 2026-02-19)
-- 🚧 **v4.0 First-Time Load Performance** — Phases 14-18 (in progress)
+- ✅ **v4.0 First-Time Load Performance** — Phases 14-18 (shipped 2026-02-21)
 
 ## Phases
 
@@ -46,7 +46,7 @@ See archive: `.planning/milestones/v3.0-ROADMAP.md`
 
 </details>
 
-### 🚧 v4.0 First-Time Load Performance (In Progress)
+### ✅ v4.0 First-Time Load Performance (Shipped 2026-02-21)
 
 **Milestone Goal:** Eliminate database round-trips for lineage traversal by building an in-memory graph engine with progressive depth loading, reducing first-time graph load from seconds to <500ms.
 
@@ -146,7 +146,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 18-01-PLAN.md — GraphSerializer module, Redis-aware engine warmup/invalidation, python_server wiring, comprehensive tests
+- [x] 18-01-PLAN.md — GraphSerializer module, Redis-aware engine warmup/invalidation, python_server wiring, comprehensive tests
 
 ## Progress
 
@@ -169,4 +169,4 @@ Plans:
 | 15. Cache Integration | v4.0 | 1/1 | Complete | 2026-02-20 |
 | 16. Progressive Depth Loading | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 17. Observability | v4.0 | 2/2 | Complete | 2026-02-20 |
-| 18. Redis Serialization | v4.0 | 0/1 | Not started | - |
+| 18. Redis Serialization | v4.0 | 1/1 | Complete | 2026-02-21 |

@@ -21,7 +21,7 @@ v4.0: ██████████ 100% (5/5 phases)
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 35 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 8)
+- Total plans completed: 36 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9)
 - v3.0 average plan duration: ~200s
 - Recent plans range: 78s (fast) to ~45min (complex with fixes)
 
@@ -32,7 +32,7 @@ v4.0: ██████████ 100% (5/5 phases)
 | v1.0 Code Quality | 3 | 12 | Complete |
 | v2.0 Performance | 3 | 8 | Complete |
 | v3.0 Wildcard Expansion | 7 | 7 | Complete |
-| v4.0 First-Time Load | 5 | 6 | In progress |
+| v4.0 First-Time Load | 5 | 9 | Complete |
 
 *Updated after each plan completion*
 
