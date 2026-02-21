@@ -39,6 +39,7 @@ interface LineageState {
   nodes: LineageNode[];
   edges: LineageEdge[];
   setGraph: (nodes: LineageNode[], edges: LineageEdge[]) => void;
+  appendGraph: (newNodes: LineageNode[], newEdges: LineageEdge[]) => void;
 
   // View options
   maxDepth: number;
@@ -127,6 +128,21 @@ export const useLineageStore = create<LineageState>((set) => ({
   nodes: [],
   edges: [],
   setGraph: (nodes, edges) => set({ nodes, edges }),
+  appendGraph: (newNodes, newEdges) =>
+    set((state) => {
+      const existingNodeIds = new Set(state.nodes.map((n) => n.id));
+      const existingEdgeIds = new Set(state.edges.map((e) => e.id));
+      return {
+        nodes: [
+          ...state.nodes,
+          ...newNodes.filter((n) => !existingNodeIds.has(n.id)),
+        ],
+        edges: [
+          ...state.edges,
+          ...newEdges.filter((e) => !existingEdgeIds.has(e.id)),
+        ],
+      };
+    }),
 
   // View options
   maxDepth: 3,

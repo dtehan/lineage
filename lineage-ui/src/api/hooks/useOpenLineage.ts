@@ -201,3 +201,49 @@ export function useOpenLineageFieldLineage(
   const { direction = 'both', maxDepth = 5, ...queryOptions } = options ?? {};
   return useOpenLineageGraph(datasetId, fieldName, direction, maxDepth, queryOptions);
 }
+
+// Progressive two-stage lineage hook — fires depth-1 immediately, full-depth after depth-1 resolves
+export function useProgressiveLineage(
+  datasetId: string,
+  fieldName: string,
+  direction: LineageDirection,
+  maxDepth: number,
+  options?: { enabled?: boolean }
+) {
+  const isEnabled = (options?.enabled ?? true) && !!datasetId && !!fieldName;
+
+  // Step 1: depth-1 fetch — fires immediately
+  const depth1Query = useQuery({
+    queryKey: openLineageKeys.lineage(datasetId, fieldName, direction, 1),
+    queryFn: () =>
+      openLineageApi.getLineageGraph(datasetId, fieldName, { direction, maxDepth: 1 }),
+    enabled: isEnabled,
+    staleTime: 30_000,
+  });
+
+  // Step 2: full-depth fetch — fires only after depth-1 resolves AND maxDepth > 1
+  const fullDepthQuery = useQuery({
+    queryKey: openLineageKeys.lineage(datasetId, fieldName, direction, maxDepth),
+    queryFn: () =>
+      openLineageApi.getLineageGraph(datasetId, fieldName, { direction, maxDepth }),
+    enabled: isEnabled && !!depth1Query.data && maxDepth > 1,
+    staleTime: 30_000,
+  });
+
+  const isDepth1Ready = !!depth1Query.data;
+  const isFullDepthReady = maxDepth <= 1 ? isDepth1Ready : !!fullDepthQuery.data;
+  const finalData = isFullDepthReady
+    ? (maxDepth <= 1 ? depth1Query.data : fullDepthQuery.data)
+    : null;
+
+  return {
+    depth1Query,
+    fullDepthQuery,
+    isDepth1Ready,
+    isFullDepthReady,
+    finalData,
+    isLoading: depth1Query.isLoading,
+    isFetchingFullDepth: maxDepth > 1 && isDepth1Ready && fullDepthQuery.isLoading,
+    error: depth1Query.error ?? fullDepthQuery.error,
+  };
+}

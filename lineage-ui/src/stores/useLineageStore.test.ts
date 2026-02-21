@@ -97,6 +97,99 @@ describe('useLineageStore', () => {
     });
   });
 
+  // TC-STATE-APPEND-001 to TC-STATE-APPEND-004: appendGraph
+  describe('appendGraph', () => {
+    it('TC-STATE-APPEND-001: adds new nodes and edges to existing graph', () => {
+      const initialNodes: LineageNode[] = [
+        { id: 'n1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c1' },
+      ];
+      const initialEdges: LineageEdge[] = [
+        { id: 'e1', source: 'n1', target: 'n2' },
+      ];
+      useLineageStore.getState().setGraph(initialNodes, initialEdges);
+
+      const newNodes: LineageNode[] = [
+        { id: 'n2', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c2' },
+      ];
+      const newEdges: LineageEdge[] = [
+        { id: 'e2', source: 'n2', target: 'n3' },
+      ];
+      useLineageStore.getState().appendGraph(newNodes, newEdges);
+
+      const state = useLineageStore.getState();
+      expect(state.nodes).toHaveLength(2);
+      expect(state.edges).toHaveLength(2);
+      expect(state.nodes.map((n) => n.id)).toContain('n1');
+      expect(state.nodes.map((n) => n.id)).toContain('n2');
+      expect(state.edges.map((e) => e.id)).toContain('e1');
+      expect(state.edges.map((e) => e.id)).toContain('e2');
+    });
+
+    it('TC-STATE-APPEND-002: deduplicates nodes and edges by ID', () => {
+      const initialNodes: LineageNode[] = [
+        { id: 'n1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c1' },
+        { id: 'n2', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c2' },
+      ];
+      const initialEdges: LineageEdge[] = [
+        { id: 'e1', source: 'n1', target: 'n2' },
+      ];
+      useLineageStore.getState().setGraph(initialNodes, initialEdges);
+
+      // Append with mix of existing and new IDs
+      const appendNodes: LineageNode[] = [
+        { id: 'n1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c1' }, // duplicate
+        { id: 'n3', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c3' }, // new
+      ];
+      const appendEdges: LineageEdge[] = [
+        { id: 'e1', source: 'n1', target: 'n2' }, // duplicate
+        { id: 'e2', source: 'n2', target: 'n3' }, // new
+      ];
+      useLineageStore.getState().appendGraph(appendNodes, appendEdges);
+
+      const state = useLineageStore.getState();
+      // Only new IDs should be added, no duplicates
+      expect(state.nodes).toHaveLength(3); // n1, n2, n3
+      expect(state.edges).toHaveLength(2); // e1, e2
+      expect(state.nodes.filter((n) => n.id === 'n1')).toHaveLength(1);
+      expect(state.edges.filter((e) => e.id === 'e1')).toHaveLength(1);
+    });
+
+    it('TC-STATE-APPEND-003: works correctly on empty initial state', () => {
+      // Store starts empty (reset in beforeEach)
+      const newNodes: LineageNode[] = [
+        { id: 'n1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c1' },
+        { id: 'n2', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c2' },
+      ];
+      const newEdges: LineageEdge[] = [
+        { id: 'e1', source: 'n1', target: 'n2' },
+      ];
+
+      useLineageStore.getState().appendGraph(newNodes, newEdges);
+
+      const state = useLineageStore.getState();
+      expect(state.nodes).toHaveLength(2);
+      expect(state.edges).toHaveLength(1);
+      expect(state.nodes.map((n) => n.id)).toEqual(['n1', 'n2']);
+    });
+
+    it('TC-STATE-APPEND-004: preserves order — existing nodes first, new nodes appended', () => {
+      const initialNodes: LineageNode[] = [
+        { id: 'n1', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c1' },
+        { id: 'n2', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c2' },
+      ];
+      useLineageStore.getState().setGraph(initialNodes, []);
+
+      const newNodes: LineageNode[] = [
+        { id: 'n3', type: 'column', databaseName: 'db', tableName: 't', columnName: 'c3' },
+      ];
+      useLineageStore.getState().appendGraph(newNodes, []);
+
+      const nodeIds = useLineageStore.getState().nodes.map((n) => n.id);
+      // Existing nodes (n1, n2) should come before the new node (n3)
+      expect(nodeIds).toEqual(['n1', 'n2', 'n3']);
+    });
+  });
+
   // TC-STATE-005: setHighlightedNodeIds
   describe('setHighlightedNodeIds', () => {
     it('updates highlighted set with provided node ids', () => {
