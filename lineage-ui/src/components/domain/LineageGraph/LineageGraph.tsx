@@ -16,7 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 
 import { useQueryClient } from '@tanstack/react-query';
-import { useOpenLineageTableLineage, useOpenLineageGraph } from '../../../api/hooks/useOpenLineage';
+import { useOpenLineageTableLineage, useProgressiveLineage } from '../../../api/hooks/useOpenLineage';
 import { openLineageApi } from '../../../api/client';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
@@ -32,6 +32,7 @@ import { Map, ChevronUp, ChevronDown } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
 import { LargeGraphWarning, LARGE_GRAPH_THRESHOLD } from './LargeGraphWarning';
+import { ProgressBanner } from './ProgressBanner';
 import {
   useLineageHighlight,
   useKeyboardShortcuts,
@@ -112,23 +113,38 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
   } = useLineageStore();
 
   // Use column-level lineage for a specific field, table-level lineage for '_all'.
-  // Column-level lineage is much faster for large tables: it fetches only the
-  // selected column's connections rather than all columns in the table.
+  // Column-level lineage uses two-stage progressive loading: depth-1 fires immediately,
+  // full-depth fires after depth-1 resolves. This means the graph is shown to the user
+  // as soon as depth-1 data arrives — the spinner dismisses on depth-1, not on full-depth.
   const isTableView = fieldName === '_all';
-  const columnQuery = useOpenLineageGraph(
-    datasetId,
-    fieldName,
-    direction,
-    maxDepth,
-    { enabled: !isTableView && !!datasetId && !!fieldName }
-  );
+  const {
+    depth1Query,
+    fullDepthQuery,
+    isDepth1Ready,
+    isFullDepthReady,
+    finalData: columnFinalData,
+    isLoading: columnIsLoading,
+    isFetchingFullDepth,
+    error: columnError,
+  } = useProgressiveLineage(datasetId, fieldName, direction, maxDepth, {
+    enabled: !isTableView && !!datasetId && !!fieldName,
+  });
   const tableQuery = useOpenLineageTableLineage(
     datasetId,
     direction,
     maxDepth,
     { enabled: isTableView && !!datasetId }
   );
-  const { data, isLoading, isFetching, error } = isTableView ? tableQuery : columnQuery;
+
+  // For column lineage, `data` is depth-1 data as soon as it's available (NOT waiting
+  // for full-depth). This ensures the layout effect fires on depth-1 data, the spinner
+  // dismisses, and the user sees the graph immediately. When full-depth arrives, `data`
+  // updates to the full dataset and the layout effect re-fires for the second pass.
+  const columnData = isFullDepthReady ? columnFinalData : (isDepth1Ready ? depth1Query.data : null);
+  const data = isTableView ? tableQuery.data : columnData;
+  const isLoading = isTableView ? tableQuery.isLoading : columnIsLoading;
+  const isFetching = isTableView ? tableQuery.isFetching : (depth1Query.isFetching || fullDepthQuery.isFetching);
+  const error = isTableView ? tableQuery.error : columnError;
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
@@ -441,10 +457,17 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         maxDepth,
         refresh: true,
       });
+      // Invalidate both depth-1 and full-depth cache entries
       queryClient.setQueryData(
         ['openlineage', 'lineage', datasetId, fieldName, direction, maxDepth],
         freshData
       );
+      // Also invalidate depth-1 if maxDepth > 1 (depth-1 is a subset)
+      if (maxDepth > 1) {
+        queryClient.invalidateQueries({
+          queryKey: ['openlineage', 'lineage', datasetId, fieldName, direction, 1],
+        });
+      }
     }
   }, [isTableView, datasetId, fieldName, direction, maxDepth, queryClient]);
 
@@ -730,6 +753,13 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
           onDismiss={handleDismissWarning}
         />
       )}
+
+      {/* Progressive depth loading banner — shown inline while full-depth fetch is in background.
+          Only reachable when showProgress is false (depth-1 has been laid out and rendered). */}
+      <ProgressBanner
+        message="Expanding to full depth..."
+        visible={!isTableView && isFetchingFullDepth}
+      />
 
       {/* Graph View */}
       {viewMode === 'graph' && (
