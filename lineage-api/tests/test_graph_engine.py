@@ -23,10 +23,12 @@ import unittest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+import fakeredis
 import networkx as nx
 
 from graph.store import GraphStore
 from graph.engine import GraphEngine
+from graph.serializer import save as redis_save, restore as redis_restore, GRAPH_KEY
 
 
 # ---------------------------------------------------------------------------
@@ -509,6 +511,142 @@ class TestGraphEngineInvalidate(unittest.TestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["source_field"], "x")
         self.assertEqual(result[0]["target_field"], "x")
+
+
+class SpyLoader:
+    """Loader that records whether load() was called."""
+
+    def __init__(self, G=None):
+        self.called = False
+        self._graph = G or nx.DiGraph()
+
+    def load(self) -> nx.DiGraph:
+        self.called = True
+        return self._graph
+
+
+class TestGraphEngineRedis(unittest.TestCase):
+    """Tests for GraphEngine Redis-aware warmup and invalidation."""
+
+    # ------------------------------------------------------------------
+    # Warm Redis restore skips loader
+    # ------------------------------------------------------------------
+
+    def test_warmup_restores_from_redis_skips_loader(self):
+        """When Redis has a valid snapshot, _warmup() restores it and does NOT
+        call the loader. The engine becomes ready and traversal returns edges."""
+        r = fakeredis.FakeRedis()
+        G = nx.DiGraph()
+        G.add_edge("a.b", "c.d", transformation_type="DIRECT")
+        redis_save(G, r)  # Pre-populate Redis
+
+        engine = GraphEngine()
+        spy = SpyLoader()
+        engine._loader = spy
+        engine._redis = r
+
+        engine._warmup()  # Run synchronously (not in background thread)
+
+        self.assertTrue(engine.is_ready)
+        self.assertFalse(spy.called, "Loader should not be called when Redis has a snapshot")
+        result = engine.traverse_downstream("a.b", max_depth=5)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]["transformation_type"], "DIRECT")
+
+    # ------------------------------------------------------------------
+    # Empty Redis falls through to loader and saves snapshot
+    # ------------------------------------------------------------------
+
+    def test_warmup_falls_through_to_loader_on_empty_redis(self):
+        """When Redis is empty, _warmup() calls the loader and saves the
+        resulting graph as a new snapshot in Redis."""
+        r = fakeredis.FakeRedis()
+        G = nx.DiGraph()
+        G.add_edge("x.y", "z.w", transformation_type="AGGREGATION")
+
+        engine = GraphEngine()
+        engine._loader = InMemoryLoader(G)
+        engine._redis = r
+
+        engine._warmup()
+
+        self.assertTrue(engine.is_ready)
+        # Snapshot should now be saved in Redis
+        raw = r.get(GRAPH_KEY)
+        self.assertIsNotNone(raw, "Snapshot should be saved to Redis after Teradata load")
+        # And restore should return a valid graph
+        G2 = redis_restore(r)
+        self.assertIsNotNone(G2)
+        self.assertEqual(G2.number_of_edges(), 1)
+
+    # ------------------------------------------------------------------
+    # No Redis — existing codepath still works
+    # ------------------------------------------------------------------
+
+    def test_warmup_without_redis_uses_loader(self):
+        """When _redis is None, _warmup() uses the loader normally without
+        attempting Redis restore or save."""
+        G = nx.DiGraph()
+        G.add_edge("p.q", "r.s", transformation_type="IDENTITY")
+
+        engine = GraphEngine()
+        engine._loader = InMemoryLoader(G)
+        engine._redis = None
+
+        engine._warmup()
+
+        self.assertTrue(engine.is_ready)
+        result = engine.traverse_downstream("p.q", max_depth=5)
+        self.assertEqual(len(result), 1)
+
+    # ------------------------------------------------------------------
+    # Invalidation deletes snapshot
+    # ------------------------------------------------------------------
+
+    def test_invalidate_deletes_redis_snapshot(self):
+        """invalidate() deletes the Redis snapshot so the rebuild thread
+        will fall through to Teradata load on the next _warmup()."""
+        r = fakeredis.FakeRedis()
+        G = nx.DiGraph()
+        G.add_edge("a.b", "c.d", transformation_type="DIRECT")
+
+        # Build a ready engine with a known graph
+        engine = make_engine_with_graph(G)
+        engine._redis = r
+
+        # Pre-populate Redis snapshot
+        redis_save(G, r)
+        self.assertIsNotNone(r.get(GRAPH_KEY), "Snapshot should exist before invalidation")
+
+        # Use GatedLoader so the rebuild thread blocks until we release it
+        gated = GatedLoader()
+        engine._loader = gated
+
+        engine.invalidate()
+
+        # Snapshot should be gone immediately after invalidate()
+        self.assertIsNone(r.get(GRAPH_KEY), "Snapshot should be deleted by invalidate()")
+
+        # Release the gate so the thread doesn't hang after test
+        gated.release()
+
+    # ------------------------------------------------------------------
+    # initialize() accepts redis_client
+    # ------------------------------------------------------------------
+
+    def test_initialize_accepts_redis_client(self):
+        """initialize(connection=None, redis_client=...) stores the client
+        on self._redis. The warmup thread starts and will fail because
+        connection is None (expected — engine stays in CTE fallback mode)."""
+        engine = GraphEngine()
+        r = fakeredis.FakeRedis()
+
+        # connection=None will cause GraphLoader to fail during warmup,
+        # which is expected — the engine stays in CTE fallback mode.
+        engine.initialize(connection=None, redis_client=r)
+
+        self.assertIsNotNone(engine._redis, "redis_client should be stored on engine._redis")
+        self.assertIs(engine._redis, r)
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from flask_cors import CORS
 from loguru import logger
 
 from config import get_db_connection
-from cache import init_cache
+from cache import init_cache, cache
 from repositories.lineage_repository import LineageRepository
 from repositories.dataset_repository import DatasetRepository
 from services.lineage_service import LineageService
@@ -72,6 +72,15 @@ def create_app():
     # Step 2.5: Initialize cache (before repositories, after CORS)
     init_cache(app)
 
+    # Extract raw redis-py client for graph engine serialization.
+    # If Redis is unavailable (SimpleCache fallback), redis_client is None
+    # and graph engine operates without Redis persistence.
+    redis_client = None
+    try:
+        redis_client = cache.cache._read_client
+    except Exception:
+        pass
+
     # Create database connection (shared across all repositories)
     connection = get_db_connection()
 
@@ -79,7 +88,9 @@ def create_app():
     # Starts a daemon thread that loads OL_COLUMN_LINEAGE into a networkx DiGraph.
     # Does NOT block — app immediately proceeds to serve requests via CTE fallback.
     # Once warmup completes, column and table lineage requests switch to BFS traversal.
-    graph_engine.initialize(connection)
+    # If Redis is available, _warmup() will restore from Redis snapshot on restart,
+    # skipping Teradata load for fast cold starts.
+    graph_engine.initialize(connection, redis_client=redis_client)
     logger.info("Graph engine: background warmup initiated")
 
     # Instantiate repositories
