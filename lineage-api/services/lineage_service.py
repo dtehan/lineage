@@ -249,15 +249,126 @@ class LineageService:
         Raises:
             ValueError: If no tables found in database
         """
+        # BFS fast path: build entirely from in-memory graph (no Teradata queries)
+        if graph_engine.is_ready:
+            return self._get_database_lineage_bfs(database_name, direction, max_depth)
+
+        # CTE fallback: query Teradata for datasets, fields, and lineage
+        return self._get_database_lineage_cte(database_name, direction, max_depth)
+
+    def _get_database_lineage_bfs(
+        self,
+        database_name: str,
+        direction: str,
+        max_depth: int
+    ) -> dict:
+        """Build database lineage graph entirely from in-memory BFS — no Teradata round-trips."""
+        t0 = time.perf_counter()
+        bfs_records = graph_engine.traverse_database(database_name)
+        record_timing("bfs_db_lineage", (time.perf_counter() - t0) * 1000)
+
+        if not bfs_records:
+            return {
+                "databaseName": database_name,
+                "direction": direction,
+                "maxDepth": max_depth,
+                "graph": {"nodes": [], "edges": []}
+            }
+
+        # Collect all unique dataset names for batch metadata resolution
+        dataset_names = set()
+        for record in bfs_records:
+            dataset_names.add(record["source_dataset"])
+            dataset_names.add(record["target_dataset"])
+
+        # Batch-resolve metadata in a single query
+        dataset_meta = self._batch_resolve_dataset_metadata(dataset_names)
+
+        # Build nodes and edges
         nodes = {}
         edges = []
 
-        # Get all datasets (tables/views) in this database
+        for record in bfs_records:
+            source_dataset = record["source_dataset"]
+            source_field = record["source_field"]
+            target_dataset = record["target_dataset"]
+            target_field = record["target_field"]
+            transformation_type = record["transformation_type"]
+
+            source_key = f"{source_dataset}.{source_field}"
+            target_key = f"{target_dataset}.{target_field}"
+
+            for key, ds_name, field_name in [
+                (source_key, source_dataset, source_field),
+                (target_key, target_dataset, target_field),
+            ]:
+                if key not in nodes:
+                    meta = dataset_meta.get(ds_name, {})
+                    nodes[key] = {
+                        "id": key,
+                        "type": "field",
+                        "name": field_name,
+                        "dataset": {
+                            "name": ds_name,
+                            "namespace": meta.get("namespace", ""),
+                            "sourceType": meta.get("sourceType", "TABLE"),
+                        },
+                        "metadata": {
+                            "columnType": None,
+                            "nullable": None
+                        }
+                    }
+
+            edge = self._build_edge(source_key, target_key, transformation_type)
+            edges.append(edge)
+
+        return {
+            "databaseName": database_name,
+            "direction": direction,
+            "maxDepth": max_depth,
+            "graph": {
+                "nodes": list(nodes.values()),
+                "edges": edges
+            }
+        }
+
+    def _batch_resolve_dataset_metadata(self, dataset_names: set) -> dict:
+        """Resolve namespace and sourceType for multiple datasets in a single query."""
+        if not dataset_names:
+            return {}
+
+        names_list = list(dataset_names)
+        placeholders = ",".join("?" * len(names_list))
+
+        with self.dataset_repo.connection.cursor() as cur:
+            cur.execute(f"""
+                SELECT TRIM(d."name"), d.source_type, n.namespace_uri
+                FROM OL_DATASET d
+                JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                WHERE TRIM(d."name") IN ({placeholders})
+            """, names_list)
+
+            result = {}
+            for row in cur.fetchall():
+                name = self.dataset_repo._strip(row[0]) if row[0] else ""
+                result[name] = {
+                    "namespace": self.dataset_repo._strip(row[2]) if row[2] else "",
+                    "sourceType": self.dataset_repo._strip(row[1]) if row[1] else "TABLE"
+                }
+            return result
+
+    def _get_database_lineage_cte(
+        self,
+        database_name: str,
+        direction: str,
+        max_depth: int
+    ) -> dict:
+        """Build database lineage graph via Teradata CTE queries (fallback path)."""
+        nodes = {}
+        edges = []
+
         search_pattern = f"{database_name}.%"
 
-        # We need to query the dataset repository to get all datasets
-        # Since we don't have a direct method for this, we'll use the connection
-        # to query OL_DATASET directly (similar to how python_server.py does it)
         with self.dataset_repo.connection.cursor() as cur:
             cur.execute("""
                 SELECT
@@ -288,7 +399,6 @@ class LineageService:
             if not datasets:
                 raise DatasetNotFoundError(f"No tables found in database '{database_name}'")
 
-            # Create a mapping of dataset name to metadata for quick lookup
             dataset_metadata = {
                 ds["name"]: {
                     "namespace": ds["namespace"],
@@ -297,50 +407,55 @@ class LineageService:
                 for ds in datasets
             }
 
-            # First, add ALL fields from ALL tables in the database as nodes
-            for dataset in datasets:
-                cur.execute("""
-                    SELECT field_name, field_type, nullable
-                    FROM OL_DATASET_FIELD
-                    WHERE dataset_id = ?
-                    ORDER BY ordinal_position
-                """, [dataset["id"]])
+            # Batch-fetch ALL fields in a single query
+            dataset_ids = [ds["id"] for ds in datasets]
+            id_to_dataset = {ds["id"]: ds for ds in datasets}
+            field_placeholders = ",".join("?" * len(dataset_ids))
+            cur.execute(f"""
+                SELECT dataset_id, field_name, field_type, nullable
+                FROM OL_DATASET_FIELD
+                WHERE dataset_id IN ({field_placeholders})
+                ORDER BY dataset_id, ordinal_position
+            """, dataset_ids)
 
-                for field_row in cur.fetchall():
-                    field_name = self.dataset_repo._strip(field_row[0]) if field_row[0] else ""
-                    field_type = self.dataset_repo._strip(field_row[1]) if field_row[1] else None
-                    nullable = self.dataset_repo._strip(field_row[2]) if field_row[2] else None
-                    field_key = f"{dataset['name']}.{field_name}"
+            for field_row in cur.fetchall():
+                ds_id = self.dataset_repo._strip(field_row[0]) if field_row[0] else ""
+                field_name = self.dataset_repo._strip(field_row[1]) if field_row[1] else ""
+                field_type = self.dataset_repo._strip(field_row[2]) if field_row[2] else None
+                nullable = self.dataset_repo._strip(field_row[3]) if field_row[3] else None
+                dataset = id_to_dataset.get(ds_id)
+                if not dataset:
+                    continue
+                field_key = f"{dataset['name']}.{field_name}"
 
-                    if field_key not in nodes:
-                        nodes[field_key] = {
-                            "id": field_key,
-                            "type": "field",
-                            "name": field_name,
-                            "dataset": {
-                                "name": dataset["name"],
-                                "namespace": dataset["namespace"],
-                                "sourceType": dataset["sourceType"]
-                            },
-                            "metadata": {
-                                "columnType": field_type,
-                                "nullable": nullable == 'Y'
-                            }
+                if field_key not in nodes:
+                    nodes[field_key] = {
+                        "id": field_key,
+                        "type": "field",
+                        "name": field_name,
+                        "dataset": {
+                            "name": dataset["name"],
+                            "namespace": dataset["namespace"],
+                            "sourceType": dataset["sourceType"]
+                        },
+                        "metadata": {
+                            "columnType": field_type,
+                            "nullable": nullable == 'Y'
                         }
+                    }
 
-        # Now get all column lineage for the database
+        # Get lineage via CTE
         t0 = time.perf_counter()
         lineage_records = self.lineage_repo.get_database_lineage(
             list(dataset_names), max_depth
         )
         record_timing("db_lineage", (time.perf_counter() - t0) * 1000)
 
-        # Process lineage results - add external nodes and create edges
         for record in lineage_records:
-            source_namespace = record["source_namespace"]
+            source_namespace = record.get("source_namespace", "")
             source_dataset = record["source_dataset"]
             source_field = record["source_field"]
-            target_namespace = record["target_namespace"]
+            target_namespace = record.get("target_namespace", "")
             target_dataset = record["target_dataset"]
             target_field = record["target_field"]
             transformation_type = record["transformation_type"]
@@ -348,20 +463,13 @@ class LineageService:
             source_key = f"{source_dataset}.{source_field}"
             target_key = f"{target_dataset}.{target_field}"
 
-            # Add source node (if it's from an external dataset)
             if source_key not in nodes:
                 source_meta = dataset_metadata.get(source_dataset)
                 if not source_meta:
-                    # External dataset - fetch metadata
                     source_meta = self.dataset_repo.get_dataset_metadata(source_dataset)
                     if not source_meta:
                         source_meta = {"namespace": source_namespace, "sourceType": "TABLE"}
-
-                # Fetch field metadata
                 field_meta = self.dataset_repo.get_field_metadata(source_dataset, source_field)
-                field_type = field_meta["field_type"] if field_meta else None
-                nullable = field_meta["nullable"] if field_meta else True
-
                 nodes[source_key] = {
                     "id": source_key,
                     "type": "field",
@@ -372,25 +480,18 @@ class LineageService:
                         "sourceType": source_meta["sourceType"]
                     },
                     "metadata": {
-                        "columnType": field_type,
-                        "nullable": nullable
+                        "columnType": field_meta["field_type"] if field_meta else None,
+                        "nullable": field_meta["nullable"] if field_meta else True
                     }
                 }
 
-            # Add target node (if it's from an external dataset)
             if target_key not in nodes:
                 target_meta = dataset_metadata.get(target_dataset)
                 if not target_meta:
-                    # External dataset - fetch metadata
                     target_meta = self.dataset_repo.get_dataset_metadata(target_dataset)
                     if not target_meta:
                         target_meta = {"namespace": target_namespace, "sourceType": "TABLE"}
-
-                # Fetch field metadata
                 field_meta = self.dataset_repo.get_field_metadata(target_dataset, target_field)
-                field_type = field_meta["field_type"] if field_meta else None
-                nullable = field_meta["nullable"] if field_meta else True
-
                 nodes[target_key] = {
                     "id": target_key,
                     "type": "field",
@@ -401,12 +502,11 @@ class LineageService:
                         "sourceType": target_meta["sourceType"]
                     },
                     "metadata": {
-                        "columnType": field_type,
-                        "nullable": nullable
+                        "columnType": field_meta["field_type"] if field_meta else None,
+                        "nullable": field_meta["nullable"] if field_meta else True
                     }
                 }
 
-            # Add edge
             edge = self._build_edge(source_key, target_key, transformation_type)
             if not any(e["id"] == edge["id"] for e in edges):
                 edges.append(edge)

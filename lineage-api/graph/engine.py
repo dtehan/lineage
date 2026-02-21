@@ -152,6 +152,46 @@ class GraphEngine:
 
         return self._bfs_edges(store.graph, node_id, reverse=False, max_depth=max_depth)
 
+    def traverse_database(self, database_name: str) -> list[dict]:
+        """
+        Return all edges where source or target belongs to the given database.
+
+        Unlike column/table traversal which starts from a single node and
+        runs BFS, database lineage simply filters all graph edges by database
+        prefix. This is O(E) where E = total edges — instant for typical
+        graph sizes.
+
+        Args:
+            database_name: Database name prefix (e.g. "demo_user").
+
+        Returns:
+            list[dict]: Edge dicts with source_dataset, source_field,
+                        target_dataset, target_field, transformation_type.
+                        Returns [] if graph is not ready.
+        """
+        with self._lock:
+            store = self._store
+
+        if store is None:
+            return []
+
+        prefix = database_name + "."
+        results = []
+        for src_node, tgt_node, edge_data in store.graph.edges(data=True):
+            src_dataset, src_field = src_node.rsplit(".", 1)
+            tgt_dataset, tgt_field = tgt_node.rsplit(".", 1)
+
+            if src_dataset.startswith(prefix) or tgt_dataset.startswith(prefix):
+                results.append({
+                    "source_dataset": src_dataset,
+                    "source_field": src_field,
+                    "target_dataset": tgt_dataset,
+                    "target_field": tgt_field,
+                    "transformation_type": edge_data.get("transformation_type", "DIRECT"),
+                })
+
+        return results
+
     @property
     def status(self) -> dict:
         """

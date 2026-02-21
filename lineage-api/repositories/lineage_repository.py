@@ -316,6 +316,19 @@ class LineageRepository(BaseRepository):
             placeholders = ",".join("?" * len(dataset_names))
             dataset_list = list(dataset_names)
 
+            # Quick existence check: skip expensive CTE if no lineage rows exist
+            db_prefix = database_name + ".%"
+            with self.connection.cursor() as cur:
+                cur.execute("""
+                    LOCKING ROW FOR ACCESS
+                    SELECT TOP 1 1
+                    FROM OL_COLUMN_LINEAGE
+                    WHERE is_active = 'Y'
+                      AND (source_dataset LIKE ? OR target_dataset LIKE ?)
+                """, [db_prefix, db_prefix])
+                if not cur.fetchone():
+                    return []
+
             lineage_query = f"""
                 LOCKING ROW FOR ACCESS
                 WITH RECURSIVE lineage_cte AS (
