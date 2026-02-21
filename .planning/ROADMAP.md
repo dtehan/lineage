@@ -85,10 +85,10 @@ Plans:
 2. After ETL updates Teradata and triggers invalidation, subsequent lineage API responses reflect the updated data (no stale pre-ETL results visible)
 3. During the graph rebuild window after invalidation, the API serves correct results via CTE fallback — no stale graph data is served from the old in-memory graph
 
-**Plans:** TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 15-01: Extend `/cache/invalidate` to trigger graph rebuild and add three-layer consistency integration test
+- [ ] 15-01-PLAN.md — Add GraphEngine.invalidate() method, wire into cache endpoint, add three-layer consistency unit tests
 
 #### Phase 16: Progressive Depth Loading
 
