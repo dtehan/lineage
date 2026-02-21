@@ -73,7 +73,8 @@ def record_timing(name: str, elapsed_ms: float) -> None:
 
     Stores the elapsed time in flask.g.timing under the given name.
     Silently no-ops when called outside a Flask request context (e.g.,
-    background threads, unit tests without app context).
+    background threads, unit tests without app context, or when called
+    outside the application context entirely).
 
     Args:
         name: Metric name (e.g., "bfs_upstream", "db_downstream").
@@ -81,7 +82,12 @@ def record_timing(name: str, elapsed_ms: float) -> None:
         elapsed_ms: Elapsed time in milliseconds. Use time.perf_counter()
                     differences multiplied by 1000 for accurate measurements.
     """
-    from flask import g
-    if not hasattr(g, "timing"):
+    try:
+        from flask import g
+        if not hasattr(g, "timing"):
+            return
+        g.timing[name] = elapsed_ms
+    except RuntimeError:
+        # Outside Flask application context — silently no-op.
+        # This covers background threads and unit tests without app context.
         return
-    g.timing[name] = elapsed_ms

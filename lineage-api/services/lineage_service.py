@@ -15,10 +15,13 @@ Dual-path routing:
     N+1 queries. Database-level lineage continues to use CTE exclusively.
 """
 
+import time
+
 from repositories.lineage_repository import LineageRepository
 from repositories.dataset_repository import DatasetRepository
 from exceptions import DatasetNotFoundError
 from graph.engine import graph_engine
+from middleware.timing import record_timing
 
 
 class LineageService:
@@ -84,27 +87,35 @@ class LineageService:
         # Get upstream lineage if requested
         if direction in ("upstream", "both"):
             if use_graph:
+                t0 = time.perf_counter()
                 bfs_edges = graph_engine.traverse_upstream(
                     f"{dataset_name}.{field_name}", max_depth
                 )
                 upstream_records = self._enrich_bfs_results(bfs_edges)
+                record_timing("bfs_upstream", (time.perf_counter() - t0) * 1000)
             else:
+                t0 = time.perf_counter()
                 upstream_records = self.lineage_repo.get_upstream_lineage(
                     dataset_name, field_name, max_depth
                 )
+                record_timing("db_upstream", (time.perf_counter() - t0) * 1000)
             self._add_lineage_results(upstream_records, nodes, edges, source_type_cache)
 
         # Get downstream lineage if requested
         if direction in ("downstream", "both"):
             if use_graph:
+                t0 = time.perf_counter()
                 bfs_edges = graph_engine.traverse_downstream(
                     f"{dataset_name}.{field_name}", max_depth
                 )
                 downstream_records = self._enrich_bfs_results(bfs_edges)
+                record_timing("bfs_downstream", (time.perf_counter() - t0) * 1000)
             else:
+                t0 = time.perf_counter()
                 downstream_records = self.lineage_repo.get_downstream_lineage(
                     dataset_name, field_name, max_depth
                 )
+                record_timing("db_downstream", (time.perf_counter() - t0) * 1000)
             self._add_lineage_results(downstream_records, nodes, edges, source_type_cache)
 
         # Add the root field node if not already present
@@ -167,7 +178,8 @@ class LineageService:
         # Determine traversal path once for all fields: BFS when graph is warm, CTE when not
         use_graph = graph_engine.is_ready
 
-        # For each field, get its lineage
+        # For each field, get its lineage — time the entire loop as one aggregate metric
+        t0_table = time.perf_counter()
         for field_name in fields:
             # Add the field as a root node
             root_key = f"{dataset_name}.{field_name}"
@@ -201,6 +213,12 @@ class LineageService:
                         dataset_name, field_name, max_depth
                     )
                 self._add_lineage_results(downstream_records, nodes, edges, source_type_cache)
+
+        # Record aggregate timing for the entire field-loop (one metric regardless of field count)
+        if use_graph:
+            record_timing("bfs_total", (time.perf_counter() - t0_table) * 1000)
+        else:
+            record_timing("db_total", (time.perf_counter() - t0_table) * 1000)
 
         return {
             "datasetId": dataset_id,
@@ -311,9 +329,11 @@ class LineageService:
                         }
 
         # Now get all column lineage for the database
+        t0 = time.perf_counter()
         lineage_records = self.lineage_repo.get_database_lineage(
             list(dataset_names), max_depth
         )
+        record_timing("db_lineage", (time.perf_counter() - t0) * 1000)
 
         # Process lineage results - add external nodes and create edges
         for record in lineage_records:
