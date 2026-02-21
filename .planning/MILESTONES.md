@@ -74,3 +74,20 @@ Project milestone history tracking completed phases and shipped features.
 
 ---
 
+
+## v4.0 First-Time Load Performance (Shipped: 2026-02-21)
+
+**Phases completed:** 5 phases (14-18), 9 plans
+
+**Delivered:** 71 files modified (+11,996/-1,807 lines), 2 days (2026-02-20 → 2026-02-21)
+
+**Key accomplishments:**
+1. In-Memory Graph Engine — networkx DiGraph with BFS traversal replaces recursive CTE database round-trips, serving lineage in <100ms with blue-green swap for zero-downtime rebuilds
+2. Three-Layer Cache Invalidation — Single `/cache/invalidate` call clears Redis, rebuilds in-memory graph, and falls back to CTE during rebuild gap
+3. Progressive Depth Loading — Depth-1 graph renders instantly via useProgressiveLineage hook, full-depth expands in background with zero layout jitter
+4. Full-Stack Observability — Server-Timing headers on all lineage responses, per-stage frontend timing (fetch/layout/render), enhanced graph status endpoint
+5. Redis Graph Serialization — Cold restart restores graph from Redis in <1s instead of re-querying Teradata; memory stable across ETL rebuild cycles
+6. UAT Validated — 11/11 acceptance tests passed with 0 issues
+
+---
+

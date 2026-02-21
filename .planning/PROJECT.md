@@ -10,31 +10,26 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 ## Current State
 
-**Shipped:** v3.0 Wildcard Expansion & Graph Enhancements (Feb 19, 2026)
+**Shipped:** v4.0 First-Time Load Performance (Feb 21, 2026)
 
 **What's working:**
-- **Complete Wildcard Lineage:** `SELECT *`, `t1.*`, `INSERT INTO...SELECT *`, `CREATE TABLE AS SELECT *` all expand to actual column names with confidence scoring (0.70)
-- **View Lineage:** Views surface as orange intermediate nodes; ViewLineageExtractor auto-populates column-level lineage from DBC.TablesV.RequestText via SQLGlot; `--views` flag on populate_lineage.py
-- **Graph Usability:** Columns sorted alphabetically in all nodes and DetailPanel; cross-database cluster boxes guaranteed non-overlapping with upstream databases on left; multi-select (Cmd+click or toolbar) with group drag
-- **Performance Optimized:** Composite indexes, LOCKING hints, Web Worker ELKjs layout (142ms for 600-node graphs), Redis cache-aside with stampede prevention
+- **In-Memory Graph Engine:** networkx DiGraph with BFS traversal serves all lineage in <100ms; blue-green swap for zero-downtime rebuilds; CTE fallback during warm-up
+- **Progressive Depth Loading:** Depth-1 graph renders instantly, full-depth expands in background with zero layout jitter via useProgressiveLineage hook
+- **Three-Layer Cache:** Redis cache-aside + in-memory graph + CTE fallback; single `/cache/invalidate` call clears all layers atomically
+- **Full Observability:** Server-Timing headers on all lineage responses; per-stage frontend timing (fetch/layout/render); graph status endpoint with node count, edge count, memory usage
+- **Redis Graph Persistence:** Cold restart restores graph from Redis in <1s; memory stable across ETL rebuild cycles
+- **Complete Wildcard Lineage:** `SELECT *`, `t1.*`, `INSERT INTO...SELECT *`, `CREATE TABLE AS SELECT *` expand to actual column names with confidence scoring (0.70)
+- **View Lineage:** Views surface as orange intermediate nodes; ViewLineageExtractor auto-populates column-level lineage from DBC.TablesV.RequestText via SQLGlot
+- **Graph Usability:** Alphabetical column sort, non-overlapping cluster boxes, multi-select with group drag
 - **Impact Analysis:** Complete downstream impact visualization with TanStack Table UI
-- **Production Ready:** ~16,253 Python + ~23,031 TypeScript LOC; graceful degradation throughout; structured JSON logging
-
-## Current Milestone: v4.0 First-Time Load Performance
-
-**Goal:** Eliminate database round-trips for lineage traversal by building an in-memory graph engine with progressive depth loading, reducing first-time graph load from seconds to <500ms.
-
-**Target features:**
-- In-memory graph engine replacing recursive CTE traversal with BFS/DFS
-- Progressive depth loading (depth=1 instant, deeper levels expand asynchronously)
-- Data normalization (TRIM removal from CTE joins, normalize at write time)
-- API timing headers for performance observability
+- **Production Ready:** ~18,616 Python + ~23,977 TypeScript LOC; graceful degradation throughout; structured JSON logging
 
 ## Next Milestone Goals
 
 **Future considerations:**
 - Security Hardening: Authentication, rate limiting, input validation for multi-user deployment
 - Feature Expansion: Version tracking, batch operations, data quality metrics
+- Production Validation: CI benchmarking, multi-worker Gunicorn support, load testing
 - BigQuery Compatibility: SELECT * EXCEPT, SELECT * REPLACE syntax
 
 ## Requirements
@@ -81,14 +76,20 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - ✓ Multi-select and group move (Cmd+click or toolbar toggle, blue ring, group drag) — v3.0
 - ✓ Alphabetical column sort in all graph nodes and DetailPanel — v3.0
 
+**v4.0 Requirements (22/22 satisfied):**
+- ✓ In-memory graph engine: networkx DiGraph with BFS traversal <100ms, CTE fallback, blue-green swap — v4.0
+- ✓ Progressive depth loading: depth-1 instant, full-depth background expand, zero layout jitter — v4.0
+- ✓ Three-layer cache invalidation: Redis + in-memory graph + CTE fallback in single operation — v4.0
+- ✓ Server-Timing headers on all lineage API responses with BFS/CTE timing — v4.0
+- ✓ Graph status endpoint: node count, edge count, last rebuild time, memory usage — v4.0
+- ✓ Frontend per-stage timing display (fetch/layout/render) — v4.0
+- ✓ Redis graph serialization: cold restart restores in <1s, memory stable across rebuild cycles — v4.0
+
 ### Active
 
 <!-- Current scope. Building toward these. -->
 
-- [ ] In-memory graph engine with BFS/DFS traversal replacing recursive CTEs
-- [ ] Progressive depth loading — depth=1 instant, deeper levels expand asynchronously
-- [ ] Data normalization — TRIM() removal from CTE joins, normalize at write time
-- [ ] API performance observability — timing headers for each pipeline stage
+(No active milestone — next milestone TBD)
 
 ### Out of Scope
 
@@ -97,32 +98,37 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - Security hardening (auth, rate limiting, input validation) — Defer to future milestone; internal tool usage only for now
 - Missing features (version tracking, batch operations, quality metrics) — Defer to future milestone
 - Test coverage expansion — Will add tests as part of implementation but not as separate initiative
-- SELECT * EXCEPT / SELECT * REPLACE (BigQuery syntax) — Teradata-specific, tracked as v4.0 requirements
+- SELECT * EXCEPT / SELECT * REPLACE (BigQuery syntax) — Teradata-specific, not applicable
+- Data normalization (TRIM removal from CTE joins) — Low impact now that in-memory engine bypasses CTEs; can be done independently later
 
 ## Context
 
-**Codebase State (v3.0):**
-- Backend: Python Flask with layered architecture (repositories, services, blueprints) + WildcardResolver + ViewLineageExtractor
-- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table; multi-select with group drag, alphabetical column sort, cluster separation
+**Codebase State (v4.0):**
+- Backend: Python Flask with layered architecture (repositories, services, blueprints) + GraphEngine (networkx BFS) + WildcardResolver + ViewLineageExtractor
+- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table; progressive depth loading, per-stage timing, multi-select with group drag
 - Database: Teradata with OpenLineage schema (OL_* tables) + 9 indexes on OL_COLUMN_LINEAGE; views surfaced as intermediate nodes
-- Caching: Redis 7.0.1 with Flask-Caching 2.3.1 (cache-aside pattern, stampede prevention)
-- LOC: ~16,253 Python + ~23,031 TypeScript
-- Testing: 400+ tests (73 DB + 20 API + 260+ frontend + 21 E2E + new wildcard/view tests)
+- Graph Engine: networkx DiGraph with BFS traversal, blue-green swap, CTE fallback, Redis serialization
+- Caching: Redis 7.0.1 with Flask-Caching 2.3.1 (cache-aside + in-memory graph + CTE fallback)
+- LOC: ~18,616 Python + ~23,977 TypeScript
+- Testing: 400+ tests (73 DB + 20 API + 260+ frontend + 21 E2E + graph engine + progressive loading tests)
 
 **Technical Stack:**
 - OpenLineage spec v2-0-2 implementation
 - DBQL-based lineage extraction using SQLGlot parser + WildcardResolver (batch DBC.ColumnsJQV)
 - ViewLineageExtractor: SQLGlot parsing of DBC.TablesV.RequestText for view-chain lineage
-- Recursive CTEs with composite index optimization, statistics collection, LOCKING hints
+- In-memory graph engine (networkx DiGraph + BFS) with CTE fallback; recursive CTEs with composite indexes as backup
 - React Flow + ELKjs (Web Worker) for non-blocking graph layout with ELK partitioning
+- Progressive depth loading via TanStack Query enabled chaining
+- Server-Timing headers + frontend per-stage timing for full-stack observability
 - Loguru for structured JSON logging with correlation IDs
-- Redis cache-aside with hierarchical keys and distributed lock stampede prevention
+- Redis: cache-aside with hierarchical keys, stampede prevention, graph snapshot persistence
 
-**Recent Changes (v3.0):**
-- **Wildcard Layer:** WildcardResolver batch-queries DBC.ColumnsJQV (100 tables/query), in-memory cache, confidence 0.70 for expanded lineage
-- **View Layer:** ViewLineageExtractor populates OL_COLUMN_LINEAGE from view SQL; `--views` flag added to populate_lineage.py; views rendered as orange nodes with VIEW badge
-- **Graph Layer:** ELK partitioning + topoSortDatabases (Kahn's) + post-layout separateDatabaseClusters() prevents overlap; ClusterBackground padding 20→60; alphabetical sort in layoutEngine + DetailPanel
-- **Interaction Layer:** isMultiSelectMode in Zustand store; useMultiSelect hook; Cmd+click or toolbar toggle; blue ring on selected nodes; group drag built-in; Escape to exit
+**Recent Changes (v4.0):**
+- **Graph Engine:** GraphStore/GraphLoader/GraphEngine package; BFS traversal replaces CTE for column/table lineage; blue-green swap for zero-downtime rebuilds
+- **Cache Integration:** GraphEngine.invalidate() wired into /cache/invalidate; three-layer consistency (Redis + graph + CTE)
+- **Progressive Loading:** useProgressiveLineage hook with TanStack Query enabled chaining; ProgressBanner component; deferred ELK layout
+- **Observability:** Server-Timing middleware on all lineage responses; graph status endpoint enhanced; frontend stageDurations + formatMs
+- **Redis Persistence:** GraphSerializer module; Redis-aware warmup/invalidation; cold restart <1s from Redis snapshot
 
 ## Constraints
 
@@ -165,6 +171,13 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | topoSortDatabases (Kahn's algorithm) for cluster ordering (v3.0) | Users expect upstream databases LEFT per lineage convention; alphabetical ordering violated this | ✓ Good — Intuitive left-to-right data flow |
 | multiSelectionKeyCode=null when toolbar multi-select active (v3.0) | RF treats every click as selection toggle without requiring Cmd modifier | ✓ Good — Consistent UX in toolbar mode |
 | REPLACE VIEW → CREATE VIEW normalization for SQLGlot (v3.0) | Teradata stores view definitions as REPLACE VIEW in RequestText, SQLGlot needs CREATE VIEW | ✓ Good — Required for correct parsing |
+| networkx DiGraph over plain dicts (v4.0) | Maintainability over memory; optimize only if production RSS exceeds targets | ✓ Good — BFS/subgraph operations clean and correct |
+| Polling over SSE for progressive loading (v4.0) | SSE incompatible with sync Gunicorn workers; polling achieves same UX | ✓ Good — Zero infrastructure risk |
+| Blue-green graph swap from day one (v4.0) | Atomically swap reference, never destroy old before new is ready | ✓ Good — Zero-downtime rebuilds |
+| Defer ELKjs layout to final depth only (v4.0) | Prevents layout jitter, avoids re-render storm | ✓ Good — No position-stability algorithm needed |
+| BFS subgraph reachability over bfs_edges (v4.0) | Correctly returns diamond convergence edges that BFS tree traversal misses | ✓ Good — Matches CTE semantics |
+| GRAPH_KEY outside lineage:graph:* namespace (v4.0) | invalidate_all() pattern doesn't accidentally delete engine snapshot | ✓ Good — Clean namespace separation |
+| No TTL on Redis graph snapshot (v4.0) | Persists until explicitly invalidated by ETL; routine restarts restore from Redis | ✓ Good — Reliable cold-start behavior |
 
 ---
-*Last updated: 2026-02-20 after v4.0 milestone started*
+*Last updated: 2026-02-21 after v4.0 milestone*
