@@ -59,27 +59,27 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LFND-01 | — | Pending |
-| LFND-02 | — | Pending |
-| LFND-03 | — | Pending |
-| LFND-04 | — | Pending |
-| LFND-05 | — | Pending |
-| LFND-06 | — | Pending |
-| MLST-01 | — | Pending |
-| MLST-02 | — | Pending |
-| MLST-03 | — | Pending |
-| MLST-04 | — | Pending |
-| MLST-05 | — | Pending |
-| MLST-06 | — | Pending |
-| UXPL-01 | — | Pending |
-| UXPL-02 | — | Pending |
-| UXPL-03 | — | Pending |
+| LFND-01 | Phase 19 | Pending |
+| LFND-02 | Phase 19 | Pending |
+| LFND-03 | Phase 19 | Pending |
+| LFND-04 | Phase 19 | Pending |
+| LFND-05 | Phase 19 | Pending |
+| LFND-06 | Phase 19 | Pending |
+| MLST-01 | Phase 20 | Pending |
+| MLST-02 | Phase 20 | Pending |
+| MLST-03 | Phase 20 | Pending |
+| MLST-04 | Phase 20 | Pending |
+| MLST-05 | Phase 20 | Pending |
+| MLST-06 | Phase 20 | Pending |
+| UXPL-01 | Phase 21 | Pending |
+| UXPL-02 | Phase 21 | Pending |
+| UXPL-03 | Phase 21 | Pending |
 
 **Coverage:**
 - v5.0 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-21*
-*Last updated: 2026-02-21 after initial definition*
+*Last updated: 2026-02-21 after roadmap creation*
