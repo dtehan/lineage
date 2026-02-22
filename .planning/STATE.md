@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v5.0 — Phase 20: Mixed Layout Strategy
+**Current focus:** v5.0 — Phase 21: UX Polish
 
 ## Current Position
 
-Phase: 20 of 21 in v5.0 (Mixed Layout Strategy)
-Plan: 2 of 3 in current phase — Plan 20-02 COMPLETE
-Status: In progress — Plan 20-02 done, ready for Plan 20-03
-Last activity: 2026-02-22 — Plan 20-02 complete: placeIsolatedGrid two-zone layout + ELK separateConnectedComponents
+Phase: 20 of 21 in v5.0 — Phase 20 COMPLETE
+Plan: 2 of 2 in phase 20 — Phase 20 COMPLETE
+Status: Phase complete — ready for Phase 21
+Last activity: 2026-02-22 — Phase 20 complete: two-zone layout (connected L→R + isolated grid) live
 
-Progress: [████░░░░░░] 40% (v5.0)
+Progress: [██████░░░░] 60% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -36,7 +36,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
-| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 in progress (4/5 plans done) |
+| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 complete (4/5 plans done) |
 
 ## Accumulated Context
 
@@ -85,5 +85,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 20-02-PLAN.md — placeIsolatedGrid two-zone layout + ELK separateConnectedComponents, 83 tests pass
+Stopped at: Phase 20 complete — verification passed 9/9 must-haves, ready for Phase 21
 Resume file: None

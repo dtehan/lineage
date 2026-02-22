@@ -104,8 +104,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 20-01-PLAN.md — detectConnectedComponents + kahnSort helper + per-component Kahn/longest-path layering (TDD)
-- [ ] 20-02-PLAN.md — Isolated table grid placement + layoutSimpleNodes ELK config fix
+- [x] 20-01-PLAN.md — detectConnectedComponents + kahnSort helper + per-component Kahn/longest-path layering (TDD)
+- [x] 20-02-PLAN.md — Isolated table grid placement + layoutSimpleNodes ELK config fix
 
 #### Phase 21: UX Polish
 
@@ -144,5 +144,5 @@ Plans:
 | 17. Observability | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 18. Redis Serialization | v4.0 | 1/1 | Complete | 2026-02-21 |
 | 19. Layout Engine Foundation | v5.0 | 2/2 | Complete | 2026-02-22 |
-| 20. Mixed Layout Strategy | v5.0 | 0/2 | Not started | - |
+| 20. Mixed Layout Strategy | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 21. UX Polish | v5.0 | 0/1 | Not started | - |
