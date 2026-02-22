@@ -178,6 +178,42 @@ class TestWildcardResolver(unittest.TestCase):
         columns = self.resolver.resolve_star('demo_user', 'customers')
         self.assertEqual(columns, [])
 
+    def test_warm_cache_qvci_fallback(self):
+        """Test fallback from ColumnsJQV to ColumnsV when QVCI is disabled (Error 9719)."""
+        column_rows = [
+            ('DEMO_USER', 'CUSTOMERS', 'customer_id', 1),
+            ('DEMO_USER', 'CUSTOMERS', 'name', 2),
+            ('DEMO_USER', 'CUSTOMERS', 'email', 3),
+        ]
+
+        call_count = [0]
+
+        def execute_side_effect(query, *args):
+            self._last_query = query
+            call_count[0] += 1
+            # Raise QVCI error on ColumnsJQV query
+            if 'ColumnsJQV' in query:
+                raise Exception('[Error 9719] QVCI feature is disabled.')
+
+        def fetchall_side_effect():
+            q = getattr(self, '_last_query', '')
+            if 'TablesV' in q:
+                return []  # no views
+            if 'ColumnsV' in q:
+                return column_rows
+            return []
+
+        self.mock_cursor.execute.side_effect = execute_side_effect
+        self.mock_cursor.fetchall.side_effect = fetchall_side_effect
+
+        # Warm cache - should fall back to ColumnsV
+        table_refs = {('demo_user', 'customers')}
+        self.resolver.warm_cache(table_refs)
+
+        # Assert cache contains correct columns from ColumnsV fallback
+        columns = self.resolver.resolve_star('demo_user', 'customers')
+        self.assertEqual(columns, ['customer_id', 'name', 'email'])
+
     # =========================================================================
     # B. Identifier Normalization Tests (CORE-06)
     # =========================================================================
@@ -544,7 +580,7 @@ class TestViewExpansion(unittest.TestCase):
         """Configure mock cursor to return different results based on query.
 
         Discriminates between DBC.TablesV (TableKind/RequestText) queries and
-        DBC.ColumnsJQV queries by inspecting the last executed query string.
+        DBC.ColumnsJQV/ColumnsV queries by inspecting the last executed query string.
         """
         def mock_execute(query, *args):
             self._last_query = query
@@ -557,7 +593,7 @@ class TestViewExpansion(unittest.TestCase):
                     return view_rows or []
                 elif 'RequestText' in self._last_query:
                     return request_text_rows or []
-                elif 'ColumnsJQV' in self._last_query:
+                elif 'ColumnsJQV' in self._last_query or 'ColumnsV' in self._last_query:
                     return column_rows or []
             return []
 

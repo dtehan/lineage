@@ -61,10 +61,11 @@ python scripts/setup/setup_lineage_schema.py  # Create OL_* tables
 python scripts/utils/insert_cte_test_data.py   # Insert test lineage patterns (cycles, diamonds, fans)
 python scripts/populate/populate_test_metadata.py # Populate OL_* metadata for test tables (run after insert_cte_test_data.py)
 
-# Populate lineage (two modes available)
-python scripts/populate/populate_lineage.py                # DBQL mode (default) - production lineage from query logs
+# Populate lineage (two modes available, view lineage included by default)
+python scripts/populate/populate_lineage.py                # DBQL + view lineage (default)
 python scripts/populate/populate_lineage.py --fixtures     # Fixtures mode - hardcoded mappings for demo/testing
 python scripts/populate/populate_lineage.py --dbql --since "2024-01-01"  # DBQL since specific date
+python scripts/populate/populate_lineage.py --no-views     # Skip view-based lineage extraction
 python scripts/populate/populate_lineage.py --dry-run      # Preview what would be populated
 ```
 

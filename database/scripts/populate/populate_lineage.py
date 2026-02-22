@@ -5,12 +5,13 @@ Populate OpenLineage Tables
 Extracts metadata from DBC views and populates OpenLineage-compliant lineage data.
 Supports multiple lineage sources:
   - DBQL extraction (default): Parse executed SQL from query logs
+  - View lineage (default): Parse view definitions via SQLGlot
   - Manual fixtures (--fixtures): Hardcoded test/demo mappings
 
 Usage:
-  python populate_lineage.py              # Use DBQL (default, for production)
+  python populate_lineage.py              # DBQL + view lineage (default)
   python populate_lineage.py --fixtures   # Use fixture mappings (for testing/demo)
-  python populate_lineage.py --dbql       # Explicitly use DBQL (redundant but supported)
+  python populate_lineage.py --no-views   # Skip view-based lineage extraction
   python populate_lineage.py --dbql --since "2024-01-01"  # DBQL since date
   python populate_lineage.py --dry-run    # Preview without changes
 """
@@ -211,6 +212,10 @@ def populate_openlineage_fields(cursor, namespace_id: str):
               SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
               WHERE odf.field_id = ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName)
           )
+        QUALIFY ROW_NUMBER() OVER (
+            PARTITION BY c.DatabaseName, c.TableName, c.ColumnName
+            ORDER BY c.ColumnId
+        ) = 1
     """, (namespace_id, namespace_id, namespace_id))
 
     count = cursor.rowcount
@@ -403,23 +408,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Lineage Sources:
-  --fixtures    Use hardcoded test/demo mappings (default)
+  --fixtures    Use hardcoded test/demo mappings
                 Located in database/fixtures/lineage_mappings.py
                 Best for: testing, demos, development
 
-  --dbql        Extract lineage from DBQL (Database Query Log) tables
+  --dbql        Extract lineage from DBQL (Database Query Log) tables (default)
                 Parses executed SQL to discover column-level lineage
                 Best for: production environments with DBQL enabled
 
-Examples:
-  # Populate with fixture mappings (testing/demo)
-  python populate_lineage.py
-  python populate_lineage.py --fixtures
+View Lineage:
+  View-based lineage extraction is enabled by default. It parses view
+  definitions via SQLGlot to derive column mappings. Use --no-views to skip.
 
-  # Extract lineage from DBQL (production)
-  python populate_lineage.py --dbql
+Examples:
+  # Default: DBQL extraction + view lineage
+  python populate_lineage.py
   python populate_lineage.py --dbql --since "2024-01-01"
   python populate_lineage.py --dbql --full
+
+  # Skip view lineage extraction
+  python populate_lineage.py --no-views
+
+  # Populate with fixture mappings (testing/demo)
+  python populate_lineage.py --fixtures
 
   # Dry run to preview
   python populate_lineage.py --dry-run
@@ -480,7 +491,13 @@ DBQL Requirements:
     parser.add_argument(
         "--views",
         action="store_true",
-        help="Derive column lineage from view definitions (DBC.TablesV.RequestText + SQLGlot parsing)"
+        default=True,
+        help="Derive column lineage from view definitions (default: enabled)"
+    )
+    parser.add_argument(
+        "--no-views",
+        action="store_true",
+        help="Skip view-based lineage extraction"
     )
     parser.add_argument(
         "--skip-clear",
@@ -523,6 +540,11 @@ DBQL Requirements:
     else:
         print("\nMode: Fixture-based mappings")
 
+    if not args.no_views:
+        print("  View lineage: enabled (use --no-views to skip)")
+    else:
+        print("  View lineage: disabled (--no-views)")
+
     # Connect
     print(f"\nConnecting to {CONFIG['host']}...")
     try:
@@ -551,6 +573,10 @@ DBQL Requirements:
             except ImportError:
                 from database.fixtures import COLUMN_LINEAGE_MAPPINGS
             print(f"  - {len(COLUMN_LINEAGE_MAPPINGS)} column lineage records from fixtures")
+        if not args.no_views:
+            print(f"  - Column lineage from view definitions (SQLGlot parsing)")
+        else:
+            print(f"  - View lineage extraction: SKIPPED (--no-views)")
     else:
         # Clear existing data (unless skipped)
         if not args.skip_clear:
@@ -576,8 +602,8 @@ DBQL Requirements:
         else:
             populate_lineage_from_fixtures(cursor, namespace_id, namespace_uri)
 
-        # Optionally derive lineage from view definitions
-        if args.views:
+        # Derive lineage from view definitions (default, opt out with --no-views)
+        if not args.no_views:
             populate_lineage_from_views(
                 cursor, namespace_uri,
                 verbose=args.verbose,

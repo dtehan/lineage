@@ -12,7 +12,9 @@ Dual-path routing:
 
     BFS results omit namespace fields, so _enrich_bfs_results() resolves them
     via dataset_repo.get_dataset_metadata() with per-request caching to avoid
-    N+1 queries. Database-level lineage continues to use CTE exclusively.
+    N+1 queries. Database-level lineage uses BFS for edges when the graph is
+    warm, but always queries Teradata for dataset/field metadata so that
+    isolated tables (no lineage edges) are included in the response.
 """
 
 import time
@@ -262,65 +264,138 @@ class LineageService:
         direction: str,
         max_depth: int
     ) -> dict:
-        """Build database lineage graph entirely from in-memory BFS — no Teradata round-trips."""
+        """Build database lineage graph from in-memory BFS + dataset metadata from Teradata.
+
+        Phase 1 fetches all datasets/fields for the database so that isolated
+        tables (no lineage edges) still appear as nodes — matching the CTE path.
+        Phase 2 runs BFS for edges and adds any external nodes from outside the database.
+        """
+        # Phase 1: Fetch all datasets and fields for this database
+        search_pattern = f"{database_name}.%"
+        nodes = {}
+        dataset_metadata = {}
+
+        with self.dataset_repo.connection.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    d.dataset_id,
+                    d."name",
+                    d.source_type,
+                    n.namespace_uri
+                FROM OL_DATASET d
+                JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
+                WHERE d."name" LIKE ?
+                ORDER BY d."name"
+            """, [search_pattern])
+
+            datasets = []
+            for row in cur.fetchall():
+                ds = {
+                    "id": self.dataset_repo._strip(row[0]) if row[0] else "",
+                    "name": self.dataset_repo._strip(row[1]) if row[1] else "",
+                    "sourceType": self.dataset_repo._strip(row[2]) if row[2] else "TABLE",
+                    "namespace": self.dataset_repo._strip(row[3]) if row[3] else "",
+                }
+                datasets.append(ds)
+                dataset_metadata[ds["name"]] = {
+                    "namespace": ds["namespace"],
+                    "sourceType": ds["sourceType"]
+                }
+
+            if not datasets:
+                raise DatasetNotFoundError(f"No tables found in database '{database_name}'")
+
+            # Batch-fetch ALL fields in a single query
+            dataset_ids = [ds["id"] for ds in datasets]
+            id_to_dataset = {ds["id"]: ds for ds in datasets}
+            field_placeholders = ",".join("?" * len(dataset_ids))
+            cur.execute(f"""
+                SELECT dataset_id, field_name, field_type, nullable
+                FROM OL_DATASET_FIELD
+                WHERE dataset_id IN ({field_placeholders})
+                ORDER BY dataset_id, ordinal_position
+            """, dataset_ids)
+
+            for field_row in cur.fetchall():
+                ds_id = self.dataset_repo._strip(field_row[0]) if field_row[0] else ""
+                field_name = self.dataset_repo._strip(field_row[1]) if field_row[1] else ""
+                field_type = self.dataset_repo._strip(field_row[2]) if field_row[2] else None
+                nullable = self.dataset_repo._strip(field_row[3]) if field_row[3] else None
+                dataset = id_to_dataset.get(ds_id)
+                if not dataset:
+                    continue
+                field_key = f"{dataset['name']}.{field_name}"
+
+                if field_key not in nodes:
+                    nodes[field_key] = {
+                        "id": field_key,
+                        "type": "field",
+                        "name": field_name,
+                        "dataset": {
+                            "name": dataset["name"],
+                            "namespace": dataset["namespace"],
+                            "sourceType": dataset["sourceType"],
+                        },
+                        "metadata": {
+                            "columnType": field_type,
+                            "nullable": nullable == 'Y'
+                        }
+                    }
+
+        # Phase 2: BFS traversal for edges
         t0 = time.perf_counter()
         bfs_records = graph_engine.traverse_database(database_name)
         record_timing("bfs_db_lineage", (time.perf_counter() - t0) * 1000)
 
-        if not bfs_records:
-            return {
-                "databaseName": database_name,
-                "direction": direction,
-                "maxDepth": max_depth,
-                "graph": {"nodes": [], "edges": []}
-            }
-
-        # Collect all unique dataset names for batch metadata resolution
-        dataset_names = set()
-        for record in bfs_records:
-            dataset_names.add(record["source_dataset"])
-            dataset_names.add(record["target_dataset"])
-
-        # Batch-resolve metadata in a single query
-        dataset_meta = self._batch_resolve_dataset_metadata(dataset_names)
-
-        # Build nodes and edges
-        nodes = {}
         edges = []
 
-        for record in bfs_records:
-            source_dataset = record["source_dataset"]
-            source_field = record["source_field"]
-            target_dataset = record["target_dataset"]
-            target_field = record["target_field"]
-            transformation_type = record["transformation_type"]
+        if bfs_records:
+            # Collect external dataset names (outside this database) for metadata resolution
+            external_dataset_names = set()
+            for record in bfs_records:
+                for ds_name in (record["source_dataset"], record["target_dataset"]):
+                    if ds_name not in dataset_metadata:
+                        external_dataset_names.add(ds_name)
 
-            source_key = f"{source_dataset}.{source_field}"
-            target_key = f"{target_dataset}.{target_field}"
+            # Batch-resolve external dataset metadata
+            if external_dataset_names:
+                external_meta = self._batch_resolve_dataset_metadata(external_dataset_names)
+                dataset_metadata.update(external_meta)
 
-            for key, ds_name, field_name in [
-                (source_key, source_dataset, source_field),
-                (target_key, target_dataset, target_field),
-            ]:
-                if key not in nodes:
-                    meta = dataset_meta.get(ds_name, {})
-                    nodes[key] = {
-                        "id": key,
-                        "type": "field",
-                        "name": field_name,
-                        "dataset": {
-                            "name": ds_name,
-                            "namespace": meta.get("namespace", ""),
-                            "sourceType": meta.get("sourceType", "TABLE"),
-                        },
-                        "metadata": {
-                            "columnType": None,
-                            "nullable": None
+            for record in bfs_records:
+                source_dataset = record["source_dataset"]
+                source_field = record["source_field"]
+                target_dataset = record["target_dataset"]
+                target_field = record["target_field"]
+                transformation_type = record["transformation_type"]
+
+                source_key = f"{source_dataset}.{source_field}"
+                target_key = f"{target_dataset}.{target_field}"
+
+                # Add external nodes not already present from Phase 1
+                for key, ds_name, field_name in [
+                    (source_key, source_dataset, source_field),
+                    (target_key, target_dataset, target_field),
+                ]:
+                    if key not in nodes:
+                        meta = dataset_metadata.get(ds_name, {})
+                        nodes[key] = {
+                            "id": key,
+                            "type": "field",
+                            "name": field_name,
+                            "dataset": {
+                                "name": ds_name,
+                                "namespace": meta.get("namespace", ""),
+                                "sourceType": meta.get("sourceType", "TABLE"),
+                            },
+                            "metadata": {
+                                "columnType": None,
+                                "nullable": None
+                            }
                         }
-                    }
 
-            edge = self._build_edge(source_key, target_key, transformation_type)
-            edges.append(edge)
+                edge = self._build_edge(source_key, target_key, transformation_type)
+                edges.append(edge)
 
         return {
             "databaseName": database_name,

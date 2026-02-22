@@ -542,6 +542,11 @@ class WildcardResolver:
     def _warm_cache_batch(self, table_refs: List[Tuple[str, str]]) -> None:
         """Query metadata for a single batch of tables.
 
+        Tries DBC.ColumnsJQV first (works for both tables and views when QVCI
+        is enabled), then falls back to DBC.ColumnsV if QVCI is disabled
+        (Error 9719). ColumnsV returns NULL types for views but column names
+        and ordinal positions are still available, which is all we need.
+
         Args:
             table_refs: List of (database, table) tuples (already normalized)
         """
@@ -555,19 +560,46 @@ class WildcardResolver:
 
         where_clause = " OR ".join(conditions)
 
-        query = f"""
-            SELECT
-                TRIM(DatabaseName) as db,
-                TRIM(TableName) as tbl,
-                TRIM(ColumnName) as col,
-                ColumnId as ordinal
-            FROM DBC.ColumnsJQV
-            WHERE {where_clause}
-            ORDER BY DatabaseName, TableName, ColumnId
-        """
+        # Try ColumnsJQV first (requires QVCI), fall back to ColumnsV
+        columns_view = "DBC.ColumnsJQV"
+        try:
+            query = f"""
+                SELECT
+                    TRIM(DatabaseName) as db,
+                    TRIM(TableName) as tbl,
+                    TRIM(ColumnName) as col,
+                    ColumnId as ordinal
+                FROM {columns_view}
+                WHERE {where_clause}
+                ORDER BY DatabaseName, TableName, ColumnId
+            """
 
-        logger.debug(f"Executing batch metadata query for {len(table_refs)} tables")
-        self.cursor.execute(query)
+            logger.debug(f"Executing batch metadata query for {len(table_refs)} tables using {columns_view}")
+            self.cursor.execute(query)
+
+        except Exception as e:
+            if "9719" in str(e):
+                # QVCI disabled — fall back to ColumnsV
+                columns_view = "DBC.ColumnsV"
+                logger.info(
+                    "QVCI disabled (Error 9719), falling back to %s for metadata cache",
+                    columns_view
+                )
+
+                query = f"""
+                    SELECT
+                        TRIM(DatabaseName) as db,
+                        TRIM(TableName) as tbl,
+                        TRIM(ColumnName) as col,
+                        ColumnId as ordinal
+                    FROM {columns_view}
+                    WHERE {where_clause}
+                    ORDER BY DatabaseName, TableName, ColumnId
+                """
+
+                self.cursor.execute(query)
+            else:
+                raise
 
         # Group results by (database, table) and store in cache
         current_key = None
