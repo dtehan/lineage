@@ -62,6 +62,14 @@ body,
   animation: none !important;
 }
 
+/* Interactive minimap cursor feedback */
+.lineage-minimap--interactive .react-flow__minimap-svg {
+  cursor: grab;
+}
+.lineage-minimap--interactive .react-flow__minimap-svg:active {
+  cursor: grabbing;
+}
+
 /* Accessibility: Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
   *,

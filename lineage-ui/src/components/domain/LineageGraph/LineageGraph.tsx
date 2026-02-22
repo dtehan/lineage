@@ -4,7 +4,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -43,6 +42,7 @@ import {
   useMultiSelect,
 } from './hooks';
 import { toggleTransitions, shouldDisableTransitions } from '../../../utils/graph/disableTransitions';
+import { LineageMiniMap } from './LineageMiniMap';
 
 /**
  * Threshold for enabling React Flow's onlyRenderVisibleElements optimization.
@@ -807,7 +807,7 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
             <Background color="#e2e8f0" gap={16} />
             <Controls />
             {showMinimap && (
-              <MiniMap
+              <LineageMiniMap
                 nodeColor={(node) => {
                   // Highlight the focused field (skip if fieldName is '_all')
                   if (fieldName !== '_all') {
@@ -821,8 +821,6 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
                   }
                   return '#94a3b8';
                 }}
-                maskColor="rgba(0, 0, 0, 0.1)"
-                style={{ bottom: 56 }}
               />
             )}
           </ReactFlow>

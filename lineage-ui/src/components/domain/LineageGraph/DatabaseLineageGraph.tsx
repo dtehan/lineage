@@ -4,7 +4,6 @@ import {
   ReactFlow,
   Background,
   Controls,
-  MiniMap,
   useNodesState,
   useEdgesState,
   useReactFlow,
@@ -36,6 +35,7 @@ import {
   useSmartViewport,
   useMultiSelect,
 } from './hooks';
+import { LineageMiniMap } from './LineageMiniMap';
 
 const nodeTypes = {
   tableNode: TableNode,
@@ -494,13 +494,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
 
             <Background color="#e2e8f0" gap={16} />
             <Controls />
-            {showMinimap && (
-              <MiniMap
-                nodeColor={() => '#94a3b8'}
-                maskColor="rgba(0, 0, 0, 0.1)"
-                style={{ bottom: 56 }}
-              />
-            )}
+            {showMinimap && <LineageMiniMap />}
           </ReactFlow>
           {/* Minimap Toggle */}
           <div className="absolute bottom-4 right-4 z-10">
