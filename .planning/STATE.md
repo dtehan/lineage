@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 19 of 21 in v5.0 (Layout Engine Foundation)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-22 — Plan 19-01 complete: Worker-based layout + generation counter in DatabaseLineageGraph
+Plan: 2 of 2 in current phase — Phase 19 COMPLETE
+Status: Phase complete — ready for Phase 20
+Last activity: 2026-02-22 — Plan 19-02 complete: Four algorithmic bug fixes (LFND-01, 02, 03, 06)
 
-Progress: [█░░░░░░░░░] 10% (v5.0)
+Progress: [██░░░░░░░░] 20% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -25,7 +25,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 38 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 1)
+- Total plans completed: 39 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 2)
 
 **By Milestone:**
 
@@ -36,7 +36,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
-| v5.0 Database Lineage Layout | 3 | 5 | Not started |
+| v5.0 Database Lineage Layout | 3 | 5 | Phase 19 complete (2/5 plans done) |
 
 ## Accumulated Context
 
@@ -48,6 +48,12 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 - layoutSimpleNodes ELK config change ships in Phase 20 alongside main path fix (atomic release, same symptom)
 - ELK DisCo explicitly rejected: known hang risk on dense graphs
 - No new npm packages: ELKjs 0.9.3 already supports all required options
+
+### Key Decisions (19-02 execution)
+
+- Binary-search splice insertion chosen for Kahn sort: queue stays sorted at O(log n) per push, eliminates O(n log n) re-sort inside while loop
+- djb2 hash for cluster color lookup: deterministic unsigned 32-bit, color stable across page refreshes regardless of Map iteration order
+- separateDatabaseClusters extended with secLo/secHi non-breaking: existing { lo, hi } destructuring sites unchanged, secondary bounds available for Phase 20
 
 ### Key Decisions (19-01 execution)
 
@@ -65,5 +71,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 19-01-PLAN.md — Plan 1 of 2 in Phase 19 done
+Stopped at: Completed 19-02-PLAN.md — Phase 19 complete (both plans done), ready for Phase 20
 Resume file: None
