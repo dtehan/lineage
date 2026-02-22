@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v5.0 — Phase 19: Layout Engine Foundation
+**Current focus:** v5.0 — Phase 20: Mixed Layout Strategy
 
 ## Current Position
 
-Phase: 19 of 21 in v5.0 (Layout Engine Foundation)
-Plan: 2 of 2 in current phase — Phase 19 COMPLETE
-Status: Phase complete — ready for Phase 20
-Last activity: 2026-02-22 — Plan 19-02 complete: Four algorithmic bug fixes (LFND-01, 02, 03, 06)
+Phase: 20 of 21 in v5.0 (Mixed Layout Strategy)
+Plan: 1 of 3 in current phase — Plan 20-01 COMPLETE
+Status: In progress — Plan 20-01 done, ready for Plan 20-02
+Last activity: 2026-02-22 — Plan 20-01 complete: BFS component detection + per-component Kahn layering
 
-Progress: [██░░░░░░░░] 20% (v5.0)
+Progress: [███░░░░░░░] 30% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -25,7 +25,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 39 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 2)
+- Total plans completed: 40 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 3)
 
 **By Milestone:**
 
@@ -36,7 +36,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
-| v5.0 Database Lineage Layout | 3 | 5 | Phase 19 complete (2/5 plans done) |
+| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 in progress (3/5 plans done) |
 
 ## Accumulated Context
 
@@ -60,6 +60,13 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 - Emit fixed progress milestones (35 before Worker, 90 after) rather than passing onProgress callback — functions are not structured-clone-able across Worker boundary (Comlink uses structured clone)
 - Generation counter (not boolean cancelled flag) protects against stale layout results from rapid direction changes
 
+### Key Decisions (20-01 execution)
+
+- Self-loops filtered in undirected adjacency build: a table pointing only to itself has zero undirected neighbors and is isolated
+- topoSortDatabases delegates to kahnSort — eliminates duplicated Kahn loop logic
+- Components stack vertically (componentYOffset along secondary axis) so all layer-0 tables align at the same x in RIGHT direction
+- Isolated tables given sequential placeholder layout in 20-01; Plan 20-02 replaces with alphabetical wrap grid
+
 ### Pending Todos
 
 None.
@@ -71,5 +78,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 19-02-PLAN.md — Phase 19 complete (both plans done), ready for Phase 20
+Stopped at: Completed 20-01-PLAN.md — detectConnectedComponents + kahnSort + per-component layoutGraph, 76 tests pass
 Resume file: None
