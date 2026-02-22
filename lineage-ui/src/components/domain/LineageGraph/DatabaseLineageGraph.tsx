@@ -16,7 +16,7 @@ import '@xyflow/react/dist/style.css';
 
 import { useOpenLineageDatabaseLineage } from '../../../api/hooks/useOpenLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
-import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
+import { type TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
@@ -35,6 +35,7 @@ import {
   useSmartViewport,
   useMultiSelect,
 } from './hooks';
+import { useLayoutWorker } from './hooks/useLayoutWorker';
 import { LineageMiniMap } from './LineageMiniMap';
 
 const nodeTypes = {
@@ -56,6 +57,11 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   const [showMinimap, setShowMinimap] = useState(false);
   const hasAppliedViewportRef = useRef(false);
   const hasUserInteractedRef = useRef(false);
+
+  // Worker-based layout to keep main thread responsive
+  const { layoutGraph: workerLayoutGraph } = useLayoutWorker();
+  // Generation counter for race-condition protection on rapid direction changes
+  const generationRef = useRef(0);
 
   const {
     direction,
@@ -161,19 +167,23 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     if (!data?.graph?.nodes) return;
 
     setStage('layout');
-    let cancelled = false;
 
     // Convert OpenLineage graph to React Flow format
     const converted = convertOpenLineageGraph(data.graph.nodes, data.graph.edges);
 
+    // Increment generation counter — any older in-flight layout is now stale
+    const generation = ++generationRef.current;
+
     setProgress(35); // Entering layout stage
 
-    // Run layout on main thread (topological layout is O(V+E), completes in ms)
-    layoutGraph(converted.nodes, converted.edges, {
-      onProgress: (p) => setProgress(p),
+    // Strip onProgress (not structured-clone-able across Worker boundary)
+    // and run layout in Worker thread to keep main thread responsive
+    workerLayoutGraph(converted.nodes, converted.edges, {
+      direction,
     })
       .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
-        if (cancelled) return;
+        if (generation !== generationRef.current) return; // Stale result — discard
+        setProgress(90); // Layout complete, entering render stage
         setStage('rendering');
         setNodes(layoutedNodes);
         setEdges(layoutedEdges);
@@ -185,17 +195,16 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         });
       })
       .catch((err) => {
-        if (cancelled) return;
+        if (generation !== generationRef.current) return; // Stale result — discard
         console.error('Database layout error:', err);
         setGraph(converted.nodes, converted.edges);
         setStage('complete');
       });
 
     return () => {
-      cancelled = true;
       reset();
     };
-  }, [data, setNodes, setEdges, setGraph, setStage, setProgress, reset]);
+  }, [data, direction, workerLayoutGraph, setNodes, setEdges, setGraph, setStage, setProgress, reset]);
 
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
