@@ -84,11 +84,11 @@ Standalone mini-phase outside main sequence. See `.planning/phases/01-foundation
   3. Switching lineage direction (upstream/downstream) does not produce stale or doubled layouts from race conditions
   4. Database cluster colors remain stable on repeated renders and across page refreshes — same database always gets the same color
   5. Kahn topological sort completes without sort-per-iteration slowdown visible in browser profiler at 400+ node graphs
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 19-01: Migrate DatabaseLineageGraph layout to Web Worker (LFND-04) and fix direction-change cancellation race condition (LFND-05)
-- [ ] 19-02: Fix ClusterBackground stale dimensions (LFND-02), separateDatabaseClusters non-contiguous bounding box (LFND-03), Kahn sort-per-iteration degradation (LFND-01), and deterministic cluster colors (LFND-06)
+- [ ] 19-01-PLAN.md — Wire useLayoutWorker + generation counter into DatabaseLineageGraph (LFND-04, LFND-05)
+- [ ] 19-02-PLAN.md — Fix Kahn sort O(V^2), ClusterBackground stale dims, bounding box extents, deterministic colors (LFND-01, LFND-02, LFND-03, LFND-06)
 
 #### Phase 20: Mixed Layout Strategy
 
