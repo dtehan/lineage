@@ -7,6 +7,9 @@ describe('useUIStore', () => {
     useUIStore.setState({
       sidebarOpen: true,
       searchQuery: '',
+      hideIsolatedTables: false,
+      isolatedTableCount: 0,
+      connectedTableCount: 0,
     });
   });
 
@@ -50,6 +53,49 @@ describe('useUIStore', () => {
       useUIStore.getState().setSearchQuery('test query');
       useUIStore.getState().setSearchQuery('');
       expect(useUIStore.getState().searchQuery).toBe('');
+    });
+  });
+
+  // TC-STATE-010: toggleHideIsolatedTables
+  describe('toggleHideIsolatedTables', () => {
+    it('toggles hideIsolatedTables from false to true', () => {
+      expect(useUIStore.getState().hideIsolatedTables).toBe(false);
+      useUIStore.getState().toggleHideIsolatedTables();
+      expect(useUIStore.getState().hideIsolatedTables).toBe(true);
+    });
+
+    it('toggles hideIsolatedTables from true to false', () => {
+      useUIStore.getState().toggleHideIsolatedTables();
+      useUIStore.getState().toggleHideIsolatedTables();
+      expect(useUIStore.getState().hideIsolatedTables).toBe(false);
+    });
+  });
+
+  // TC-STATE-011: setIsolatedTableCount
+  describe('setIsolatedTableCount', () => {
+    it('sets isolatedTableCount to provided value', () => {
+      useUIStore.getState().setIsolatedTableCount(5);
+      expect(useUIStore.getState().isolatedTableCount).toBe(5);
+    });
+
+    it('resets isolatedTableCount to 0', () => {
+      useUIStore.getState().setIsolatedTableCount(5);
+      useUIStore.getState().setIsolatedTableCount(0);
+      expect(useUIStore.getState().isolatedTableCount).toBe(0);
+    });
+  });
+
+  // TC-STATE-012: setConnectedTableCount
+  describe('setConnectedTableCount', () => {
+    it('sets connectedTableCount to provided value', () => {
+      useUIStore.getState().setConnectedTableCount(10);
+      expect(useUIStore.getState().connectedTableCount).toBe(10);
+    });
+
+    it('resets connectedTableCount to 0', () => {
+      useUIStore.getState().setConnectedTableCount(10);
+      useUIStore.getState().setConnectedTableCount(0);
+      expect(useUIStore.getState().connectedTableCount).toBe(0);
     });
   });
 

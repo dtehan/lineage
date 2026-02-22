@@ -44,6 +44,10 @@ export interface LayoutResult {
   nodes: Node[];
   edges: Edge[];
   metrics?: LayoutMetrics;
+  isolatedCount: number;          // Number of isolated (disconnected) tables
+  connectedCount: number;         // Number of tables in connected components
+  isolatedGridOrigin?: { x: number; y: number }; // Canvas position of isolated grid zone start (undefined when no isolated tables)
+  isolatedNodeIds: string[];      // Table IDs in the isolated grid (for hide filtering)
 }
 
 // Constants for node sizing
@@ -681,6 +685,7 @@ export async function layoutGraph(
 
   // Place isolated tables in a compact alphabetical grid below (RIGHT/LEFT) or
   // to the right of (UP/DOWN) the connected section.
+  let isolatedGridOrigin: { x: number; y: number } | undefined;
   if (isolated.length > 0) {
     const gridGap = componentGap; // 80px — same as componentGap
 
@@ -698,6 +703,12 @@ export async function layoutGraph(
 
     const startSecondary = componentSecondaryOffset + gridGap;
     const maxRowWidth = Math.max(1200, maxConnectedPrimaryExtent);
+
+    // Capture the grid origin for section label placement
+    isolatedGridOrigin = {
+      x: isHorizontal ? 0 : startSecondary,
+      y: isHorizontal ? startSecondary : 0,
+    };
 
     const gridNodes = placeIsolatedGrid(
       isolated,
@@ -789,7 +800,15 @@ export async function layoutGraph(
       }
     : undefined;
 
-  return { nodes: finalNodes, edges: layoutedEdges, metrics };
+  return {
+    nodes: finalNodes,
+    edges: layoutedEdges,
+    metrics,
+    isolatedCount: isolated.length,
+    connectedCount: allTableIds.length - isolated.length,
+    isolatedGridOrigin,
+    isolatedNodeIds: isolated,
+  };
 }
 
 /**
@@ -921,7 +940,15 @@ async function layoutSimpleNodes(
       }
     : undefined;
 
-  return { nodes: layoutedNodes, edges: layoutedEdges, metrics };
+  return {
+    nodes: layoutedNodes,
+    edges: layoutedEdges,
+    metrics,
+    isolatedCount: 0,
+    connectedCount: layoutedNodes.length,
+    isolatedGridOrigin: undefined,
+    isolatedNodeIds: [],
+  };
 }
 
 // Legacy helper functions for backward compatibility
