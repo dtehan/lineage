@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import { render } from '../../../test/test-utils';
 import { DatabaseLineageGraph } from './DatabaseLineageGraph';
-import * as useLineageModule from '../../../api/hooks/useLineage';
+import * as useOpenLineageModule from '../../../api/hooks/useOpenLineage';
 import * as useLineageStoreModule from '../../../stores/useLineageStore';
 
-// Mock the useDatabaseLineage hook
-vi.mock('../../../api/hooks/useLineage');
+// Mock the useOpenLineageDatabaseLineage hook
+vi.mock('../../../api/hooks/useOpenLineage');
 
 // Mock the useLineageStore
 vi.mock('../../../stores/useLineageStore');
@@ -51,28 +51,36 @@ vi.mock('../../../utils/graph/layoutEngine', () => ({
 }));
 
 const mockDatabaseLineageData = {
-  pages: [{
-    databaseName: 'demo_user',
-    graph: {
-      nodes: [
-        { id: 'demo_user.SRC_SALES.quantity', type: 'column', databaseName: 'demo_user', tableName: 'SRC_SALES', columnName: 'quantity' },
-        { id: 'demo_user.STG_SALES.quantity', type: 'column', databaseName: 'demo_user', tableName: 'STG_SALES', columnName: 'quantity' },
-        { id: 'demo_user.FACT_SALES.quantity', type: 'column', databaseName: 'demo_user', tableName: 'FACT_SALES', columnName: 'quantity' },
-      ],
-      edges: [
-        { id: 'e1', source: 'demo_user.SRC_SALES.quantity', target: 'demo_user.STG_SALES.quantity', transformationType: 'DIRECT' },
-        { id: 'e2', source: 'demo_user.STG_SALES.quantity', target: 'demo_user.FACT_SALES.quantity', transformationType: 'DIRECT' },
-      ],
-    },
-    pagination: {
-      page: 1,
-      pageSize: 50,
-      totalTables: 6,
-      totalPages: 1,
-    },
-  }],
-  pageParams: [1],
+  databaseName: 'demo_user',
+  direction: 'both' as const,
+  maxDepth: 3,
+  graph: {
+    nodes: [
+      { id: 'demo_user.SRC_SALES.quantity', type: 'column', databaseName: 'demo_user', tableName: 'SRC_SALES', columnName: 'quantity' },
+      { id: 'demo_user.STG_SALES.quantity', type: 'column', databaseName: 'demo_user', tableName: 'STG_SALES', columnName: 'quantity' },
+      { id: 'demo_user.FACT_SALES.quantity', type: 'column', databaseName: 'demo_user', tableName: 'FACT_SALES', columnName: 'quantity' },
+    ],
+    edges: [
+      { id: 'e1', source: 'demo_user.SRC_SALES.quantity', target: 'demo_user.STG_SALES.quantity', transformationType: 'DIRECT' },
+      { id: 'e2', source: 'demo_user.STG_SALES.quantity', target: 'demo_user.FACT_SALES.quantity', transformationType: 'DIRECT' },
+    ],
+  },
 };
+
+function mockUseQuery(overrides: Record<string, unknown>) {
+  return {
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+    isSuccess: false,
+    isFetching: false,
+    isRefetching: false,
+    refetch: vi.fn(),
+    status: 'idle',
+    ...overrides,
+  } as unknown as ReturnType<typeof useOpenLineageModule.useOpenLineageDatabaseLineage>;
+}
 
 describe('DatabaseLineageGraph Component', () => {
   const mockSetGraph = vi.fn();
@@ -124,16 +132,9 @@ describe('DatabaseLineageGraph Component', () => {
 
   describe('TC-DB-LINEAGE-001: Loading State', () => {
     it('displays loading spinner while fetching data', () => {
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: undefined,
-        isLoading: true,
-        isError: false,
-        error: null,
-        isSuccess: false,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
+      vi.mocked(useOpenLineageModule.useOpenLineageDatabaseLineage).mockReturnValue(
+        mockUseQuery({ isLoading: true })
+      );
 
       render(<DatabaseLineageGraph databaseName="demo_user" />);
 
@@ -145,16 +146,9 @@ describe('DatabaseLineageGraph Component', () => {
   describe('TC-DB-LINEAGE-002: Error State', () => {
     it('displays error message on API failure', () => {
       const errorMessage = 'Database not found';
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: undefined,
-        isLoading: false,
-        isError: true,
-        error: new Error(errorMessage),
-        isSuccess: false,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
+      vi.mocked(useOpenLineageModule.useOpenLineageDatabaseLineage).mockReturnValue(
+        mockUseQuery({ isError: true, error: new Error(errorMessage) })
+      );
 
       render(<DatabaseLineageGraph databaseName="demo_user" />);
 
@@ -166,16 +160,9 @@ describe('DatabaseLineageGraph Component', () => {
 
   describe('TC-DB-LINEAGE-003: Successful Render', () => {
     it('renders ReactFlow component when data is loaded', async () => {
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: mockDatabaseLineageData,
-        isLoading: false,
-        isError: false,
-        error: null,
-        isSuccess: true,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
+      vi.mocked(useOpenLineageModule.useOpenLineageDatabaseLineage).mockReturnValue(
+        mockUseQuery({ data: mockDatabaseLineageData, isSuccess: true })
+      );
 
       render(<DatabaseLineageGraph databaseName="demo_user" />);
 
@@ -185,16 +172,9 @@ describe('DatabaseLineageGraph Component', () => {
     });
 
     it('displays database name in header', async () => {
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: mockDatabaseLineageData,
-        isLoading: false,
-        isError: false,
-        error: null,
-        isSuccess: true,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
+      vi.mocked(useOpenLineageModule.useOpenLineageDatabaseLineage).mockReturnValue(
+        mockUseQuery({ data: mockDatabaseLineageData, isSuccess: true })
+      );
 
       render(<DatabaseLineageGraph databaseName="demo_user" />);
 
@@ -204,65 +184,19 @@ describe('DatabaseLineageGraph Component', () => {
     });
   });
 
-  describe('TC-DB-LINEAGE-004: Pagination', () => {
-    it('shows load more button when hasNextPage is true', async () => {
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: mockDatabaseLineageData,
-        isLoading: false,
-        isError: false,
-        error: null,
-        isSuccess: true,
-        fetchNextPage: vi.fn(),
-        hasNextPage: true,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
-
-      render(<DatabaseLineageGraph databaseName="demo_user" />);
-
-      await waitFor(() => {
-        expect(screen.getByTestId('load-more-btn')).toBeInTheDocument();
-      });
-    });
-
-    it('does not show load more button when hasNextPage is false', async () => {
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: mockDatabaseLineageData,
-        isLoading: false,
-        isError: false,
-        error: null,
-        isSuccess: true,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
-
-      render(<DatabaseLineageGraph databaseName="demo_user" />);
-
-      await waitFor(() => {
-        expect(screen.queryByTestId('load-more-btn')).not.toBeInTheDocument();
-      });
-    });
-  });
-
   describe('TC-DB-LINEAGE-005: Empty State', () => {
     it('displays empty state message when no lineage data', async () => {
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: {
-          pages: [{
+      vi.mocked(useOpenLineageModule.useOpenLineageDatabaseLineage).mockReturnValue(
+        mockUseQuery({
+          data: {
             databaseName: 'demo_user',
+            direction: 'both',
+            maxDepth: 3,
             graph: { nodes: [], edges: [] },
-            pagination: { page: 1, pageSize: 50, totalTables: 0, totalPages: 0 },
-          }],
-          pageParams: [1],
-        },
-        isLoading: false,
-        isError: false,
-        error: null,
-        isSuccess: true,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
+          },
+          isSuccess: true,
+        })
+      );
 
       render(<DatabaseLineageGraph databaseName="demo_user" />);
 
@@ -312,24 +246,13 @@ describe('DatabaseLineageGraph Component', () => {
         setAllTablesExpanded: vi.fn(),
       });
 
-      vi.mocked(useLineageModule.useDatabaseLineage).mockReturnValue({
-        data: undefined,
-        isLoading: true,
-        isError: false,
-        error: null,
-        isSuccess: false,
-        fetchNextPage: vi.fn(),
-        hasNextPage: false,
-        isFetchingNextPage: false,
-      } as unknown as ReturnType<typeof useLineageModule.useDatabaseLineage>);
+      vi.mocked(useOpenLineageModule.useOpenLineageDatabaseLineage).mockReturnValue(
+        mockUseQuery({ isLoading: true })
+      );
 
       render(<DatabaseLineageGraph databaseName="demo_user" />);
 
-      expect(useLineageModule.useDatabaseLineage).toHaveBeenCalledWith('demo_user', {
-        direction: 'upstream',
-        maxDepth: 5,
-        pageSize: 10,
-      });
+      expect(useOpenLineageModule.useOpenLineageDatabaseLineage).toHaveBeenCalledWith('demo_user', 'upstream', 5);
     });
   });
 });
