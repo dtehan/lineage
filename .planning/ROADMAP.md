@@ -116,10 +116,10 @@ Plans:
   1. A visible label "Tables without lineage connections (N)" marks the disconnected grid so users understand the section is intentional, not a layout bug
   2. User can toggle a "Hide tables without lineage" control in the toolbar to show or hide the disconnected section without a page reload
   3. The database header displays both the count of tables in the lineage flow and the count of isolated tables before the user opens the graph
-**Plans:** TBD
+**Plans:** 1 plan
 
 Plans:
-- [ ] 21-01: Section label for isolated grid, "hide" toggle in toolbar (useUIStore), and isolated table count in database header
+- [ ] 21-01-PLAN.md — Section label for isolated grid, hide toggle in toolbar (useUIStore), header count badges
 
 ## Progress
 
