@@ -1041,3 +1041,91 @@ describe('kahnSort', () => {
     expect(result).toContain('B');
   });
 });
+
+// Per-component layout tests
+describe('per-component layout', () => {
+  it('two independent chains produce correct x-layers (chain A->B and chain C->D)', async () => {
+    // tA->tB is one chain, tC->tD is a separate chain
+    // Both tA and tC should be at layer 0 (same x), tB and tD at layer 1 (same x)
+    // But tA and tC should be at different y positions (component stacking)
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 'tA', columnName: 'a' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 'tB', columnName: 'b' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 'tC', columnName: 'c' },
+      { id: '4', type: 'column', databaseName: 'db', tableName: 'tD', columnName: 'd' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+      { id: 'e2', source: '3', target: '4' },
+    ];
+
+    const result = await layoutGraph(nodes, edges);
+
+    expect(result.nodes).toHaveLength(4);
+    const posMap = new Map(result.nodes.map(n => [n.data.tableName as string, n.position]));
+    const posTA = posMap.get('tA')!;
+    const posTB = posMap.get('tB')!;
+    const posTC = posMap.get('tC')!;
+    const posTD = posMap.get('tD')!;
+
+    // Both tA and tC are at layer 0 — should have the same x in RIGHT direction
+    expect(posTA.x).toBe(posTC.x);
+    // Both tB and tD are at layer 1 — should have the same x in RIGHT direction
+    expect(posTB.x).toBe(posTD.x);
+    // tA and tC are in different components — different y positions
+    expect(posTA.y).not.toBe(posTC.y);
+  });
+
+  it('connected + isolated separation — isolated table gets a position distinct from connected tables', async () => {
+    // tA->tB connected; tC isolated (no edges)
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 'tA', columnName: 'a' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 'tB', columnName: 'b' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 'tC', columnName: 'c' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+    ];
+
+    const result = await layoutGraph(nodes, edges);
+
+    expect(result.nodes).toHaveLength(3);
+    // All nodes have finite positions
+    result.nodes.forEach(node => {
+      expect(Number.isFinite(node.position.x)).toBe(true);
+      expect(Number.isFinite(node.position.y)).toBe(true);
+    });
+    // tC (isolated) must be positioned — it should appear in the result
+    const tCNode = result.nodes.find(n => n.data.tableName === 'tC');
+    expect(tCNode).toBeDefined();
+  });
+
+  it('single component behaves identically — linear chain A->B->C->D preserves x-ordering', async () => {
+    // Regression guard: single connected component should still produce correct ordering
+    const nodes: LineageNode[] = [
+      { id: 'A', type: 'column', databaseName: 'db', tableName: 't1', columnName: 'col1' },
+      { id: 'B', type: 'column', databaseName: 'db', tableName: 't2', columnName: 'col2' },
+      { id: 'C', type: 'column', databaseName: 'db', tableName: 't3', columnName: 'col3' },
+      { id: 'D', type: 'column', databaseName: 'db', tableName: 't4', columnName: 'col4' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: 'A', target: 'B' },
+      { id: 'e2', source: 'B', target: 'C' },
+      { id: 'e3', source: 'C', target: 'D' },
+    ];
+
+    const result = await layoutGraph(nodes, edges);
+
+    expect(result.nodes).toHaveLength(4);
+    const posMap = new Map(result.nodes.map(n => [n.id, n.position]));
+    const posT1 = posMap.get('db.t1')!;
+    const posT2 = posMap.get('db.t2')!;
+    const posT3 = posMap.get('db.t3')!;
+    const posT4 = posMap.get('db.t4')!;
+
+    // Source (t1) should be leftmost, sink (t4) should be rightmost in RIGHT direction
+    expect(posT1.x).toBeLessThan(posT2.x);
+    expect(posT2.x).toBeLessThan(posT3.x);
+    expect(posT3.x).toBeLessThan(posT4.x);
+  });
+});

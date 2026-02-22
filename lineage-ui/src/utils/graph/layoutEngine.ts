@@ -518,71 +518,136 @@ export async function layoutGraph(
     }
   }
 
-  // Topological sort via Kahn's algorithm (deterministic tie-breaking)
-  const allTableIds = new Set(tableNodeData.map((t) => t.id));
-  const topoOrder = kahnSort(allTableIds, tableAdj, tableInDeg);
+  // Detect connected components — separate tables with edges from isolated tables
+  const allTableIds = tableNodeData.map((t) => t.id);
+  const { connected, isolated } = detectConnectedComponents(allTableIds, tableAdj);
 
-  // Longest-path layering: layer[v] = max(layer[u] + 1) for all edges u→v
-  const layerMap = new Map<string, number>();
-  for (const id of topoOrder) layerMap.set(id, 0);
-  let maxLayer = 0;
-  for (const id of topoOrder) {
-    const curLayer = layerMap.get(id)!;
-    for (const tgt of tableAdj.get(id) || new Set<string>()) {
-      const proposed = curLayer + 1;
-      if (proposed > (layerMap.get(tgt) ?? 0)) {
-        layerMap.set(tgt, proposed);
-        if (proposed > maxLayer) maxLayer = proposed;
-      }
-    }
-  }
+  onProgress?.(55); // Component detection complete
 
-  onProgress?.(55); // Layering complete
-
-  // Group tables by layer
-  const layerBuckets = new Map<number, TableNodeData[]>();
-  for (const t of tableNodeData) {
-    const layer = layerMap.get(t.id) ?? 0;
-    if (!layerBuckets.has(layer)) layerBuckets.set(layer, []);
-    layerBuckets.get(layer)!.push(t);
-  }
-
-  // Position tables: primary axis = layer, secondary axis = stacked within layer
+  // Position tables: primary axis = layer (topological depth), secondary axis = stacked
   const isHorizontal = direction === 'RIGHT' || direction === 'LEFT';
   const isReversed = direction === 'LEFT' || direction === 'UP';
 
-  let primaryCursor = 0;
   const layoutedNodes: Node[] = [];
 
-  for (let layer = 0; layer <= maxLayer; layer++) {
-    const tables = layerBuckets.get(layer);
-    if (!tables) continue;
-    tables.sort((a, b) => a.id.localeCompare(b.id)); // deterministic order
+  // componentGap: vertical (horizontal layouts) or horizontal (vertical layouts) gap between components
+  const componentGap = 80;
+  let componentSecondaryOffset = 0; // offset along secondary axis for each component
 
-    let secondaryCursor = 0;
-    let maxPrimarySize = 0;
-
-    for (const table of tables) {
-      const width = calculateTableNodeWidth(table.tableName, table.columns);
-      const height = calculateTableNodeHeight(table.columns.length, table.isExpanded);
-      const primarySize = isHorizontal ? width : height;
-      const secondarySize = isHorizontal ? height : width;
-      maxPrimarySize = Math.max(maxPrimarySize, primarySize);
-
-      layoutedNodes.push({
-        id: table.id,
-        type: 'tableNode',
-        position: {
-          x: isHorizontal ? primaryCursor : secondaryCursor,
-          y: isHorizontal ? secondaryCursor : primaryCursor,
-        },
-        data: table,
-      } as Node);
-
-      secondaryCursor += secondarySize + nodeSpacing;
+  for (const component of connected) {
+    // Build sub-adjacency for this component only
+    const subAdj = new Map<string, Set<string>>();
+    const subInDeg = new Map<string, number>();
+    for (const id of component) {
+      subAdj.set(id, new Set());
+      subInDeg.set(id, 0);
+    }
+    for (const id of component) {
+      for (const tgt of tableAdj.get(id) ?? []) {
+        if (component.has(tgt)) {
+          subAdj.get(id)!.add(tgt);
+          subInDeg.set(tgt, (subInDeg.get(tgt) ?? 0) + 1);
+        }
+      }
     }
 
-    primaryCursor += maxPrimarySize + layerSpacing;
+    // Kahn sort per component
+    const topoOrder = kahnSort(component, subAdj, subInDeg);
+
+    // Longest-path layering within this component
+    const layerMap = new Map<string, number>();
+    for (const id of topoOrder) layerMap.set(id, 0);
+    let maxLayer = 0;
+    for (const id of topoOrder) {
+      const curLayer = layerMap.get(id)!;
+      for (const tgt of subAdj.get(id) ?? []) {
+        const proposed = curLayer + 1;
+        if (proposed > (layerMap.get(tgt) ?? 0)) {
+          layerMap.set(tgt, proposed);
+          if (proposed > maxLayer) maxLayer = proposed;
+        }
+      }
+    }
+
+    // Group component tables by layer
+    const layerBuckets = new Map<number, TableNodeData[]>();
+    for (const id of component) {
+      const td = tableNodeData.find((t) => t.id === id);
+      if (!td) continue;
+      const layer = layerMap.get(id) ?? 0;
+      if (!layerBuckets.has(layer)) layerBuckets.set(layer, []);
+      layerBuckets.get(layer)!.push(td);
+    }
+
+    // Position tables in this component: primary axis = layer, secondary axis = stacked
+    // The secondary axis starts at componentSecondaryOffset so components don't overlap
+    let primaryCursor = 0;
+    let maxSecondaryCursor = componentSecondaryOffset;
+
+    for (let layer = 0; layer <= maxLayer; layer++) {
+      const tables = layerBuckets.get(layer);
+      if (!tables) continue;
+      tables.sort((a, b) => a.id.localeCompare(b.id)); // deterministic order
+
+      let secondaryCursor = componentSecondaryOffset;
+      let maxPrimarySize = 0;
+
+      for (const table of tables) {
+        const width = calculateTableNodeWidth(table.tableName, table.columns);
+        const height = calculateTableNodeHeight(table.columns.length, table.isExpanded);
+        const primarySize = isHorizontal ? width : height;
+        const secondarySize = isHorizontal ? height : width;
+        maxPrimarySize = Math.max(maxPrimarySize, primarySize);
+
+        layoutedNodes.push({
+          id: table.id,
+          type: 'tableNode',
+          position: {
+            x: isHorizontal ? primaryCursor : secondaryCursor,
+            y: isHorizontal ? secondaryCursor : primaryCursor,
+          },
+          data: table,
+        } as Node);
+
+        secondaryCursor += secondarySize + nodeSpacing;
+        maxSecondaryCursor = Math.max(maxSecondaryCursor, secondaryCursor);
+      }
+
+      primaryCursor += maxPrimarySize + layerSpacing;
+    }
+
+    // Advance secondary offset for next component (add gap)
+    componentSecondaryOffset = maxSecondaryCursor + componentGap;
+  }
+
+  // Place isolated tables: temporary sequential placement below all connected components
+  // (Plan 20-02 will replace this with a proper alphabetical grid)
+  if (isolated.length > 0) {
+    let isolatedSecondaryCursor = componentSecondaryOffset;
+    let isolatedPrimaryCursor = 0;
+    let isolatedRowMaxSecondary = isolatedSecondaryCursor;
+
+    for (const tableId of isolated) {
+      const td = tableNodeData.find((t) => t.id === tableId);
+      if (!td) continue;
+      const width = calculateTableNodeWidth(td.tableName, td.columns);
+      const height = calculateTableNodeHeight(td.columns.length, td.isExpanded);
+      const primarySize = isHorizontal ? width : height;
+      const secondarySize = isHorizontal ? height : width;
+
+      layoutedNodes.push({
+        id: td.id,
+        type: 'tableNode',
+        position: {
+          x: isHorizontal ? isolatedPrimaryCursor : isolatedSecondaryCursor,
+          y: isHorizontal ? isolatedSecondaryCursor : isolatedPrimaryCursor,
+        },
+        data: td,
+      } as Node);
+
+      isolatedRowMaxSecondary = Math.max(isolatedRowMaxSecondary, isolatedSecondaryCursor + secondarySize);
+      isolatedPrimaryCursor += primarySize + layerSpacing;
+    }
   }
 
   // Flip positions for LEFT/UP directions
