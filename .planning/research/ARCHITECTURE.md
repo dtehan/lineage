@@ -818,3 +818,450 @@ def create_app():
 *Architecture research for: In-memory graph engine + progressive depth loading integration*
 *Researched: 2026-02-20*
 *Context: Adding to existing Flask repository/service architecture; Teradata lineage application v4.0 milestone*
+
+---
+
+# Architecture Research: Database Lineage Graph Layout Improvement
+
+**Domain:** Database lineage graph — connected component detection, hybrid hierarchical/grid layout
+**Researched:** 2026-02-21
+**Confidence:** HIGH (based on direct code analysis of the existing codebase)
+
+## Context
+
+This section covers the specific question: how should connected component detection, hierarchical layout for connected tables, and grid layout for isolated tables integrate with the existing layout architecture?
+
+**The short answer:** All changes go inside `layoutGraph()` in `src/utils/graph/layoutEngine.ts`. No new files are needed. No interface changes are required. No callers change. The improvement is entirely internal to the layout function.
+
+---
+
+## Existing Layout Architecture (what exists today)
+
+### Call Path for Database Lineage
+
+```
+DatabaseLineageGraph.tsx
+    |
+    | useOpenLineageDatabaseLineage (TanStack Query)
+    | GET /api/v2/openlineage/lineage/database/{name}
+    v
+data.graph.nodes (OpenLineageNode[]), data.graph.edges (OpenLineageEdge[])
+    |
+    v
+convertOpenLineageGraph()          -- openLineageAdapter.ts
+    | produces LineageNode[], LineageEdge[]
+    v
+layoutGraph(nodes, edges, options) -- layoutEngine.ts (MAIN THREAD, not Worker)
+    |
+    ├─ groupColumnsByTable()
+    |    produces: Map<"db.table", LineageNode[]>
+    |
+    ├─ transformToTableNodes()
+    |    produces: TableNodeData[], columnToTableMap
+    |
+    ├─ build tableAdj (directed, table-level)
+    |    Map<tableId, Set<tableId>>
+    |
+    ├─ Kahn topological sort → topoOrder[]
+    |
+    ├─ longest-path layering → layerMap
+    |
+    ├─ position tables by layer (primary axis = layer, secondary = stack within layer)
+    |
+    └─ separateDatabaseClusters()  -- post-layout DB cluster shifting
+    |
+    v
+Node[], Edge[]  → setNodes(), setEdges()
+    |
+    v
+React Flow renders
+    |
+    v
+useDatabaseClustersFromNodes(nodes) -- ClusterBackground.tsx
+ClusterBackground draws bounding boxes
+```
+
+**Critical implementation detail:** `DatabaseLineageGraph.tsx` calls `layoutGraph()` directly on the main thread (line 172). The Web Worker (`layout.worker.ts`) exists and wraps `layoutGraph()` via Comlink, but `DatabaseLineageGraph` does not use it. The comment states: "Run layout on main thread (topological layout is O(V+E), completes in ms)."
+
+### Current Problem
+
+The current layout treats all tables as a single connected graph. When a database has many tables with no lineage edges (isolated tables — no known lineage), they all fall into layer 0 and stack vertically on top of each other, making the graph unusable.
+
+---
+
+## Where to Make the Change
+
+### Answer to Question 1: Where should connected component detection happen?
+
+**Inside `layoutGraph()` in `layoutEngine.ts`, after `tableAdj` is built (line ~410), before the topological sort loop (line ~413).**
+
+Not before passing to ELK (ELK is not used in this path — it was replaced with custom O(V+E) topological layout). Not in a pre-processing step outside `layoutGraph()` (the table adjacency graph only exists inside `layoutGraph()`).
+
+The boundary is: connected component detection operates on `tableAdj` (table-level directed graph), which is constructed from the column-level `rawEdges` via `columnToTableMap`. This map is built inside `layoutGraph()` as part of `transformToTableNodes()`. Performing component detection upstream of `layoutGraph()` would require duplicating `groupColumnsByTable()` and `transformToTableNodes()` — unnecessary.
+
+### Answer to Question 2: How to combine hierarchical and grid layout?
+
+**Per-component topological layout, then isolated table grid placement, then `separateDatabaseClusters()` as before.**
+
+The existing longest-path layering algorithm is correct for connected components — it correctly positions tables that have lineage relationships. The improvement is:
+
+1. Detect connected components on `tableAdj`
+2. For each component with 2+ tables: run Kahn sort + longest-path layering on the component subgraph only (not the full graph), producing positions in a local coordinate space
+3. Stack connected components vertically (along the secondary axis), with a configurable gap between components
+4. Collect isolated tables (1-node components) and place them in a grid below all connected components
+5. Run `separateDatabaseClusters()` as before — it reads final `databaseName` from `TableNodeData` and shifts DB groups; it does not care how positions were computed
+
+### Answer to Question 3: Separate ELK configuration or pre/post-processing?
+
+**Neither. This is internal restructuring of the custom O(V+E) topological layout. ELK is not involved.**
+
+ELK was abandoned for this path (see comment at line 386 of `layoutEngine.ts`). The `elk` singleton at line 18 is still imported but only used in `layoutSimpleNodes()` — the fallback path for `LineageNode[]` inputs that have no column nodes. The main path (lines 349–578) does not call `elk.layout()` at all.
+
+---
+
+## System Overview After Improvement
+
+```
+layoutGraph() internal structure (AFTER):
+
+    groupColumnsByTable()
+    transformToTableNodes()
+    build tableAdj
+        |
+        v
+    detectConnectedComponents(tableIds, tableAdj)
+        returns: string[][]
+        -- each inner array is one component's table IDs
+        -- undirected connectivity (follow edges both directions)
+        |
+        v
+    For each component with 2+ tables:
+        Kahn sort on component subgraph → componentTopoOrder
+        longest-path layering on component → componentLayerMap
+        position tables in local coordinates (primaryCursor, secondaryCursor)
+        translate by component offset → accumulate into layoutedNodes
+        advance componentOffset by (component height + COMPONENT_GAP)
+        |
+    Collect isolated tables (1-node components)
+    Place in grid (ISOLATED_GRID_COLUMNS wide, ISOLATED_GRID_GAP between cells)
+    starting y = maxConnectedComponentY + ISOLATED_SECTION_GAP
+        |
+        v
+    Build layoutedEdges (unchanged)
+        |
+        v
+    separateDatabaseClusters() (unchanged)
+```
+
+### Component Responsibilities
+
+| Component | Responsibility | Change |
+|-----------|----------------|--------|
+| `layoutGraph()` | Orchestrates entire layout pipeline | YES — add component detection step, refactor layer-assignment loop |
+| `detectConnectedComponents()` | BFS on undirected table graph | NEW — local function inside `layoutEngine.ts` |
+| Per-component layout loop | Topo sort + layering on subgraph | REFACTOR — existing loop body extracted to work on a subgraph |
+| Isolated table grid | Grid placement for 1-node components | NEW — simple grid logic after component loop |
+| `separateDatabaseClusters()` | Post-layout DB cluster shifting | NO CHANGE — reads final positions |
+| `ClusterBackground` | Renders bounding boxes | NO CHANGE — reads from React Flow node store |
+| `DatabaseLineageGraph.tsx` | Calls `layoutGraph()` | NO CHANGE — identical call site |
+
+---
+
+## Architectural Patterns
+
+### Pattern 1: Pre-processing Inside the Layout Function
+
+**What:** `detectConnectedComponents()` runs inside `layoutGraph()` after the table adjacency graph is built, before the topological sort. It is a local helper function in the same file.
+
+**When to use:** When a preprocessing step depends on data structures (like `tableAdj`) that only exist inside the layout function, and externalizing them would require duplicating logic.
+
+**Trade-offs:** `layoutGraph()` grows slightly larger. Mitigate with clear section comments and small, well-named helper functions extracted as local functions.
+
+**Example:**
+
+```typescript
+// Inside layoutGraph(), at line ~410, after tableAdj is fully populated:
+
+function detectConnectedComponents(
+  tableIds: string[],
+  tableAdj: Map<string, Set<string>>
+): string[][] {
+  const visited = new Set<string>();
+  const components: string[][] = [];
+
+  for (const tableId of tableIds) {
+    if (visited.has(tableId)) continue;
+    const component: string[] = [];
+    const queue = [tableId];
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (visited.has(current)) continue;
+      visited.add(current);
+      component.push(current);
+
+      // Follow forward edges
+      for (const neighbor of tableAdj.get(current) || new Set<string>()) {
+        if (!visited.has(neighbor)) queue.push(neighbor);
+      }
+      // Follow reverse edges (undirected connectivity)
+      for (const [src, targets] of tableAdj) {
+        if (targets.has(current) && !visited.has(src)) queue.push(src);
+      }
+    }
+
+    components.push(component);
+  }
+
+  return components;
+}
+
+// Usage inside layoutGraph():
+const allTableIds = tableNodeData.map(t => t.id);
+const components = detectConnectedComponents(allTableIds, tableAdj);
+const connectedComponents = components.filter(c => c.length > 1);
+const isolatedTables = components.filter(c => c.length === 1).map(c => c[0]);
+```
+
+### Pattern 2: Per-Component Subgraph Layout
+
+**What:** The existing topological sort and layering runs on the full table graph. Refactor so it runs on a subgraph (one component at a time). Each component produces positions in local coordinates. The component is then translated by a cumulative offset.
+
+**Trade-offs:** The refactoring is a restructuring of existing logic, not new logic. Risk of regression is low if existing tests pass after the change. Determinism is preserved because components are sorted by their smallest table ID before layout.
+
+**Example:**
+
+```typescript
+// Pseudocode for the per-component loop (replaces lines 437-497):
+
+let secondaryOffset = 0; // stacking offset along secondary axis
+
+// Sort components for determinism: by smallest table ID in component
+connectedComponents.sort((a, b) => a[0].localeCompare(b[0]));
+
+for (const component of connectedComponents) {
+  const componentSet = new Set(component);
+
+  // Build component-local adjacency
+  const compAdj = new Map<string, Set<string>>();
+  const compInDeg = new Map<string, number>();
+  for (const id of component) {
+    compAdj.set(id, new Set());
+    compInDeg.set(id, 0);
+  }
+  for (const id of component) {
+    for (const tgt of tableAdj.get(id) || new Set<string>()) {
+      if (componentSet.has(tgt)) {
+        compAdj.get(id)!.add(tgt);
+        compInDeg.set(tgt, (compInDeg.get(tgt) || 0) + 1);
+      }
+    }
+  }
+
+  // Kahn sort on component
+  const compTopoOrder = kahnSort(component, compAdj, compInDeg);
+
+  // Longest-path layering on component
+  const compLayerMap = longestPathLayering(compTopoOrder, compAdj);
+
+  // Position tables (local coordinates)
+  const compNodes = positionByLayer(compLayerMap, tableNodeData, nodeSpacing, layerSpacing, isHorizontal);
+
+  // Translate by secondaryOffset (stacking components vertically)
+  const translated = compNodes.map(node => ({
+    ...node,
+    position: {
+      x: isHorizontal ? node.position.x : node.position.x + secondaryOffset,
+      y: isHorizontal ? node.position.y + secondaryOffset : node.position.y,
+    }
+  }));
+
+  // Advance offset past this component
+  const compSecondaryExtent = Math.max(...compNodes.map(n =>
+    isHorizontal ? n.position.y + (tableNodeData.find(t => t.id === n.id)?.columns.length ?? 0) * COLUMN_ROW_HEIGHT : 0
+  ));
+  secondaryOffset += compSecondaryExtent + COMPONENT_GAP;
+
+  layoutedNodes.push(...translated);
+}
+```
+
+### Pattern 3: Grid Placement for Isolated Tables
+
+**What:** Single-node components (isolated tables — no lineage) are placed in a grid below all connected components. Grid width is configurable via `LayoutOptions.isolatedGridColumns` (default 4).
+
+**Trade-offs:** Simple and predictable. Isolated tables are visually distinct from connected components. The grid is ordered alphabetically for determinism.
+
+**Example:**
+
+```typescript
+const ISOLATED_SECTION_GAP = 100; // gap between connected components and isolated grid
+const isolatedGridColumns = options.isolatedGridColumns ?? 4;
+
+if (isolatedTables.length > 0) {
+  const startY = secondaryOffset + ISOLATED_SECTION_GAP; // below all connected components
+  isolatedTables.sort(); // alphabetical for determinism
+
+  isolatedTables.forEach((tableId, index) => {
+    const col = index % isolatedGridColumns;
+    const row = Math.floor(index / isolatedGridColumns);
+    const td = tableNodeData.find(t => t.id === tableId)!;
+    const width = calculateTableNodeWidth(td.tableName, td.columns);
+    const height = calculateTableNodeHeight(td.columns.length, td.isExpanded);
+
+    layoutedNodes.push({
+      id: tableId,
+      type: 'tableNode',
+      position: {
+        x: isHorizontal ? col * (width + nodeSpacing) : startY + row * (height + nodeSpacing),
+        y: isHorizontal ? startY + row * (height + nodeSpacing) : col * (width + nodeSpacing),
+      },
+      data: td,
+    } as Node);
+  });
+}
+```
+
+---
+
+## Data Flow
+
+### Request Flow (After Improvement — only `layoutGraph()` changes)
+
+```
+DatabaseLineageGraph.tsx
+    |
+    v (identical to before)
+convertOpenLineageGraph() → LineageNode[], LineageEdge[]
+    |
+    v (identical call site)
+layoutGraph(nodes, edges, options)
+    |
+    ├─ groupColumnsByTable()              [unchanged]
+    ├─ transformToTableNodes()            [unchanged]
+    ├─ build tableAdj                     [unchanged]
+    |
+    ├─ detectConnectedComponents()        [NEW]
+    |     → connectedComponents: string[][]
+    |     → isolatedTables: string[]
+    |
+    ├─ for each connected component:      [REFACTORED from single loop]
+    |     Kahn sort on component subgraph
+    |     longest-path layering
+    |     position in local coordinates
+    |     translate by stacking offset
+    |
+    ├─ place isolatedTables in grid       [NEW]
+    |
+    ├─ build layoutedEdges                [unchanged]
+    |
+    └─ separateDatabaseClusters()         [unchanged]
+    |
+    v (identical to before)
+setNodes(), setEdges()
+    v
+React Flow renders
+    v
+ClusterBackground draws bounding boxes   [unchanged]
+```
+
+---
+
+## Integration Points
+
+### What Changes and What Does Not
+
+| File | Change | Notes |
+|------|--------|-------|
+| `src/utils/graph/layoutEngine.ts` | YES — core change | Add `detectConnectedComponents()` as local function; refactor layer-assignment into per-component loop; add isolated table grid |
+| `src/utils/graph/layoutEngine.test.ts` | YES — new tests | Unit tests for `detectConnectedComponents()`; tests for isolated table grid; regression tests for existing patterns |
+| `src/components/domain/LineageGraph/DatabaseLineageGraph.tsx` | NO | Call site to `layoutGraph()` is identical |
+| `src/components/domain/LineageGraph/AllDatabasesLineageGraph.tsx` | NO | Also benefits from the improvement automatically |
+| `src/components/domain/LineageGraph/ClusterBackground.tsx` | NO | Reads final node positions — unaffected |
+| `src/components/domain/LineageGraph/hooks/useDatabaseClusters.ts` | NO | Secondary hook not used by `DatabaseLineageGraph` |
+| `src/utils/graph/openLineageAdapter.ts` | NO | Format conversion unchanged |
+| `src/workers/layout.worker.ts` | NO | Wraps `layoutGraph()` — improvement is inside, Worker gets it automatically |
+| `LayoutOptions` interface | MAYBE | Add optional `isolatedGridColumns?: number` if callers need to tune |
+| `LayoutResult` interface | NO | Same shape returned |
+
+### Existing Tests — Regression Surface
+
+All existing tests in `layoutEngine.test.ts` must pass without modification. The following test groups are the regression surface:
+
+| Test Group | What it verifies | Risk |
+|------------|------------------|------|
+| `layoutGraph` — column grouping | Two columns same table → one node | Low (grouping unchanged) |
+| `layoutGraph` — separate tables | One table per column, correct edge handles | Low |
+| `TC-GRAPH-004` — diamond/fan/chain patterns | All 4-5 node patterns, positions correct | Medium — refactoring the loop |
+| `TC-GRAPH-002/003` — direction options | DOWN and LEFT directions produce correct ordering | Medium |
+| `cross-database cluster layout` | Upstream DB left of downstream DB | Low — `separateDatabaseClusters()` unchanged |
+| `topoSortDatabases` | DB-level ordering | No change — function unchanged |
+| `separateDatabaseClusters` | Cluster separation | No change — function unchanged |
+
+---
+
+## Anti-Patterns to Avoid
+
+### Anti-Pattern 1: Component Detection at Column Level
+
+**What people might try:** Detect connected components on the raw `LineageNode[]` input before `groupColumnsByTable()`.
+
+**Why it's wrong:** Component connectivity must be defined at the table level, not the column level. A table with 10 columns may have lineage through 1 column — all 10 columns belong to the same table node and that table is connected. Column-level component detection would misclassify tables where only some columns have lineage.
+
+**Do this instead:** Run after `transformToTableNodes()` and `tableAdj` is built. Operate on table keys (`db.tableName`), not column IDs.
+
+### Anti-Pattern 2: Using ELK for Connected Components
+
+**What people might try:** Use ELK's compound node or partition features to lay out components separately.
+
+**Why it's wrong:** ELK is not used in the main layout path. The custom O(V+E) topological algorithm replaced ELK because ELK hangs on dense graphs (see comment line 386 of `layoutEngine.ts`). Adding ELK back for a subset of the work would reintroduce the hang risk and adds unnecessary complexity.
+
+**Do this instead:** Extend the existing custom topological algorithm to handle components.
+
+### Anti-Pattern 3: Modifying ClusterBackground for Isolated Tables
+
+**What people might try:** Render isolated tables differently in `ClusterBackground` or add a new overlay.
+
+**Why it's wrong:** `ClusterBackground` is a rendering layer that draws bounding boxes around nodes already in their final positions. If isolated tables are correctly placed in a grid by `layoutGraph()`, `ClusterBackground` will draw correct bounding boxes around them automatically — it groups by `databaseName`, not by lineage connectivity.
+
+**Do this instead:** Fix the positions in `layoutGraph()`. Rendering requires no changes.
+
+### Anti-Pattern 4: Separate Layout Function for Database Lineage
+
+**What people might try:** Create `layoutDatabaseGraph()` called specifically from `DatabaseLineageGraph.tsx`.
+
+**Why it's wrong:** `AllDatabasesLineageGraph` also calls `layoutGraph()` and has the same isolated table problem. A database-specific fork misses this consumer and creates diverging code paths to maintain.
+
+**Do this instead:** Improve `layoutGraph()` so both consumers benefit.
+
+---
+
+## Build Order
+
+Build in this sequence (each step is independently testable):
+
+1. **`detectConnectedComponents()` function** — write and unit-test in isolation. Input: `string[]` of table IDs, `Map<string, Set<string>>` adjacency. Output: `string[][]`. Test: linear chain, diamond, fan, disconnected, single isolated node, all isolated.
+
+2. **Refactor layer-assignment into per-component loop** — extract Kahn sort + longest-path into named helper functions `kahnSort()` and `longestPathLayering()`. Run existing tests to confirm no regression before adding component logic.
+
+3. **Wire `detectConnectedComponents()` into the refactored loop** — run existing tests. All prior tests should pass since all existing test fixtures have fully connected graphs (every table in a test has lineage edges).
+
+4. **Add isolated table grid placement** — add grid positioning block after the component loop. Write new tests: all-isolated database, mix of connected and isolated, isolated tables from multiple databases.
+
+5. **Optional: `isolatedGridColumns` in `LayoutOptions`** — add if product needs the grid width to be configurable. Non-breaking (optional parameter with default of 4).
+
+---
+
+## Sources
+
+**Direct code analysis (HIGH confidence)**
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/utils/graph/layoutEngine.ts` — full layout pipeline, lines 349–578 (main path), lines 583–707 (ELK fallback)
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx` — call site at line 172; Worker is NOT used
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/components/domain/LineageGraph/ClusterBackground.tsx` — reads React Flow store, not layout output directly
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/workers/layout.worker.ts` — wraps `layoutGraph()` via Comlink
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/utils/graph/layoutEngine.test.ts` — existing test coverage confirms current behavior expectations
+
+---
+*Architecture research for: database lineage graph layout improvement (connected components + grid)*
+*Researched: 2026-02-21*
+*Context: Subsequent milestone — fixing database lineage graph layout in existing column-level lineage application*

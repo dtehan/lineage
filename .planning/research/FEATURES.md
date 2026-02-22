@@ -1,283 +1,292 @@
-# Feature Research: In-Memory Graph Engine & Progressive Depth Loading
+# Feature Research: Database Lineage Layout Improvement
 
-**Domain:** Column-level data lineage graph performance optimization
-**Researched:** 2026-02-20
-**Confidence:** HIGH
+**Domain:** Database-level lineage graph layout for mixed connected/disconnected node sets
+**Researched:** 2026-02-21
+**Confidence:** HIGH (ELK algorithm research confirmed via official docs; tool UX patterns from official documentation + direct observation; layout algorithms from published academic and library sources)
 
 ---
 
 ## Context
 
-This research covers features needed for the next milestone: adding an in-memory graph engine and progressive depth loading to the existing Teradata lineage application. The goal is first-load performance under 500ms for any graph size, with depth-1 results visible within 200ms.
+This research covers the new milestone: v5.0 Database Lineage Layout. The goal is to fix the database lineage graph view which currently stacks all tables in a single vertical column regardless of lineage connections.
 
 **What already exists (do not rebuild):**
-- Recursive CTE traversal in `lineage_repository.py` (upstream/downstream, cycle detection)
-- Redis caching with stampede prevention in `cache/__init__.py`
-- Loading progress stages: fetching → layout → rendering → complete
-- ELKjs layout in Web Worker (`useLayoutWorker.ts`, `layout.worker.ts`)
-- TanStack Query for data fetching with infinite scroll (database view)
-- React Flow + ELKjs graph rendering pipeline
-- Structured cache keys: `lineage:graph:column:{dataset}:{field}:{direction}:{maxDepth}`
+- `layoutGraph()` in `layoutEngine.ts` — custom topological layering with Kahn's algorithm + longest-path layering, O(V+E)
+- `layoutSimpleNodes()` — ELKjs layered algorithm fallback for non-column (table-type) nodes; currently called for database-level graphs since columns are not rendered
+- `separateDatabaseClusters()` — post-layout cluster box non-overlap logic using topological database ordering
+- `topoSortDatabases()` — Kahn's topological sort for database-level ordering (cross-database case)
+- `DatabaseLineageGraph.tsx` — React Flow component for database view
+- `lineage_service.py:get_database_lineage_graph()` — BFS path serves all tables including isolated ones; already returns both connected and isolated table nodes
 
-**Current bottleneck:** Recursive CTE runs on every first load (150ms–15s). Redis cache helps on repeat loads but cold-start latency is unbounded. No depth-progressive loading — the full graph at maxDepth=5 is fetched before anything renders.
+**Current problem:** The database lineage API returns all tables as column-level field nodes (type `"field"`). These get passed to `layoutGraph()` which calls `groupColumnsByTable()`, produces one "table card" per Teradata table, then runs Kahn's topological sort. Tables with no lineage edges get `inDegree=0` and all land in layer 0, stacking vertically. Tables in the same layer stack vertically with `nodeSpacing=40` between them. The result: 50+ tables in one vertical tower on the left side.
+
+**Correct behavior desired:**
+- Tables that have lineage edges flow left-to-right (upstream left, downstream right)
+- Tables with no lineage edges appear in a compact grid, not a vertical tower
+- No node overlap in either section
+
+---
+
+## How Real Tools Handle This Problem
+
+### Pattern 1: Show Only Connected Nodes (Snowflake, Databricks Unity Catalog)
+
+Most production lineage tools avoid the mixed-graph problem entirely: they only show the selected asset and its connected neighbors, not all tables in a database. Snowflake reveals objects incrementally, "one step at a time upstream or downstream from your selection." Databricks shows "one level by default" with expand buttons. Neither shows all tables in a schema simultaneously.
+
+**Implication for this project:** This pattern sidesteps the problem by not having a "database overview" mode at all. Our application has already committed to showing all tables in the database (including those without lineage) as a database-level overview. This is a deliberate differentiator — it shows isolation patterns and data inventory alongside lineage flow.
+
+### Pattern 2: Filter to Lineage-Connected Only (DataHub, Atlan)
+
+DataHub and Atlan track a `"hasLineage"` metadata flag per asset. Their database/schema views let users filter to "only show tables with lineage" before rendering the graph. The disconnected tables are accessible in the catalog browser, not the lineage graph. This cleanly avoids the mixed-graph layout problem.
+
+**Implication for this project:** A "hide tables without lineage" toggle is a viable anti-junk approach, but it discards the inventory visibility that makes this view valuable. Better to show both with distinct layout zones.
+
+### Pattern 3: Separate Layout Zones (dbt docs, some academic systems)
+
+dbt-docs (the closest match to what this project needs) uses Dagre for horizontal layout. The DAG-connected nodes flow left-to-right. Isolated nodes (sources with no upstream, sinks with no downstream, orphaned models) are placed by the layout algorithm wherever they land — often they cluster at the left edge at y=0 if there are multiple zero-in-degree nodes. dbt-docs does not explicitly separate "connected" from "disconnected" nodes into visually distinct zones.
+
+Academic research (Eclipse ELK, polyomino packing papers, igraph community) recognizes that disconnected components are the hardest layout case. ELK provides `separateConnectedComponents` and the ELK DisCo algorithm specifically for packing disconnected subgraphs compactly.
+
+### Pattern 4: Organic/Force Layout with Component Packing (Cytoscape.js, igraph)
+
+Cytoscape.js's organic (CoSE) layout considers each disconnected component separately, runs the force algorithm per component, then packs components together. The igraph library recommends force-directed layout for disconnected graphs because it handles multiple components naturally. However, force-directed layout does not produce left-to-right lineage order, which is a hard requirement for this application.
 
 ---
 
 ## Feature Landscape
 
-### Table Stakes (Users Expect These)
+### Table Stakes
 
-Features users assume exist. Missing these = product feels incomplete.
+Features users expect. Missing = the database lineage view feels broken.
 
 | Feature | Why Expected | Complexity | Notes |
 |---------|--------------|------------|-------|
-| **In-memory graph index (server-side)** | DataHub, Amundsen, Neo4j Browser all serve lineage from pre-built in-memory structures rather than running traversal queries per request. Users expect sub-second response for explored nodes. | MEDIUM | Build `networkx.DiGraph` from all `OL_COLUMN_LINEAGE` rows at startup. Keep in Flask application-level singleton (not per-request). Survives request lifetime. ~165 rows test data, expected 10K–100K production. NetworkX `DiGraph` handles 1M edges with <1 GB RAM. |
-| **Depth-1 immediate response (<200ms)** | Industry standard: DataHub returns 1-hop in well under 200ms; Databricks' lineage UI defaults to depth 1 with expand on demand. Users are trained to see immediate neighbors instantly. | MEDIUM | Serve depth-1 subgraph from in-memory graph. BFS to 1 hop is O(edges at depth 1) — microseconds in memory vs 150ms+ CTE. Requires `ego_graph(G, node, radius=1)` or `bfs_tree(G, node, depth_limit=1)`. |
-| **Full graph within 500ms for any size** | Users tolerate at most 500ms for a complete initial graph load (Nielsen's response time threshold for user perception of "fast"). Current 15s for large graphs is unacceptable. | HIGH | In-memory BFS to full depth (5 hops) from 100K row graph: O(V+E) traversal in <50ms. Bottleneck shifts to layout (ELKjs) and serialization. Requires graph warm-up before serving requests. |
-| **Graph warm-up on startup** | Tools like Dash explicitly recommend pre-filling cache; enterprise lineage tools rebuild indexes on startup. Users expect the first user to get the same performance as subsequent users. | MEDIUM | Background thread in Flask that builds `networkx.DiGraph` from all `OL_COLUMN_LINEAGE` rows immediately after app start. Store on `app` or module-level singleton. Flask supports background threads via `threading.Thread`; use `daemon=True` to avoid blocking shutdown. |
-| **Graceful warm-up fallback** | If graph is still building, fall back to CTE with existing Redis cache. Users should never see a 500 error because warm-up is incomplete. | LOW | Track warm-up state (`warming`, `ready`, `failed`). If `warming`, return CTE result (same as today). If `ready`, serve from memory. Existing Redis cache serves as safety net throughout. |
-| **Cache invalidation when lineage data changes** | If `OL_COLUMN_LINEAGE` is updated (e.g., by `populate_lineage.py`), in-memory graph must reflect changes. Serving stale lineage is a correctness bug, not just a performance issue. | MEDIUM | Expose a `/api/v2/graph/rebuild` admin endpoint that triggers async rebuild of the in-memory graph. Existing Redis invalidation (`cache/invalidation.py`) should fire the rebuild. TTL-based rebuild schedule (e.g., every hour via background thread timer) as a safety net. |
+| **Hierarchical left-to-right layout for connected tables** | Every lineage tool (dbt docs, DataHub, Databricks, Snowflake) uses left-to-right directed layout for connected data flow. Users read lineage left-to-right as "upstream → downstream." The current layout already does this for column-level views — users see the correct behavior there and expect it in the database view too. | LOW | Already implemented for column-level views via `layoutGraph()`. The database view uses `layoutSimpleNodes()` (ELKjs) instead. The fix is to route database-level graphs through the same custom topological layout path that already works, since the data is available. |
+| **Compact grid for isolated/disconnected tables** | Tables with no lineage edges are currently stacked in a single vertical column. With 50+ tables, this produces an ~3000px tall column that requires excessive scrolling. A grid (N columns × M rows) uses space efficiently. This is the primary user complaint for the database view. | MEDIUM | Not a React Flow or ELK built-in — requires custom post-layout grid placement logic for the zero-edge-connected component of the graph. ELK DisCo handles component packing but is complex to configure; simpler to implement a deterministic grid packer after the topological layout runs. |
+| **No node overlap** | Fundamental correctness expectation for any graph layout. Currently the vertical stacking causes nodes to overlap when cluster boxes are drawn. | LOW | Already guaranteed for the connected portion by the existing `separateDatabaseClusters()` logic. The gap is the disconnected portion — the grid packer must account for node dimensions (width × height) and spacing. |
+| **Disconnected tables visually distinct from connected flow** | Users need to distinguish "these tables participate in lineage" from "these tables exist in the database but have no known lineage." Without visual distinction, the graph is confusing — why are some tables in a flow and others in a pile? | MEDIUM | Options: (a) subtle background region / section label "No lineage connections", (b) gray or desaturated node styling for isolated tables, (c) explicit visual separator between the DAG section and the grid section. Option (a) matches the existing `ClusterBackground` pattern and is lowest risk. |
 
-### Differentiators (Competitive Advantage)
+### Differentiators
 
-Features that set the product apart. Not required, but valued.
+Features that set this database view apart. Not required for correctness, but improve usability.
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Progressive depth loading (depth 1 → full)** | DataHub uses "expand on click" for additional hops; Amazon DataZone defaults to 1-depth and expands. Progressive loading means users see something immediately and can explore further. Reduces perceived wait time even for large graphs. | HIGH | Two-phase fetch: Phase 1 fetches depth=1 and renders. Phase 2 fetches depth=2..5 in background. Frontend merges incrementally. Requires new API parameter `?maxDepth=1` then `?maxDepth=5` (already exists). TanStack Query `prefetchQuery` after depth-1 resolves. React Flow `hidden` property used to reveal nodes as they arrive. |
-| **Depth-expand on node click** | Industry pattern (DataHub, Neo4j Browser, Amazon DataZone): clicking a node that's at the frontier of the current view expands its neighbors. Scales to arbitrarily large graphs without overwhelming the layout at once. | HIGH | Requires frontend to track "expanded" vs "frontier" nodes. Frontier nodes show an expand button. Click fires `GET /lineage/{id}/{field}?maxDepth=1` from that node's perspective and merges result into existing graph. React Flow `useExpandCollapse` pattern is the reference implementation. Conflicts with "show all at maxDepth=5" — must be a conscious design choice. |
-| **Graph warm-up metrics endpoint** | DataHub exposes system health metrics. Operations teams need to know if the in-memory graph is stale or failed. | LOW | `GET /api/v2/graph/status` returns: `{ status: "ready" | "warming" | "failed", nodeCount, edgeCount, buildTimeMs, lastBuiltAt }`. Extends existing `/health` endpoint pattern. |
-| **Incremental graph merge on frontend** | Users see depth-1 graph rendered, then watch depth-2..5 nodes appear without a full re-render flash. Better perceived performance even if total time is the same. | MEDIUM | Frontend holds nodes/edges in Zustand state. When additional depths arrive, merge by adding new nodes/edges without replacing existing. React Flow supports dynamic node addition. ELKjs re-layout must handle incremental case without moving already-positioned nodes (use `elk.js` `layoutOptions: { "elk.incrementalLayout": true }` or pin existing node positions). |
-| **Stale-while-revalidate for in-memory graph** | Users get instant response from in-memory graph even if the data is slightly stale. Background rebuild happens while they explore. | MEDIUM | Implement `stale-while-revalidate` pattern: serve current in-memory graph immediately, trigger async rebuild if `lastBuiltAt` is older than TTL. Uses `threading.Thread` + event flag. Mirrors the Redis stampede prevention pattern already in `lineage_repository.py`. |
-| **Graph subgraph serialization cache (Redis)** | Serialize computed subgraphs back to Redis so warm-up is fast on restart. Cold start becomes: load serialized graph from Redis → restore `networkx.DiGraph` → ready in <1s instead of querying Teradata. | MEDIUM | Serialize with `nx.node_link_data(G)` → JSON → Redis. On startup: check Redis for serialized graph → restore if present and fresh → else query Teradata and build. Reduces startup build time from O(rows * query) to O(Redis round trip + deserialization). |
+| **Visual section label for disconnected tables** | Makes the two-zone layout self-explanatory. Users immediately understand "I'm looking at both the lineage DAG and the inventory of tables without lineage." Without this label, users may think the grid section is a bug. | LOW | A static SVG text element or absolute-positioned div below the DAG section. Can be computed from the bounding box of the connected cluster after layout. |
+| **"Hide tables without lineage" toggle** | Reduces graph clutter when users only care about the flow. DataHub and Atlan offer this. For databases with 200 tables and only 20 in the lineage flow, the grid section dominates the canvas unnecessarily. | LOW | Already partially supported via the existing `assetTypeFilter` mechanism in the store. A boolean `hideIsolated` flag in `useUIStore` + filter step in the layout path. Toolbar button to toggle. |
+| **Isolated table count in toolbar or header** | Shows "42 tables in lineage flow / 158 tables with no lineage" to set user expectations before they explore the graph. | LOW | Count is derivable from the graph data before layout. Add to the database header bar alongside the database name. |
+| **Deterministic ordering within the disconnected grid** | Alphabetical by table name within the grid ensures the same table is always in the same position. Users navigating repeatedly shouldn't have to re-find tables. | LOW | Sort `disconnectedTables` alphabetically before computing grid positions. Already the approach in `layoutGraph()` (`tables.sort((a, b) => a.id.localeCompare(b.id))`). |
+| **Grid columns count adapts to node width** | If all table names are short, pack more columns. If names are long (wide cards), use fewer. Fixed 4-column grid wastes space for wide nodes and looks wrong. | LOW | Compute `gridCols = Math.floor(availableWidth / (maxNodeWidth + nodeSpacing))` where `availableWidth` is estimated from the connected DAG bounding box or a fixed canvas width constant. |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+### Anti-Features
 
-Features that seem good but create problems.
+Features to explicitly avoid.
 
-| Feature | Why Requested | Why Problematic | Alternative |
-|---------|---------------|-----------------|-------------|
-| **Server-Sent Events (SSE) streaming per-request** | Seems like the natural way to stream depth-by-depth results to the frontend. | Flask's dev server handles one request at a time — SSE streams block the server. Production SSE requires a proper WSGI async server (gevent, eventlet) or async framework (FastAPI). Adding this requires infrastructure changes that aren't justified for this milestone. Flask's `stream_with_context` has documented limitations. | Use two sequential fetches: depth=1 then depth=5. TanStack Query handles the orchestration. No SSE needed. Much simpler. |
-| **WebSocket for real-time graph updates** | Real-time lineage refresh feels modern. | Requires WebSocket server infrastructure, connection management, reconnection handling. Far exceeds the scope of "faster initial load." Existing lineage data is populated periodically by `populate_lineage.py`, not in real-time — streaming updates would stream nothing most of the time. | Manual refresh button + cache invalidation endpoint. Let users trigger rebuilds explicitly. |
-| **Full graph database (Neo4j, Memgraph) replacement** | Graph DBs are designed for lineage traversal. O(1) hop complexity vs O(log N) join complexity. | Replacing Teradata with a graph DB changes the entire deployment model. The Teradata OL_COLUMN_LINEAGE table is the source of truth; duplicating to a graph DB creates a sync problem. Operational overhead is massive for a single-server application. | Build `networkx.DiGraph` in-process. Python-native, zero infrastructure, same O(1) hop traversal performance as graph databases for this data scale. |
-| **Full graph pre-computation (all paths, all depths)** | Pre-compute every subgraph at startup so every possible request is instantly served. | 100K node lineage graph: 100K starting points × upstream × downstream × 5 depths = 1M+ subgraphs. Memory and time to compute are prohibitive. | Compute on demand from in-memory graph (BFS is O(V+E), fast enough). Cache computed subgraphs in Redis with existing TTL. Best of both worlds. |
-| **Canvas-based rendering replacing React Flow** | React Flow has documented limits: "not intended for 1000+ nodes." Canvas solves the DOM overhead. | Rewrites the entire graph visualization layer. Loses all existing TableNode components, ELKjs layout integration, highlight/search hooks. Months of work. | Use React Flow's `onlyRenderVisibleElements` + `hidden` property to limit active DOM nodes. Viewport-based rendering makes React Flow practical for 200–500 node graphs which covers 95% of real lineage views. |
-| **Depth auto-detection ("show everything")** | Users don't want to think about depth — just show the full lineage. | At depth=10, a well-connected column can return thousands of nodes. ELKjs layout for 500+ nodes takes 2–10 seconds. React Flow renders 1000+ nodes slowly. Auto-detecting "everything" produces unusable graphs. DataHub explicitly limits to 3+ hops and says results may not return. | Cap maxDepth at 5 (current default). Show node count at each depth. Let users consciously increase depth. |
+| Anti-Feature | Why Avoid | What to Do Instead |
+|--------------|-----------|-------------------|
+| **Force-directed layout for the whole graph** | Force-directed layout (d3-force, CoSE) handles disconnected components naturally, but destroys the left-to-right lineage order that users depend on. The connected tables would land wherever the physics simulation settles, not in upstream-to-downstream order. This breaks the fundamental lineage mental model. | Keep topological layering for connected tables. Use a deterministic grid for isolated tables only. |
+| **ELK DisCo algorithm for component packing** | ELK DisCo is the "correct" academic solution for packing disconnected subgraphs, but elkjs's bundled algorithm for DisCo hangs indefinitely on dense column-level graphs (discovered in v3.0). The codebase already replaced ELKjs with a custom O(V+E) topological layout for this reason. Using DisCo for the isolated-grid portion reintroduces the hang risk. | Write a simple deterministic grid packer: `x = (i % cols) * (nodeWidth + spacing)`, `y = (Math.floor(i / cols)) * (nodeHeight + spacing)`. Zero risk, correct result. |
+| **Separate API call to split connected vs disconnected tables** | It might seem cleaner to have the backend tag nodes as "has_lineage=true/false" and send them separately. Adding a new API field creates a v6 schema migration, breaks the existing OpenLineage adapter, and adds backend complexity for a problem that is entirely solvable in the frontend layout step. | Split connected vs disconnected entirely in the layout engine: connected tables are those with at least one edge in the raw edge list; disconnected tables have no edges. This is O(nodes + edges) and requires no API change. |
+| **Pagination for the disconnected grid** | Some large databases have 500+ tables. Paginating the grid (showing 50 at a time) seems like it would scale better. But pagination in a graph view requires hover state, z-index management, and breaks the spatial memory users build when navigating. | Use `onlyRenderVisibleElements={nodes.length > 50}` (already in `DatabaseLineageGraph.tsx`) for React Flow viewport culling. The minimap provides navigation for the full canvas. If graphs are genuinely too large, a future "filter by table name" search (already in toolbar) addresses it. |
+| **Animating isolated nodes into grid position** | CSS transitions on node position changes look polished but cause jank for 100+ nodes (documented in v2.0 research: transition disabling at 200+ nodes). | Apply the same `disableTransitions` logic already in use for large graphs. No animation for the initial layout. |
+| **Unified ELKjs layout for both sections** | One ELKjs call for the whole graph (connected + disconnected) seems like the simplest approach. ELKjs `separateConnectedComponents: true` should handle this. But ELKjs hangs on dense graphs (why it was replaced in v3.0). The database graph can have 200+ nodes with many edges. | Two-section approach: custom topological layout for connected tables (existing, proven), deterministic grid for disconnected tables (new, simple). Merge the two node sets with a spatial offset between sections. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[In-memory graph singleton]
-    └──requires──> [Graph warm-up on startup]
-    └──requires──> [Graceful warm-up fallback (CTE path)]
-    └──enables──> [Depth-1 immediate response]
-    └──enables──> [Full graph <500ms]
+[Split nodes into connected vs disconnected] (O(V+E), pure JS)
+    └──requires──> [Edge set from API response] (already available)
+    └──enables──> [Topological layout for connected subset]
+    └──enables──> [Grid layout for disconnected subset]
 
-[Depth-1 immediate response]
-    └──requires──> [In-memory graph singleton]
-    └──enables──> [Progressive depth loading]
+[Topological layout for connected tables]
+    └──requires──> [Split nodes into connected vs disconnected]
+    └──reuses──> [layoutGraph() existing topological layering] (already proven for column-level views)
+    └──reuses──> [separateDatabaseClusters()] (for multi-database connected tables)
+    └──enables──> [Connected DAG bounding box calculation]
 
-[Progressive depth loading]
-    └──requires──> [Depth-1 immediate response]
-    └──requires──> [Incremental graph merge on frontend]
-    └──conflicts──> [Depth-expand on node click] (choose one UI model)
+[Grid layout for disconnected tables]
+    └──requires──> [Split nodes into connected vs disconnected]
+    └──requires──> [Connected DAG bounding box] (to place grid below/beside connected section)
+    └──enables──> [Merged final node array]
 
-[Cache invalidation on rebuild]
-    └──requires──> [In-memory graph singleton]
-    └──enhances──> [Existing Redis invalidation (cache/invalidation.py)]
+[Connected DAG bounding box]
+    └──requires──> [Topological layout for connected tables]
+    └──enables──> [Grid layout for disconnected tables] (placement anchor)
+    └──enables──> [Visual section label] (position anchor for label element)
 
-[Graph subgraph serialization cache]
-    └──requires──> [In-memory graph singleton]
-    └──enhances──> [Graph warm-up on startup] (faster cold start)
+[Merged final node array]
+    └──requires──> [Topological layout for connected tables]
+    └──requires──> [Grid layout for disconnected tables]
+    └──enables──> [React Flow render]
 
-[Graph warm-up metrics endpoint]
-    └──requires──> [In-memory graph singleton]
-    └──enhances──> [Existing /health endpoint]
+[Visual section label]
+    └──requires──> [Grid layout for disconnected tables]
+    └──optional──> renders via ClusterBackground or absolute-positioned div
+
+["Hide tables without lineage" toggle]
+    └──requires──> [Split nodes into connected vs disconnected]
+    └──optional──> adds boolean to useUIStore; filter step before layout entry point
 ```
 
 ### Dependency Notes
 
-- **In-memory graph singleton requires graph warm-up:** The singleton is useless without being populated. Warm-up must complete (or be in-flight) before the singleton is queryable.
-- **Progressive depth loading conflicts with depth-expand on click:** These are competing UX models. "Progressive" means the system decides when to load more. "Expand on click" means the user decides. Choose one for this milestone. Progressive is lower frontend complexity; expand-on-click gives users more control for large graphs.
-- **Cache invalidation enhances existing Redis invalidation:** The existing `cache/invalidation.py` can be extended to also trigger in-memory graph rebuild. Don't replace it — extend it.
-- **Graph subgraph serialization cache enhances warm-up:** This is an optimization on top of warm-up, not a requirement for it. Build warm-up first, add Redis serialization if startup time is still slow after in-memory graph is working.
+- **All work is in `layoutEngine.ts` and `DatabaseLineageGraph.tsx`:** No backend changes required. The API already returns all tables (connected and disconnected). The split is purely a frontend layout concern.
+- **`layoutGraph()` must handle the "no columns, only tables" case:** Currently `layoutGraph()` calls `groupColumnsByTable()` which returns an empty map for table-type nodes, causing fallback to `layoutSimpleNodes()`. The database graph uses table-type nodes with no columns. The fix path is either: (a) teach `layoutGraph()` to handle table nodes directly (apply the topological layout to them), or (b) factor the topological layout logic into a shared function that both the column path and the table-only path can call. Option (b) is lower risk — it extracts already-proven code.
+- **Grid placement needs a spatial gap from the DAG section:** If the connected DAG occupies x=0..2000, the grid section should start at x=2000 + `GRID_GAP_PX` (e.g. 200px). This prevents visual ambiguity. The gap also provides space for the section label.
+- **`separateDatabaseClusters()` only applies to connected tables:** Disconnected tables from the same database all go in the grid. The cluster box logic should not wrap disconnected tables (they have no lineage direction to imply cluster position).
 
 ---
 
 ## MVP Definition
 
-### Launch With (v1) — Core In-Memory Engine
+### v5.0 Launch With
 
-Minimum viable feature set to achieve <500ms goal.
+Minimum viable feature set for a correct, non-embarrassing database lineage view.
 
-- [ ] **In-memory graph singleton** — Build `networkx.DiGraph` from all OL_COLUMN_LINEAGE rows. Store at Flask app level. This is the foundation of everything else.
-- [ ] **Graph warm-up on startup** — Background `threading.Thread(daemon=True)` that builds graph on `create_app()`. Set `warm_up_status` flag (`warming`, `ready`, `failed`).
-- [ ] **Graceful fallback** — If `warm_up_status != 'ready'`, route request to existing CTE path. If `ready`, serve from in-memory graph.
-- [ ] **Depth-1 immediate response** — In-memory BFS to depth=1. Serve JSON response to frontend. Frontend renders partial graph.
-- [ ] **Full graph request** — In-memory BFS to depth=5. Serves full graph in <50ms (compute time). Frontend re-renders complete graph.
-- [ ] **Graph warm-up metrics** — `GET /api/v2/graph/status` for operational visibility. Low effort, high value.
-- [ ] **Cache invalidation hook** — Extend existing `cache/invalidation.py` to set a `needs_rebuild` flag. Background thread checks flag and rebuilds.
+- [ ] **Split connected vs disconnected tables** — Partition `tableNodeData` into `connectedTables` (any edge in/out) and `disconnectedTables` (no edges). O(nodes + edges). Pure JS, no API change.
+- [ ] **Topological layout for connected tables** — Extract the topological layering logic from `layoutGraph()` (the Kahn's + longest-path portion, lines 386–511) into a shared `layoutTableDAG(tables, edges)` function. Call it for the connected subset. Reuses proven code.
+- [ ] **Deterministic grid for disconnected tables** — Sort disconnected tables alphabetically. Compute grid positions: `x = (i % cols) * (cardWidth + nodeSpacing)`, `y = floor(i / cols) * (cardHeight + nodeSpacing)`. Offset the entire grid below or to the right of the connected DAG's bounding box.
+- [ ] **No overlap guarantee** — Connected section: existing `separateDatabaseClusters()` handles multi-database cases. Disconnected section: grid formula guarantees non-overlap by construction (deterministic cell assignment).
+- [ ] **Correct React Flow node format** — Disconnected tables must produce `{ type: 'tableNode', data: TableNodeData, position: {x, y} }` in the same format as connected tables so the existing `TableNode` component renders them correctly.
 
-### Add After Validation (v1.x) — Progressive UX
+### After Validation (v5.1)
 
-Features to add once core in-memory engine is working and validated.
+Features to add once the layout is correct and usable.
 
-- [ ] **Progressive depth loading (two-phase fetch)** — Add frontend two-phase fetch: depth-1 renders first, depth-5 fetches in background and merges. Requires `prefetchQuery` in TanStack Query after depth-1 resolves.
-- [ ] **Incremental graph merge** — Zustand store merges new nodes/edges without replacing existing. React Flow `hidden` property reveals new nodes. ELKjs incremental layout pins existing node positions.
-- [ ] **Graph subgraph serialization to Redis** — Serialize `networkx.DiGraph` → JSON → Redis on warm-up. Restore on startup from Redis if fresh. Reduces cold-start Teradata query from O(all rows) to O(Redis GET).
-
-### Future Consideration (v2+) — Advanced Expansion
-
-Features to defer until progressive loading is validated.
-
-- [ ] **Depth-expand on node click** — Requires substantial frontend rework: frontier detection, expand button UI, subgraph merge logic, node position pinning. High complexity, good user experience. Defer until basic progressive loading proves out.
-- [ ] **Stale-while-revalidate** — Worth implementing after Redis serialization is in place. Adds one more concurrency primitive (event flag + background rebuild) that requires careful testing.
+- [ ] **Visual section label for disconnected grid** — Static text label "Tables without lineage connections (N)" placed above the grid section. Positioned using the grid bounding box. Rendered as a React Flow background element or absolute-positioned div.
+- [ ] **"Hide tables without lineage" toggle** — Boolean in `useUIStore`. If true, skip disconnected tables before layout entry. Toolbar button (similar to existing "Show database clusters" toggle). Hides the grid section entirely.
+- [ ] **Isolated table count in database header** — "X tables in lineage flow / Y tables with no lineage" alongside the database name in the blue header bar. Derived from the connected/disconnected split before layout.
 
 ---
 
-## Feature Prioritization Matrix
+## Complexity Assessment by Category
 
-| Feature | User Value | Implementation Cost | Priority |
-|---------|------------|---------------------|----------|
-| In-memory graph singleton | HIGH | MEDIUM | P1 |
-| Graph warm-up on startup | HIGH | LOW | P1 |
-| Graceful fallback to CTE | HIGH | LOW | P1 |
-| Depth-1 immediate response | HIGH | LOW (depends on P1) | P1 |
-| Full graph <500ms | HIGH | LOW (depends on P1) | P1 |
-| Cache invalidation rebuild | HIGH | LOW | P1 |
-| Graph warm-up metrics endpoint | MEDIUM | LOW | P1 |
-| Progressive depth loading | HIGH | MEDIUM | P2 |
-| Incremental graph merge (frontend) | MEDIUM | MEDIUM | P2 |
-| Graph subgraph serialization (Redis) | MEDIUM | LOW | P2 |
-| Depth-expand on node click | HIGH | HIGH | P3 |
-| Stale-while-revalidate | LOW | MEDIUM | P3 |
+| Category | Complexity | Notes |
+|----------|-----------|-------|
+| **Connected/disconnected split logic** | LOW (0.5 days) | Pure JS: iterate edges, build set of nodes with connections; O(V+E) |
+| **Extract shared topological layout function** | LOW (0.5–1 day) | Refactoring existing, proven code from `layoutGraph()`; no new algorithm |
+| **Deterministic grid packer** | LOW (0.5 days) | Simple modular arithmetic; no external library needed |
+| **Spatial offset between DAG and grid sections** | LOW (0.5 days) | Compute DAG bounding box (max x + padding), offset grid x by that amount |
+| **"Hide without lineage" toggle** | LOW (0.5 days) | 1 boolean in store, 1 filter step in layout, 1 toolbar button |
+| **Section label rendering** | LOW (0.5 days) | Absolute-positioned div or React Flow `Background` subcomponent |
+| **Test coverage** | MEDIUM (1–2 days) | `layoutEngine.test.ts` already exists; add cases for: all-disconnected, all-connected, mixed, empty |
 
-**Priority key:**
-- P1: Must have — directly achieves the <500ms / <200ms performance goal
-- P2: Should have — improves perceived performance once P1 is working
-- P3: Nice to have — UX enhancement for future consideration
+**Total estimated scope:** 2–4 days frontend-only work. No backend changes required.
 
 ---
 
 ## Competitor Feature Analysis
 
-How comparable tools handle the same problem:
+How comparable tools handle the mixed connected/disconnected case:
 
-| Feature | DataHub | Amazon DataZone | Databricks Unity Catalog | Our Approach |
-|---------|---------|-----------------|--------------------------|--------------|
-| Initial depth shown | 1 hop (expand to see more) | 1 hop (base node + 1-depth) | 1 depth (configurable) | Depth-1 first, full in background |
-| Expand mechanism | Click expand button per node | Graph expands upstream/downstream | Manual depth control | Progressive: auto-fetch full depth |
-| In-memory storage | Yes — maintains upstream/downstream in memory | Cloud-native graph service | Managed service (Unity Catalog) | NetworkX DiGraph in Flask process |
-| Max supported depth | 3+ hops (may not return at high fanout) | 20 levels, 10,000 links per direction | Not published | 5 hops (existing default) |
-| Cold start strategy | Startup indexing | Managed service, always warm | Managed service | Background thread warm-up + Redis serialization |
-| Stale cache handling | Not published | Not published | Not published | Rebuild endpoint + scheduled rebuild |
+| Tool | "All tables in DB" view? | Layout for connected | Layout for disconnected | Our v5.0 approach |
+|------|--------------------------|----------------------|-------------------------|-------------------|
+| Snowflake (Snowsight) | No — node-centric, expand neighbors | Hierarchical, progressive | Not shown | Not applicable |
+| Databricks Unity Catalog | No — 1-depth expand from selected | Left-to-right hierarchical | Not shown | Not applicable |
+| DataHub | No — entity-centric graph | Left-to-right directed | "Has lineage" filter, not shown by default | Closest model: show both with filter toggle |
+| Atlan | No — entity-centric | Left-to-right directed | "Has lineage" filter available | Closest model: show both with filter toggle |
+| dbt Explorer | Yes — full DAG of all models | Left-to-right with dagre | Land in leftmost layer (not explicitly separated) | Better than dbt: explicit grid, not vertical stack |
+| dbt-docs (OSS) | Yes — full DAG | Left-to-right with dagre | Zero-in-degree nodes cluster at left | Our v5.0 does this correctly |
+| OpenMetadata | Yes — schema-level lineage | Left-to-right | Not explicitly handled, can cause layout issues | Our v5.0 improves on this |
 
-**Key insight from DataHub:** At 3+ hops, DataHub warns results "may not return" due to fanout. This validates capping our maxDepth at 5 and warning users when node count is high.
+**Key insight:** No major commercial tool shows all database tables simultaneously in a single lineage view — they all use progressive disclosure from a selected anchor node. This application's database-level view is a genuine differentiator. The layout challenge is novel because no major tool has solved it the same way.
 
-**Key insight from Amazon DataZone:** Depth-1 default with expand capability is the UX pattern users are trained on. Our progressive loading (depth-1 renders, depth-5 loads in background) is the right middle ground — no user action required but still shows something immediately.
+**Key insight from dbt-docs:** dbt-docs places all zero-in-degree nodes (sources, isolated models) at the leftmost layer in the same DAG. They can stack vertically. With 50 models in that layer, it produces the same vertical tower problem we have. Our two-zone approach (DAG + grid) is strictly better than the dbt-docs behavior.
 
 ---
 
 ## Implementation Notes
 
-### In-Memory Graph Architecture
-
-```
-Flask app.create_app()
-    │
-    ├── init_cache()          (existing Redis/SimpleCache)
-    │
-    ├── build_graph_async()   (NEW: background thread)
-    │       │
-    │       └── SELECT * FROM OL_COLUMN_LINEAGE WHERE is_active = 'Y'
-    │               │
-    │               └── networkx.DiGraph(edges)
-    │                       │
-    │                       └── Store on app.graph_engine
-    │
-    └── Start serving requests
-            │
-            ├── graph_engine.status == 'warming' → LineageRepository CTE path (existing)
-            └── graph_engine.status == 'ready'   → graph_engine.subgraph(node, depth)
-```
-
-**NetworkX data size estimate:**
-- 10K edges: ~5 MB RAM, ~1ms build time, ~0.1ms BFS traversal
-- 100K edges: ~50 MB RAM, ~5s build time (one-time), ~1ms BFS traversal
-- Build time is acceptable — it's a one-time startup cost, not per-request
-
-**BFS traversal pattern (in-memory):**
-```python
-import networkx as nx
-
-# Build once
-G = nx.DiGraph()
-G.add_edges_from([(src, tgt, {"transformation_type": t}) for src, tgt, t in rows])
-
-# Serve per-request (microseconds)
-subgraph = nx.ego_graph(G, root_node, radius=depth, undirected=False)
-```
-
-### Progressive Depth Loading Data Flow
-
-```
-User clicks column
-    │
-    ├── Phase 1: GET /lineage/{id}/{field}?maxDepth=1
-    │       │
-    │       ├── In-memory BFS depth=1 → ~1ms
-    │       ├── Serialize response → ~5ms
-    │       └── ELKjs layout (Web Worker) → ~20ms
-    │               └── React Flow renders depth-1 graph → ~50ms total
-    │
-    └── Phase 2: prefetchQuery depth=5 (triggered after Phase 1 resolves)
-            │
-            ├── In-memory BFS depth=5 → ~5ms
-            ├── Serialize response → ~10ms
-            └── ELKjs layout (Web Worker) → ~100ms for large graph
-                    └── Merge new nodes into existing React Flow state → incremental render
-```
-
-### Frontend Incremental Merge Pattern
+### Splitting Connected vs Disconnected Tables
 
 ```typescript
-// Zustand store: merge, don't replace
-const mergeGraphData = (existingNodes, newNodes, existingEdges, newEdges) => {
-  const nodeMap = new Map(existingNodes.map(n => [n.id, n]));
-  newNodes.forEach(n => { if (!nodeMap.has(n.id)) nodeMap.set(n.id, n); });
-
-  const edgeSet = new Set(existingEdges.map(e => e.id));
-  const addedEdges = newEdges.filter(e => !edgeSet.has(e.id));
-
+// In layoutEngine.ts — runs before layout, O(V+E)
+function splitConnectedTables(
+  tableNodeData: TableNodeData[],
+  rawEdges: LineageEdge[],
+  columnToTableMap: Map<string, string>
+): { connected: TableNodeData[]; disconnected: TableNodeData[] } {
+  const tablesWithEdges = new Set<string>();
+  for (const edge of rawEdges) {
+    const src = columnToTableMap.get(edge.source);
+    const tgt = columnToTableMap.get(edge.target);
+    if (src && src !== tgt) tablesWithEdges.add(src);
+    if (tgt && src !== tgt) tablesWithEdges.add(tgt);
+  }
   return {
-    nodes: Array.from(nodeMap.values()),
-    edges: [...existingEdges, ...addedEdges]
+    connected: tableNodeData.filter(t => tablesWithEdges.has(t.id)),
+    disconnected: tableNodeData.filter(t => !tablesWithEdges.has(t.id)),
   };
-};
+}
 ```
 
-### Cache Invalidation Extension
+### Deterministic Grid Placement
 
-Existing pattern in `cache/invalidation.py` handles Redis key deletion. Extend to signal graph rebuild:
+```typescript
+// Grid packing for disconnected tables — placed below the connected DAG
+function layoutDisconnectedGrid(
+  tables: TableNodeData[],
+  startX: number,   // left edge of grid (usually 0 or aligned with DAG)
+  startY: number,   // top edge of grid (below the connected DAG + gap)
+  nodeSpacing: number
+): Node[] {
+  const sorted = [...tables].sort((a, b) => a.id.localeCompare(b.id));
+  const cols = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(sorted.length))));
 
-```python
-# In GraphEngine (new class):
-def signal_rebuild(self):
-    """Called by cache invalidation when OL_COLUMN_LINEAGE changes."""
-    self._status = "stale"
-    threading.Thread(target=self._build, daemon=True).start()
+  return sorted.map((table, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const width = calculateTableNodeWidth(table.tableName, table.columns);
+    const height = calculateTableNodeHeight(table.columns.length, table.isExpanded);
+
+    return {
+      id: table.id,
+      type: 'tableNode',
+      position: {
+        x: startX + col * (width + nodeSpacing),
+        y: startY + row * (height + nodeSpacing),
+      },
+      data: table,
+    } as Node;
+  });
+}
 ```
 
-### React Flow Performance for This Graph Size
+### Connected DAG Bounding Box Calculation
 
-React Flow's documented limit is "not intended for 1000+ nodes." For this application:
-- Column-level depth-5 graph: typically 50–200 nodes (realistic lineage)
-- Table-level graphs: 10–50 table nodes with expanded columns
-- Database-level graphs: 100–300 nodes (already uses pagination)
+```typescript
+// After connected tables are laid out, compute the bounding box
+function computeBoundingBox(nodes: Node[], tableNodeData: TableNodeData[]): {
+  maxX: number; maxY: number; minX: number; minY: number;
+} {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const node of nodes) {
+    const td = tableNodeData.find(t => t.id === node.id);
+    const w = td ? calculateTableNodeWidth(td.tableName, td.columns) : 300;
+    const h = td ? calculateTableNodeHeight(td.columns.length, true) : 100;
+    minX = Math.min(minX, node.position.x);
+    minY = Math.min(minY, node.position.y);
+    maxX = Math.max(maxX, node.position.x + w);
+    maxY = Math.max(maxY, node.position.y + h);
+  }
+  return { minX, minY, maxX, maxY };
+}
+```
 
-React Flow performs well within these ranges with `onlyRenderVisibleElements=true` and memoized node components. The 1000+ node warning does not apply to typical column-level lineage views.
+### Integration into `layoutGraph()`
+
+The main `layoutGraph()` function currently falls through to `layoutSimpleNodes()` for table-type nodes (because `groupColumnsByTable()` returns an empty map). The integration point is:
+
+1. After `transformToTableNodes()` produces `tableNodeData`, call `splitConnectedTables()`.
+2. Run the existing topological layout on `connected` tables only.
+3. Run `layoutDisconnectedGrid()` on `disconnected` tables with `startY = dagBoundingBox.maxY + GRID_SECTION_GAP`.
+4. Merge both node arrays: `[...connectedNodes, ...disconnectedNodes]`.
+5. Pass merged array to React Flow.
+
+This change is contained entirely within `layoutEngine.ts`. No changes to `DatabaseLineageGraph.tsx`, no API changes, no store changes.
 
 ---
 
@@ -285,59 +294,43 @@ React Flow performs well within these ranges with `onlyRenderVisibleElements=tru
 
 | New Feature | Depends On | Status |
 |-------------|-----------|--------|
-| In-memory graph singleton | Flask `create_app()`, `OL_COLUMN_LINEAGE` schema | Already established — extend `create_app()` |
-| Graph warm-up | `get_db_connection()`, `config.py` | Already established — reuse DB connection |
-| Graceful fallback | `LineageRepository.get_upstream/downstream_lineage()` | Implemented — call existing methods |
-| Depth-1 response | New `GraphEngine` service class | New class, follows `LineageService` pattern |
-| Cache invalidation hook | `cache/invalidation.py` | Implemented — extend existing module |
-| Progressive loading (frontend) | `useLineage.ts`, TanStack Query | Implemented — add `prefetchQuery` call |
-| Incremental merge | `useLineageStore.ts` (Zustand) | Implemented — add merge action to store |
-| Metrics endpoint | `/health` blueprint pattern | Implemented — add new route to `health.py` |
-| Redis serialization | `cache/__init__.py`, `networkx` | New — add serialization helper to `cache/` |
-
----
-
-## Complexity Assessment by Category
-
-| Category | Low (1-2 days) | Medium (3-5 days) | High (1-2 weeks) |
-|----------|---------------|------------------|-----------------|
-| **Backend (graph engine)** | Warm-up metrics endpoint, graceful fallback | NetworkX singleton + warm-up thread, cache invalidation hook | Redis serialization of full graph |
-| **Backend (API)** | Expose existing `?maxDepth=1` as depth-1 endpoint | Sub-graph serialization (nodes/edges from `ego_graph`) | — |
-| **Frontend (progressive)** | TanStack Query `prefetchQuery` on depth-1 resolve | Zustand incremental merge, React Flow hidden node reveal | Depth-expand on click (frontier UX) |
-| **Frontend (layout)** | `onlyRenderVisibleElements` flag | ELKjs incremental layout (pin existing positions) | — |
+| Split connected/disconnected | `tableNodeData`, `rawEdges`, `columnToTableMap` | All available in `layoutGraph()` |
+| Topological layout for connected subset | Existing Kahn's + longest-path logic (lines 386–511 in `layoutEngine.ts`) | Extract into shared function — no rewrite |
+| Grid packer for disconnected tables | `calculateTableNodeWidth()`, `calculateTableNodeHeight()` | Already in `layoutEngine.ts` |
+| Spatial offset between sections | Connected DAG bounding box | Computed post-layout; no external dependency |
+| "Hide without lineage" toggle | `useUIStore` store, `Toolbar.tsx` | Established patterns — add one boolean |
+| Section label | React Flow `Background` or absolute div pattern | `ClusterBackground.tsx` already does this for cluster boxes |
 
 ---
 
 ## Sources
 
-### Industry Tool Analysis (HIGH confidence)
-- [DataHub Lineage Features — docs.datahub.com](https://docs.datahub.com/docs/features/feature-guides/lineage) — depth control, max_hops parameter, 3+ hop warnings
-- [DataHub Lineage API Tutorial](https://docs.datahub.com/docs/api/tutorials/lineage) — GraphQL API pagination, degree filtering ("1", "2", "3+")
-- [Amazon DataZone Lineage Visualization](https://aws.amazon.com/blogs/big-data/amazon-datazone-introduces-openlineage-compatible-data-lineage-visualization-in-preview/) — depth-1 default, expand upstream/downstream
-- [Databricks Unity Catalog Lineage](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage) — 1-depth default, depth limits
+### ELK Layout Options (HIGH confidence)
+- [ELK separateConnectedComponents — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-separateConnectedComponents.html) — confirmed: ELK can process each connected component independently, then pack results
+- [ELK DisCo componentLayoutAlgorithm — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-disco-componentCompaction-componentLayoutAlgorithm.html) — confirms ELK DisCo algorithm exists for packing disconnected components
+- [ELK Layout Options reference — eclipse.dev](https://eclipse.dev/elk/reference/options.html) — full option reference
 
-### Graph Engine Performance (MEDIUM confidence)
-- [Data Lineage Analysis with Python and NetworkX — rittmanmead.com, 2024](https://www.rittmanmead.com/blog/2024/08/data-lineage-analysis-with-python-and-networkx/) — BFS 8x faster than has_path for 100K iterations; `bfs_tree()` with `reverse=True/False` for upstream/downstream
-- [Graph Library Benchmark — timlrx.com](https://www.timlrx.com/blog/benchmark-of-popular-graph-network-packages/) — NetworkX 40-250x slower than graph-tool but adequate for <100K edges at this scale
-- [Memgraph: Data Lineage is a Graph Problem](https://memgraph.com/blog/join-the-dots-data-lineage-is-a-graph-problem-heres-why) — O(1) hop complexity vs O(log N) join complexity argument for graph structures
-- [NetworkX DiGraph Documentation](https://networkx.org/documentation/stable/reference/classes/digraph.html) — API reference for BFS, ego_graph, subgraph
+### Graph Visualization UX (HIGH confidence from official documentation)
+- [Snowflake Data Lineage — docs.snowflake.com](https://docs.snowflake.com/en/user-guide/ui-snowsight-lineage) — confirmed: neighborhood view, progressive reveal only, isolated tables not shown
+- [Databricks Unity Catalog Lineage — docs.databricks.com](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage) — confirmed: 1-depth default, expand on click, no all-tables view
+- [DataHub UI Lineage Management — docs.datahub.com](https://docs.datahub.com/docs/features/feature-guides/ui-lineage) — confirmed: entity-centric, has lineage filtering, no schema-level all-tables view
+- [Atlan View Lineage — docs.atlan.com](https://docs.atlan.com/product/capabilities/lineage/how-tos/view-lineage) — confirmed: "Has lineage" filter in Properties menu; no explicit disconnected-node layout behavior documented
 
-### Progressive Loading & UX Patterns (HIGH confidence)
-- [React Flow Expand Collapse Example — reactflow.dev](https://reactflow.dev/examples/layout/expand-collapse) — `useExpandCollapse` hook, `hidden` property pattern, dynamic layout recalculation
-- [React Flow Performance Guide — reactflow.dev](https://reactflow.dev/learn/advanced-use/performance) — `onlyRenderVisibleElements`, memoization requirements, 1000+ node limits
-- [React Flow Progressive Loading Discussion — github.com/xyflow](https://github.com/xyflow/xyflow/discussions/3033) — viewport-based rendering, throttled recalculation, Web Workers for computation
-- [TanStack Query Prefetching Guide — tanstack.com](https://tanstack.com/query/v5/docs/react/guides/prefetching) — `prefetchQuery` with staleTime, conditional prefetch after first query resolves
+### dbt-docs Graph Layout (MEDIUM confidence — deepwiki analysis)
+- [dbt-docs Graph Visualization — deepwiki.com](https://deepwiki.com/dbt-labs/dbt-docs/3.4-graph-visualization) — confirmed: dagre algorithm for fullscreen mode, vertical preset for sidebar; no explicit isolated-node treatment beyond placing at zero-in-degree layer
 
-### Flask Architecture (MEDIUM confidence)
-- [Using Threads with Flask — michaeltoohig.com](https://michaeltoohig.com/blog/using-threads-with-flask/) — `threading.Thread(daemon=True)` pattern, queue-based communication, graceful shutdown
-- [Flask Streaming Patterns — flask.palletsprojects.com](https://flask.palletsprojects.com/en/stable/patterns/streaming/) — generator-based streaming, `stream_with_context` limitations
-- [Flask Background Thread Pattern — vmois.dev](https://vmois.dev/python-flask-background-thread/) — background thread initialization in `create_app()`, WSGI compatibility notes
+### Graph Layout Research (HIGH confidence — peer-reviewed and official library sources)
+- [Evaluating Graph Layout Algorithms — Wiley/Computer Graphics Forum, 2024](https://onlinelibrary.wiley.com/doi/10.1111/cgf.15073) — systematic review of layout methods; confirms topological layouts for DAGs, component packing for disconnected graphs
+- [Graph Visualization UX — cambridge-intelligence.com](https://cambridge-intelligence.com/graph-visualization-ux-how-to-avoid-wrecking-your-graph-visualization/) — "snowstorm" anti-pattern for isolated nodes; grouping and clustering as mitigation
+- [React Flow Layouting Overview — reactflow.dev](https://reactflow.dev/learn/layouting/layouting) — confirmed: dagre has sub-flow issues; ELK is most configurable option
+- [igraph disconnected graph layout discussion — igraph.discourse.group](https://igraph.discourse.group/t/best-layout-algorithm-for-large-graph-with-disconnected-components/177) — organic layout considers each disconnected component separately before packing
 
-### Cache Strategy (HIGH confidence)
-- [Redis Cache Invalidation — redis.io](https://redis.io/glossary/cache-invalidation/) — TTL, tag-based invalidation, sorted set TTL emulation
-- Existing codebase: `cache/stampede.py`, `cache/invalidation.py`, `cache/keys.py` — established patterns to extend
+### Existing Codebase (HIGH confidence — direct source examination)
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/utils/graph/layoutEngine.ts` — confirmed: `layoutGraph()` falls through to `layoutSimpleNodes()` (ELKjs) for table-type nodes; topological layout only applies to column-type nodes
+- `/Users/Daniel.Tehan/Code/lineage/lineage-api/services/lineage_service.py` — confirmed: `_get_database_lineage_bfs()` already returns all tables including isolated ones; no API change needed
+- `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx` — confirmed: calls `layoutGraph()` directly; no pre-processing of connected vs disconnected
 
 ---
 
-*Feature research for: In-memory graph engine and progressive depth loading for Teradata column lineage*
-*Researched: 2026-02-20*
+*Feature research for: v5.0 Database Lineage Layout (database-level graph layout improvement)*
+*Researched: 2026-02-21*

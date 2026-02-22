@@ -1,339 +1,249 @@
-# Technology Stack: In-Memory Graph Engine & Progressive Depth Loading
+# Technology Stack: Database Lineage Graph Layout Fix
 
 **Project:** Lineage — Column-Level Data Lineage for Teradata
-**Milestone:** In-memory graph engine with BFS/DFS traversal and progressive depth loading
-**Researched:** 2026-02-20
-**Confidence:** HIGH
-
-## Context
-
-This research covers only NEW stack additions for the in-memory graph engine milestone. The following are already validated and are NOT re-researched here:
-
-- Python Flask 3.x backend with layered architecture
-- React 18 + TypeScript + React Flow (@xyflow/react ^12)
-- TanStack Query v5 + Zustand for state management
-- Teradata + OpenLineage schema (OL_* tables)
-- Redis 7.0.1 + Flask-Caching 2.3.1 (cache-aside, stampede prevention)
-- Loguru structured logging, ELKjs Web Worker for graph layout
-
-**Problem being solved:** Recursive CTEs take 150ms–15s+ for first-time queries. OL_COLUMN_LINEAGE has ~165 rows in test and up to 100K rows in production. Load the full graph into memory once at startup, traverse it with BFS/DFS instead of hitting Teradata per request.
+**Milestone:** Fix database-level graph layout (connected components flow left-to-right; disconnected components arrange in compact grid)
+**Researched:** 2026-02-21
+**Confidence:** HIGH for ELKjs options, HIGH for "no new dependencies" conclusion
 
 ---
 
-## Recommended Stack Additions
+## Context
 
-### Backend: Python Graph Library
+This research covers ONLY what is needed for the database lineage layout fix milestone. The following are already validated and are NOT re-researched here:
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| networkx | >=3.6.1 | In-memory directed graph engine: BFS/DFS traversal, depth-limited expansion | Best fit for this scale. `nx.DiGraph` stores the full OL_COLUMN_LINEAGE table as an adjacency structure. `bfs_edges(depth_limit=N)` is a generator, enabling progressive depth-by-depth streaming. Pure Python, no compilation required. Production/Stable status, maintained by NumFOCUS. |
+- React Flow (@xyflow/react ^12.0.0) — graph rendering
+- ELKjs 0.9.3 (via elkjs ^0.9.0) — layout algorithm library
+- Comlink ^4.4.2 — Web Worker communication
+- Custom topological layout in `layoutGraph()` — handles column/table lineage correctly
+- `layoutSimpleNodes()` in `layoutEngine.ts` — the fallback path used by database-level graphs (table nodes without columns)
+- `topoSortDatabases()` + `separateDatabaseClusters()` — post-layout cluster separation (used in column/table lineage, NOT yet applied to database-level graphs)
 
-**Why networkx over alternatives:**
+**Problem being solved:** When `DatabaseLineageGraph` or `AllDatabasesLineageGraph` renders, the API returns table-type nodes (not column nodes). `layoutGraph()` detects zero column groups and falls back to `layoutSimpleNodes()`. That fallback calls ELK's `layered` algorithm but does not set `separateConnectedComponents` or handle disconnected components — so all disconnected tables stack into a single vertical column, which looks broken.
 
-- **vs. rustworkx 0.17.1:** Rustworkx is 3–100x faster for compute-intensive algorithms on large graphs (millions of nodes). At 10K–100K edges, the traversal latency will be dominated by Flask response serialization and ELKjs layout — not BFS. Rustworkx adds a Rust compilation dependency and a different API. The performance gain is not justified for this scale. (LOW confidence claim: "not justified" — revisit if profiling shows BFS > 5ms at 100K edges.)
-- **vs. custom dict adjacency list:** A plain `dict[str, list[str]]` works for BFS but requires reimplementing cycle detection, reverse traversal, depth tracking, and path recording. `networkx.DiGraph` provides all of this as tested library code. Estimated 100 bytes per edge: 100K edges = ~10 MB — well within Flask process memory budget.
-- **vs. graph databases (Neo4j, Memgraph):** Adds infrastructure dependency. Current Teradata + Redis is already the source of truth. No need for a third persistent store for this scale.
+**Two sub-problems:**
+1. Connected tables (with lineage edges between them) should flow left-to-right in topological order
+2. Disconnected tables (no edges to other tables in the graph) should arrange in a compact grid, not a vertical single column
 
-**Memory estimate:**
-- 10K edges: ~1 MB (well within budget)
-- 100K edges: ~10 MB (still within budget — a Flask process has 256 MB+ available)
-- NetworkX dict-of-dict overhead is ~100 bytes per edge; acceptable for this application
+---
 
-### Backend: Graph Engine Initialization Pattern
+## Recommended Approach: ELKjs Options Only — No New Dependencies
 
-No new library needed. Use the existing Flask `create_app()` factory pattern.
+**Verdict: Zero new npm packages needed.** ELKjs 0.9.3 (already installed) has all required capabilities. The fix is configuration of existing ELK options inside `layoutSimpleNodes()`.
 
-| Pattern | Why |
-|---------|-----|
-| Module-level `GraphEngine` singleton instantiated inside `create_app()` | Consistent with how `LineageRepository`, `LineageService`, and Redis cache are already initialized. Single-process Flask dev server means no multi-process memory sharing issues. If Gunicorn multi-worker is added later, use `preload_app = True` or move to Redis-backed graph (per the pitfalls doc). |
+---
 
-```python
-# lineage-api/graph/engine.py  (new module)
-import networkx as nx
-from loguru import logger
+## ELKjs Algorithm Options for This Problem
 
-class GraphEngine:
-    """In-memory lineage graph with BFS/DFS traversal."""
+### Option Set 1: Connected Component Layout (layered algorithm + separateConnectedComponents)
 
-    def __init__(self):
-        self._graph: nx.DiGraph = nx.DiGraph()
-        self._loaded = False
+The ELK `layered` algorithm already handles the left-to-right hierarchical flow correctly when nodes are connected. The missing option is `separateConnectedComponents`, which causes ELK to treat each disconnected subgraph independently before packing them together.
 
-    def load(self, connection) -> int:
-        """Load all active edges from OL_COLUMN_LINEAGE into memory."""
-        with connection.cursor() as cur:
-            cur.execute("""
-                LOCKING ROW FOR ACCESS
-                SELECT
-                    source_dataset, source_field,
-                    target_dataset, target_field,
-                    transformation_type, source_namespace, target_namespace
-                FROM OL_COLUMN_LINEAGE
-                WHERE is_active = 'Y'
-            """)
-            rows = cur.fetchall()
+| ELK Option Key | Value | Purpose | Source |
+|----------------|-------|---------|--------|
+| `elk.algorithm` | `'layered'` | Hierarchical layout, already in use | HIGH — official ELK docs |
+| `elk.direction` | `'RIGHT'` | Left-to-right flow direction, already in use | HIGH — official ELK docs |
+| `elk.separateConnectedComponents` | `'true'` | Layout each disconnected subgraph independently before arranging them | HIGH — eclipse.dev/elk/reference/options |
+| `elk.spacing.componentComponent` | `'80'` | Gap between disconnected components after layout. Default is 20px — too tight for table node cards | HIGH — eclipse.dev/elk/reference/options |
+| `elk.layered.spacing.nodeNodeBetweenLayers` | `'100'` | Horizontal gap between layers (upstream/downstream separation). Already in use | HIGH — ELK layered reference |
+| `elk.spacing.nodeNode` | `'40'` | Vertical gap between nodes within the same layer. Already in use | HIGH — ELK layered reference |
+| `elk.layered.crossingMinimization.strategy` | `'LAYER_SWEEP'` | Reduce edge crossings. Already in use | HIGH — ELK layered reference |
+| `elk.layered.nodePlacement.strategy` | `'NETWORK_SIMPLEX'` | Better vertical node positioning. Already in use | HIGH — ELK layered reference |
+| `elk.aspectRatio` | `'1.7'` | Guides component packing arrangement toward a landscape (wide) shape rather than a tall column. 1.7 ≈ 16:9 ratio | MEDIUM — eclipse.dev/elk/reference/options/org-eclipse-elk-aspectRatio |
 
-        self._graph.clear()
-        for row in rows:
-            src = f"{row[0].strip()}.{row[1].strip()}"
-            tgt = f"{row[2].strip()}.{row[3].strip()}"
-            self._graph.add_edge(src, tgt,
-                transformation_type=row[4] or "DIRECT",
-                source_namespace=row[5] or "",
-                target_namespace=row[6] or ""
-            )
+**What `separateConnectedComponents: true` does:**
+ELK first computes a layout for each connected subgraph independently (each subgraph gets its own left-to-right layered arrangement), then packs all subgraphs into the canvas using the `spacing.componentComponent` gap. The `aspectRatio` hint guides how they pack — wider values push toward horizontal rows of component groups rather than a single vertical column.
 
-        self._loaded = True
-        logger.info("Graph engine loaded", nodes=self._graph.number_of_nodes(),
-                    edges=self._graph.number_of_edges())
-        return self._graph.number_of_edges()
+**What this fixes without any new dependencies:**
+- Isolated tables (zero edges) each become a 1-node component, packed into a grid-like arrangement
+- Connected tables flow left-to-right in correct topological order within each component
+- Cross-component gaps are controlled by `spacing.componentComponent`
 
-    def bfs_upstream(self, node: str, depth: int):
-        """Yield edges in BFS order traversing upstream (reverse direction)."""
-        return nx.bfs_edges(self._graph, node, reverse=True, depth_limit=depth)
+### Option Set 2: Aspect Ratio to Control Grid Shape
 
-    def bfs_downstream(self, node: str, depth: int):
-        """Yield edges in BFS order traversing downstream."""
-        return nx.bfs_edges(self._graph, node, depth_limit=depth)
+The `elk.aspectRatio` option (type: Double, greater than 0) is supported by ELK Layered, Box, DisCo, and other algorithms. When `separateConnectedComponents` is true, ELK uses the aspect ratio hint to decide how to arrange the packed components. Setting it to approximately 1.7 (widescreen) avoids the single-column stacking problem.
 
-    @property
-    def loaded(self) -> bool:
-        return self._loaded
-```
+This is a hint, not a hard constraint. ELK will try to produce a layout close to this ratio. Confidence is MEDIUM because the exact behavior with `separateConnectedComponents` was not directly tested — it is documented but the interaction is inferred from the ELK option documentation.
 
-### Backend: Progressive/Streaming HTTP Response
+---
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Flask `Response` + `stream_with_context` | Flask 3.x (built-in) | Stream BFS results depth-by-depth as NDJSON | Zero new dependency. Flask's generator-based streaming supports chunked transfer encoding natively. `stream_with_context` keeps request context alive across generator yields. |
-| NDJSON format (`application/x-ndjson`) | Standard | Wire format for progressive graph chunks | Each depth level yields one JSON object per line. Client parses incrementally. Simpler than SSE (no event parsing overhead) and avoids the "multiple JSON objects in one chunk" parsing bug. |
+## Alternative ELK Algorithms Considered and Rejected
 
-**Why NDJSON over SSE:**
-- SSE (Server-Sent Events via `EventSource`) adds a structured event envelope (`data:`, `event:`, `id:` fields) and requires the client to use `EventSource` or a custom fetch loop with header parsing. For a depth-by-depth graph load, the structure is: yield depth-1 data, yield depth-2 data, yield done signal. This is a simple stream, not a real-time event feed. NDJSON over regular `fetch` is less code and no new browser API surface.
-- SSE also adds automatic reconnection behavior, which is counterproductive for a one-shot graph load query.
-- `EventSource` doesn't support custom request headers (needed for future auth).
+### DisCo Algorithm (`org.eclipse.elk.disco`)
 
-**Why not WebSockets:**
-WebSockets are bidirectional and require connection lifecycle management. Graph loading is a one-shot server-to-client stream. WebSocket adds complexity (connection handshake, keepalive) with no benefit for this use case.
+ELK DisCo is specifically designed for "arranging unconnected subgraphs." It uses polyomino-based packing. Its key option `elk.disco.componentCompaction.componentLayoutAlgorithm` lets you specify a secondary algorithm (e.g., `layered`) to apply inside each component.
 
-**Flask streaming pattern:**
-```python
-# lineage-api/routes/openlineage.py (modified)
-from flask import Response, stream_with_context, request
-import json
+**Why not DisCo:** DisCo is designed for graphs where ALL components are disconnected. In the database lineage view, some tables are connected (they have lineage edges between them) and some are isolated. Using DisCo with `componentLayoutAlgorithm: 'layered'` works in theory, but the `layered` algorithm has already proven to hang on dense column-level graphs in this codebase (see `layoutEngine.ts` comment: "Replaces ELK which hangs indefinitely on dense column-level graphs"). Even though database-level graphs are simpler (fewer nodes, table-level edges only), the risk of the same hang on a large real Teradata database with hundreds of tables is not justified. The `layered + separateConnectedComponents` path is safer because it uses the same algorithm that already works for the `layoutSimpleNodes()` fallback.
 
-@openlineage_bp.route('/api/v2/openlineage/lineage/<dataset_id>/<field_name>/stream')
-def stream_column_lineage(dataset_id, field_name):
-    direction = request.args.get('direction', 'both')
-    max_depth = int(request.args.get('maxDepth', 5))
+**Confidence:** MEDIUM — DisCo would likely work at this node count (tens to low hundreds of tables), but it is untested in this codebase and adds an algorithm switch that complicates future maintenance.
 
-    def generate():
-        for depth in range(1, max_depth + 1):
-            chunk = graph_engine.get_depth_slice(dataset_id, field_name, direction, depth)
-            yield json.dumps({"depth": depth, "nodes": chunk["nodes"], "edges": chunk["edges"]}) + "\n"
-        yield json.dumps({"depth": "done", "nodes": [], "edges": []}) + "\n"
+### Box Algorithm (`org.eclipse.elk.box`)
 
-    return Response(
-        stream_with_context(generate()),
-        mimetype='application/x-ndjson'
-    )
-```
+ELK Box "packs unconnected boxes." It does not route edges or respect directionality. It would arrange all tables as a compact grid but would lose all left-to-right topological ordering for connected tables.
 
-### Frontend: Incremental Graph Rendering
+**Why not Box:** The database lineage view has edges between tables. Box ignores edges entirely. It would show a compact grid but with edges drawn as chaos across the grid. Worse than the current single-column layout for understanding lineage.
 
-No new libraries required. Use the existing React Flow + TanStack Query + Zustand stack.
+### Stress / Force (`org.eclipse.elk.stress`, `org.eclipse.elk.force`)
 
-| Pattern | Technology | Why |
-|---------|------------|-----|
-| Depth-by-depth accumulation | `fetch` + `ReadableStream` + custom hook | Axios does not natively support streaming. Use native `fetch` with `response.body.getReader()` to consume NDJSON. Parse each newline-delimited JSON object as it arrives. |
-| Incremental node/edge accumulation | Zustand `useLineageStore.setGraph()` | Existing store already holds `nodes` and `edges`. Extend with an `appendGraph(newNodes, newEdges)` action that merges depth slices into the existing graph state without replacing it. |
-| Progressive React Flow rendering | `useReactFlow().setNodes()` + `hidden` property | React Flow's `hidden` property defers rendering of nodes not yet visible. As each depth arrives, toggle `hidden: false` for new nodes. O(1) node access via `getNode()`. |
-| No layout re-run on each depth | ELKjs Web Worker (existing) | Run ELKjs layout once after all depths loaded, or after each depth with incremental addition. Avoid running layout for every single node addition — batch by depth. |
+Force-directed layouts create organic blob arrangements. They do not enforce left-to-right directionality and produce non-deterministic results. Not appropriate for a directed acyclic graph representing data flow.
 
-**Why native `fetch` over Axios for streaming:**
-Axios buffers the entire response before resolving the Promise. For streaming NDJSON, use `fetch()` with `response.body.getReader()`. The existing Axios `apiClient` remains for all non-streaming endpoints (search, metadata, impact analysis). Add one custom hook for the streaming lineage endpoint only.
+---
 
-**Frontend streaming hook pattern:**
+## Exact Configuration: What to Change in `layoutSimpleNodes()`
+
+The fix is a targeted change to the `layoutOptions` object inside `layoutSimpleNodes()` in `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/utils/graph/layoutEngine.ts`.
+
+**Current configuration (lines 619–631):**
 ```typescript
-// lineage-ui/src/api/hooks/useLineageStream.ts (new file)
-import { useCallback, useRef } from 'react';
-import { useLineageStore } from '../../stores/useLineageStore';
-
-export function useLineageStream() {
-  const appendGraph = useLineageStore((s) => s.appendGraph);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const streamLineage = useCallback(async (
-    datasetId: string,
-    fieldName: string,
-    direction: string,
-    maxDepth: number
-  ) => {
-    abortRef.current?.abort();
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-
-    const url = `/api/v2/openlineage/lineage/${encodeURIComponent(datasetId)}/${encodeURIComponent(fieldName)}/stream?direction=${direction}&maxDepth=${maxDepth}`;
-    const response = await fetch(url, { signal: ctrl.signal });
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';  // Keep incomplete last line
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        const chunk = JSON.parse(line);
-        if (chunk.depth !== 'done') {
-          appendGraph(chunk.nodes, chunk.edges);
-        }
-      }
-    }
-  }, [appendGraph]);
-
-  return { streamLineage, abort: () => abortRef.current?.abort() };
-}
+const elkGraph: ElkNode = {
+  id: 'root',
+  layoutOptions: {
+    'elk.algorithm': 'layered',
+    'elk.direction': direction,
+    'elk.spacing.nodeNode': String(nodeSpacing),
+    'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+    'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+  },
+  children: elkNodes,
+  edges: elkEdges,
+};
 ```
+
+**Recommended configuration:**
+```typescript
+const elkGraph: ElkNode = {
+  id: 'root',
+  layoutOptions: {
+    'elk.algorithm': 'layered',
+    'elk.direction': direction,
+    'elk.separateConnectedComponents': 'true',
+    'elk.spacing.componentComponent': '80',
+    'elk.aspectRatio': '1.7',
+    'elk.spacing.nodeNode': String(nodeSpacing),
+    'elk.layered.spacing.nodeNodeBetweenLayers': String(layerSpacing),
+    'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+    'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+  },
+  children: elkNodes,
+  edges: elkEdges,
+};
+```
+
+**Three options added:**
+1. `elk.separateConnectedComponents: 'true'` — the core fix for disconnected table layout
+2. `elk.spacing.componentComponent: '80'` — adequate gap between clusters (default 20px is too tight for table node cards which are 280–400px wide)
+3. `elk.aspectRatio: '1.7'` — guides packing toward widescreen rather than tall column
+
+All ELK option values must be passed as strings in the JavaScript API.
+
+---
+
+## ELKjs Timeout Risk Assessment
+
+The existing `layoutGraph()` abandoned ELK for column/table lineage because it "hangs indefinitely on dense column-level graphs." That was a graph with potentially thousands of column nodes and thousands of edges.
+
+The `layoutSimpleNodes()` path used by database lineage operates at the table level: tens to low hundreds of tables, with table-level edges (far fewer than column-level). ELK `layered` at this scale does not hang. The `layoutSimpleNodes()` function already calls ELK successfully today — the only issue is the single-column layout artifact. Adding `separateConnectedComponents` does not increase layout computation time meaningfully at this node count.
+
+**Risk: LOW.** No timeout mitigation needed for this configuration change.
 
 ---
 
 ## What NOT to Add
 
-| Library | Why to Avoid |
-|---------|-------------|
-| rustworkx | Overkill at 10K–100K edges. Adds Rust compilation build dependency. Different API from networkx. Performance gain materializes only at millions of nodes and when BFS is the bottleneck. |
-| Flask-SSE (singingwolfboy/flask-sse) | Requires Redis pub/sub for SSE. Already have Redis, but SSE adds complexity for a use case (one-shot graph load) that plain NDJSON serves better. |
-| WebSockets (Flask-SocketIO) | Bidirectional protocol with connection lifecycle overhead. Graph loading is server-to-client one-shot stream. Wrong tool. |
-| graph-tool | C++ extension, complex installation, GPL license. Research-oriented library. Not suited for a Flask service needing simple BFS. |
-| igraph (python-igraph) | Better performance than networkx, but requires C library. Installation on macOS/Linux varies. Benefit doesn't justify the dev environment complexity at this scale. |
-| ndjson-readablestream (npm) | Unnecessary npm dependency. Native `fetch` + manual line splitting handles NDJSON with ~10 lines of TypeScript. |
-| TanStack DB | Experimental (v0.5 as of 2026). Designed for synchronized client-side collections, not one-shot graph streaming. Current TanStack Query v5 handles the progressive loading pattern via `appendGraph`. |
-| GraphQL subscriptions | Architectural overhaul. The existing REST API is a deliberate and correct choice for this application. |
+| Avoid | Why | Instead |
+|-------|-----|---------|
+| `@elkg/layout-options` or any ELK option helper library | Does not exist as a standard package; option keys are passed as plain strings | Pass options as string key-value pairs directly |
+| dagre / @dagrejs/dagre | Dagre was EOL/unmaintained as of 2023. This codebase uses ELKjs intentionally. Adding dagre adds a second layout dependency with lower capability | Use ELK layered algorithm with proper options |
+| d3-dag | Adds D3 as a layout dependency alongside ELK. No benefit for this specific fix | Extend existing ELKjs configuration |
+| A separate grid layout implementation | The custom topological layout in `layoutGraph()` has ~100 lines of bespoke positioning code. Duplicating that pattern for the disconnected case is unnecessary when ELK handles it natively | `elk.separateConnectedComponents` in `layoutSimpleNodes()` |
+| DisCo algorithm for all database graphs | Untested in this codebase; risk of hang on large graphs; maintenance overhead of switching algorithms per view | `layered + separateConnectedComponents` handles both cases |
 
 ---
 
-## Installation
+## Integration with Existing Architecture
 
-```bash
-# Backend: Add networkx to requirements.txt
-# No other new Python dependencies required
+### Where the Fix Lives
 
-pip install networkx>=3.6.1
+Single file, single function:
+- File: `/Users/Daniel.Tehan/Code/lineage/lineage-ui/src/utils/graph/layoutEngine.ts`
+- Function: `layoutSimpleNodes()` (lines 583–707)
+- Change: Add 3 ELK options to the `layoutOptions` object
 
-# Frontend: No new npm packages required
-# Native fetch API handles NDJSON streaming
-# Existing React Flow, Zustand, TanStack Query handle incremental rendering
-```
+No changes needed to:
+- `DatabaseLineageGraph.tsx` — calls `layoutGraph()` which delegates to `layoutSimpleNodes()`
+- `AllDatabasesLineageGraph.tsx` — same
+- `layout.worker.ts` — the Web Worker wraps `layoutGraph()`, no change needed
+- `ClusterBackground.tsx` — reads node positions from React Flow store after layout, not affected
+- `topoSortDatabases()` / `separateDatabaseClusters()` — these already exist and work; they're called for multi-database column lineage. They are NOT called for database-level graphs (the `layoutSimpleNodes()` path has no post-layout cluster separation). If post-layout cluster separation is still needed after the ELK fix, it can be added — but the `separateConnectedComponents` option should handle component separation sufficiently.
 
-**Updated requirements.txt additions:**
-```
-# In-memory graph engine for BFS/DFS lineage traversal
-networkx>=3.6.1
-```
+### ELKjs Web Worker Compatibility
 
----
+`layoutSimpleNodes()` is called inside the Web Worker via `layout.worker.ts` → `layoutGraph()`. The ELK options change is pure configuration — no new imports, no new Worker messages, no new Comlink types. The Worker path is fully compatible.
 
-## Integration Points with Existing Architecture
+### Test Impact
 
-### Backend Integration
-
-| Existing Component | Change |
-|-------------------|--------|
-| `python_server.py` → `create_app()` | Add `GraphEngine` instantiation after `init_cache(app)`. Call `graph_engine.load(connection)` at startup. Pass `graph_engine` to a new `GraphLineageService` (or extend `LineageService`). |
-| `LineageService` | Add new methods that delegate to `GraphEngine` instead of `LineageRepository` CTEs. Keep CTE methods as fallback if graph not loaded. |
-| `LineageRepository` (CTE methods) | Retain as-is. Used for cache warm-up fallback and correctness verification during development. |
-| Redis cache | Graph engine bypasses Redis for traversal (in-memory is faster). Redis remains for expensive metadata queries (dataset info, field types). Cache invalidation: call `graph_engine.load()` after lineage mutation (populate_lineage.py runs). |
-| Routes (`routes/openlineage.py`) | Add new streaming endpoints alongside existing endpoints. Existing endpoints remain unchanged — they serve cached or CTE results. |
-
-### Frontend Integration
-
-| Existing Component | Change |
-|-------------------|--------|
-| `useLineageStore` | Add `appendGraph(nodes, edges)` action that merges new nodes/edges deduplicating by `id`. Add `isStreaming: boolean` and `streamingDepth: number` state. |
-| `useLineage.ts` | Keep existing `useQuery`-based hook. Add new `useLineageStream.ts` hook for streaming endpoint. Caller chooses which to use based on feature flag or depth. |
-| `LineageGraph` component | No change to React Flow rendering logic. The `setGraph`/`appendGraph` state updates trigger existing React Flow re-renders. |
-| ELKjs Web Worker | Run layout after each complete depth batch, not per-node. Existing worker interface unchanged — just call it more frequently during streaming. |
+The existing test suite in `layoutEngine.test.ts` covers `layoutGraph()` with column nodes. The `layoutSimpleNodes()` path is tested indirectly when table/database nodes are passed (see "assigns databaseNode type for database nodes in fallback" test). Adding tests for the multi-component arrangement would be valuable — specifically:
+- Table nodes with no edges should be positioned without vertical single-column stacking
+- Table nodes with edges should flow left-to-right (existing tests already cover this via `layoutGraph()` — but `layoutSimpleNodes()` has no equivalent test for direction ordering)
 
 ---
 
 ## Version Compatibility
 
-| Package | Current | Recommended | Notes |
-|---------|---------|-------------|-------|
-| networkx | not installed | >=3.6.1 | Latest stable: 3.6.1 (Dec 8, 2025). Requires Python >=3.11. Flask app already on Python 3.x — verify >=3.11. |
-| Flask | >=3.0.0 | unchanged | `stream_with_context` and generator responses are stable in Flask 3.x. |
-| @xyflow/react | ^12.0.0 | unchanged | `setNodes`, `addNodes`, `hidden` property all available in v12. |
-| @tanstack/react-query | ^5.17.0 | unchanged | Not used for streaming endpoint; `useLineageStream` uses native fetch. |
+| Package | Installed | Notes |
+|---------|-----------|-------|
+| elkjs | 0.9.3 | `separateConnectedComponents`, `spacing.componentComponent`, and `aspectRatio` are all core ELK options supported since ELK 0.7.x. No version bump needed. |
+| @xyflow/react | ^12.0.0 | No changes to React Flow usage. |
+| comlink | ^4.4.2 | No changes to Worker communication. |
 
-**Python version check:** networkx 3.6.1 requires Python !=3.14.1, >=3.11. Confirm Flask server uses Python 3.11+.
+---
+
+## Installation
+
+No new packages. Zero `npm install` required.
 
 ---
 
 ## Alternatives Considered
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| Graph library | networkx 3.6.1 | rustworkx 0.17.1 | 3–100x faster but only matters at millions of edges; adds Rust build dependency; different API |
-| Graph library | networkx 3.6.1 | custom dict adjacency | Saves ~10 MB RAM at 100K edges but requires reimplementing BFS, cycle detection, reverse traversal, path tracking |
-| Streaming format | NDJSON over HTTP | SSE (EventSource) | SSE structured protocol overhead unnecessary; EventSource doesn't support custom headers; auto-reconnect counterproductive for one-shot loads |
-| Streaming format | NDJSON over HTTP | WebSocket | Bidirectional connection overhead for a unidirectional stream; requires Flask-SocketIO |
-| Frontend streaming | native fetch | Axios streaming | Axios buffers full response before resolving; native fetch with ReadableStream is the correct API for streaming |
-| Graph init | startup singleton in `create_app()` | lazy load on first request | First request still bears Teradata load latency. Startup load amortizes cost; consistent with how Redis cache is initialized. |
+| Recommended | Alternative | Why Not |
+|-------------|-------------|---------|
+| ELK `layered` + `separateConnectedComponents: true` | ELK `disco` with `componentLayoutAlgorithm: layered` | DisCo is designed for fully-disconnected graphs; in this codebase ELK has a history of hanging on complex graphs; `layered + separateConnectedComponents` reuses the same proven algorithm path |
+| ELK `layered` + `separateConnectedComponents: true` | ELK `box` | Box ignores edges — produces compact grid but loses all directional left-to-right ordering |
+| `elk.aspectRatio: '1.7'` hint for grid shape | Custom post-layout grid rearrangement | ELK handles it natively; custom code adds maintenance burden and is fragile to graph size changes |
+| Tune `spacing.componentComponent: '80'` | Leave at default 20px | 20px is insufficient for table node cards (280–400px wide); components would visually merge |
 
 ---
 
 ## Confidence Assessment
 
-| Area | Confidence | Basis |
-|------|------------|-------|
-| networkx as graph library | HIGH | Official docs, PyPI (3.6.1 Dec 2025), verified BFS API with depth_limit |
-| NDJSON over Flask generator | HIGH | Official Flask streaming docs, NDJSON spec, pattern proven in production LLM streaming |
-| native fetch for streaming | HIGH | MDN ReadableStream API, well-established pattern |
-| Memory estimate (100 bytes/edge) | MEDIUM | NetworkX mailing list, community analysis — not official benchmark |
-| rustworkx performance claim (3–100x) | HIGH | Official rustworkx benchmark page, academic paper |
-| "networkx sufficient at 100K edges" | MEDIUM | Extrapolated from lineage analysis article (9s for 100K traversals with BFS — likely overkill for single-column traversal) |
-| Multi-worker memory sharing caution | HIGH | Gunicorn official documentation, Flask deployment docs |
+| Claim | Confidence | Basis |
+|-------|------------|-------|
+| `separateConnectedComponents` fixes disconnected-table vertical stacking | HIGH | Official ELK option documentation; option is specifically described as treating disconnected subgraphs independently |
+| `spacing.componentComponent` controls inter-component gap when `separateConnectedComponents` is true | HIGH | Official ELK option docs explicitly state "only relevant if separateConnectedComponents is activated" |
+| `aspectRatio: 1.7` guides packing toward widescreen | MEDIUM | Official ELK docs describe it as a hint for overall proportions; exact interaction with `separateConnectedComponents` packing is inferred from documentation, not tested in this codebase |
+| ELK will not hang at database-level node counts (tens to low hundreds of tables) | HIGH | Current `layoutSimpleNodes()` already calls ELK successfully; hang issue was specific to thousands of column nodes |
+| No new npm packages needed | HIGH | All required ELK algorithms and options are in the already-installed elkjs 0.9.3 |
+| DisCo algorithm would work for this use case | MEDIUM | DisCo is documented for this purpose; untested in this codebase; risk profile is higher than using already-working `layered` algorithm |
 
 ---
 
 ## Sources
 
-**NetworkX:**
-- [networkx PyPI — Latest version 3.6.1, Dec 2025](https://pypi.org/project/networkx/) (HIGH confidence)
-- [NetworkX bfs_edges API — depth_limit parameter](https://networkx.org/documentation/stable/reference/algorithms/generated/networkx.algorithms.traversal.breadth_first_search.bfs_edges.html) (HIGH confidence)
-- [Data Lineage Analysis with Python and NetworkX — Rittman Mead, 2024](https://www.rittmanmead.com/blog/2024/08/data-lineage-analysis-with-python-and-networkx/) (MEDIUM confidence — real-world lineage use case with BFS performance data)
-- [NetworkX memory overhead discussion — Google Groups](https://groups.google.com/g/networkx-discuss/c/5zZ_OBu-wYA) (MEDIUM confidence)
-
-**rustworkx:**
-- [rustworkx PyPI — Version 0.17.1, Aug 2025](https://pypi.org/project/rustworkx/) (HIGH confidence)
-- [rustworkx Benchmark Comparisons](https://www.rustworkx.org/benchmarks.html) (HIGH confidence)
-- [rustworkx GitHub — Qiskit/rustworkx](https://github.com/Qiskit/rustworkx) (HIGH confidence)
-
-**Flask Streaming:**
-- [Flask Streaming Documentation — Official 3.1.x](https://flask.palletsprojects.com/en/stable/patterns/streaming/) (HIGH confidence)
-- [Streaming JSON with Flask — Al4 Blog](https://blog.al4.co.nz/2016/01/streaming-json-with-flask/) (MEDIUM confidence)
-- [NDJSON 101: Streaming Over HTTP — APIdog](https://apidog.com/blog/ndjson/) (MEDIUM confidence)
-
-**Frontend Streaming:**
-- [Streaming Data with Fetch and NDJSON — David Walsh](https://davidwalsh.name/streaming-data-fetch-ndjson) (MEDIUM confidence)
-- [Fetching JSON over Streaming HTTP — Pamela Fox](http://blog.pamelafox.org/2023/08/fetching-json-over-streaming-http.html) (MEDIUM confidence)
-- [MDN: Using Readable Streams](https://developer.mozilla.org/en-US/docs/Web/API/Streams_API/Using_readable_streams) (HIGH confidence)
-
-**React Flow:**
-- [React Flow Performance Documentation](https://reactflow.dev/learn/advanced-use/performance) (HIGH confidence)
-- [React Flow Large Graph Discussion](https://github.com/xyflow/xyflow/discussions/4975) (MEDIUM confidence)
-
-**Multi-worker Memory:**
-- [Sharing data across Gunicorn workers — JG Lee, Medium](https://medium.com/@jgleeee/sharing-data-across-workers-in-a-gunicorn-flask-application-2ad698591875) (MEDIUM confidence)
-- [Flask Gunicorn Deployment Docs](https://flask.palletsprojects.com/en/stable/deploying/gunicorn/) (HIGH confidence)
+- [ELK Layered Algorithm Reference — eclipse.dev](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html) — layered algorithm options (HIGH confidence)
+- [ELK separateConnectedComponents Option — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-separateConnectedComponents.html) — option behavior true vs false (HIGH confidence)
+- [ELK spacing.componentComponent Option — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-spacing-componentComponent.html) — default 20px, only active with separateConnectedComponents (HIGH confidence)
+- [ELK aspectRatio Option — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-aspectRatio.html) — Double, width/height quotient, supported by layered (MEDIUM confidence for interaction with component packing)
+- [ELK DisCo Algorithm Reference — eclipse.dev](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-disco.html) — DisCo purpose and options (HIGH confidence for description; MEDIUM confidence for suitability in this codebase)
+- [ELK Box Algorithm Reference — eclipse.dev](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-box.html) — Box algorithm for edge-free graphs (HIGH confidence)
+- [ELK Options Reference Index — eclipse.dev](https://eclipse.dev/elk/reference/options.html) — full options list (HIGH confidence)
+- [elkjs GitHub — kieler/elkjs](https://github.com/kieler/elkjs) — confirms included algorithms: layered, stress, mrtree, radial, force, disco (HIGH confidence)
+- [elkjs npm — installed version 0.9.3](https://www.npmjs.com/package/elkjs) — version confirmed via `npm list elkjs` in this repository (HIGH confidence)
+- [layoutEngine.ts — existing codebase](https://github.com) — analysis of `layoutSimpleNodes()` current options and `layoutGraph()` ELK hang comment (HIGH confidence — first-party)
+- [considerModelOrder.components ELK option — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-layered-considerModelOrder-components.html) — component ordering strategies (HIGH confidence; not needed for this fix but documents available ordering customization)
 
 ---
 
-*Stack research for: In-memory graph engine with BFS/DFS traversal and progressive depth loading*
-*Researched: 2026-02-20*
-*Confidence: HIGH for core choices (networkx, Flask NDJSON streaming, native fetch). MEDIUM for memory estimates at production scale.*
+*Stack research for: Database lineage graph layout fix — connected left-to-right, disconnected compact grid*
+*Researched: 2026-02-21*
+*Confidence: HIGH for core approach (ELKjs options only, no new packages). MEDIUM for aspectRatio interaction with component packing.*

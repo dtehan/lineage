@@ -1,336 +1,270 @@
 # Pitfalls Research
 
-**Domain:** In-memory graph engine + progressive loading added to existing Flask+React lineage app
-**Researched:** 2026-02-20
+**Domain:** Adding mixed layout strategies to existing ELKjs + React Flow database lineage graph
+**Researched:** 2026-02-21
 **Confidence:** HIGH
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Multi-Worker Inconsistency — Each Gunicorn Worker Builds Its Own Graph
+### Pitfall 1: Kahn Sort-Every-Iteration Is O(n log n) per Layer, Not O(V+E)
 
 **What goes wrong:**
-The in-memory graph is a Python dict (or networkx/igraph object) stored as a module-level singleton. Gunicorn spawns N worker processes using `fork()`. Each worker gets its own independent address space. Worker 1 builds the graph from Teradata and serves fast BFS traversals. Worker 2 hasn't built the graph yet — its first request triggers a full Teradata load. Worker 3 built the graph 2 minutes after Worker 1, so it reflects newer ETL data. Users hitting different workers see different lineage results for identical queries. This is functionally indistinguishable from "the app is broken" for end users.
+The existing `layoutGraph()` in `layoutEngine.ts` calls `topoQueue.sort()` inside the BFS while-loop — once per dequeue. Standard Kahn's algorithm is O(V+E) with a plain queue. Sorting on each iteration degrades it to O(V log V + E) in the best case, O(V² log V) in the worst case for dense graphs. For 50-table lineage this is invisible. For a database-lineage view with 400+ table nodes the sort-per-iteration is called 400+ times, and each sort operates on the full remaining queue. At 400 nodes and average fan-out of 5 this is measurable jank (10-50ms extra) in the layout-worker thread. The comment "deterministic tie-breaking" justifies the sort, but the sort only needs to happen once per layer, not once per dequeue.
 
 **Why it happens:**
-Gunicorn's process model is the exact wrong architecture for in-memory singletons. Each worker process is allocated its own address space — modifying a global variable in one process does not affect the same variable in other processes. Developers test with a single worker in development, everything works, and the problem only surfaces in multi-worker production. The existing Redis cache masks this because Redis is shared, but an in-memory graph is not Redis.
+The developer correctly wanted deterministic output but applied sorting too frequently. The canonical Kahn's algorithm uses a FIFO queue — sorting is not required for correctness, only for output stability. Determinism can be achieved by sorting once at the start (all zero-in-degree nodes sorted) and sorting each layer's candidates once before pushing them, rather than sorting the entire queue repeatedly.
 
 **How to avoid:**
-1. Design the graph as a read-only structure built once at startup using Gunicorn's `--preload` flag — the master builds the graph, workers inherit it via copy-on-write, and reads don't trigger CoW page duplication
-2. Use `--preload` only if DB connections are NOT opened at import time (they aren't in this app's `create_app()` factory pattern — the connection opens inside the factory, which is safe)
-3. Limit to `--workers 1` with `--threads N` if the preload pattern proves unreliable — threads share address space natively
-4. Accept that writes (ETL-triggered graph rebuilds) cannot propagate to forked workers without an external coordination mechanism (Redis pub/sub for rebuild notifications)
-5. Test explicitly with `--workers 4` in staging — single-worker dev hides this entirely
+Replace the inner `topoQueue.sort()` call with a sort applied only when a new batch of zero-in-degree nodes is discovered — i.e., sort the newly-added candidates before appending to the queue, not the entire queue on every iteration. In the `topoSortDatabases` function the same pattern exists and should be corrected simultaneously. Benchmark with `layoutEngine.bench.ts` at 400 nodes before and after to validate the fix.
 
 **Warning signs:**
-- Lineage results differ between requests for the same column at the same depth
-- Some requests are fast (graph hit) and others are slow (graph miss) with no obvious pattern
-- Log shows "building graph" multiple times per restart
-- App works perfectly in `flask run` but fails mysteriously in production Gunicorn
+- `layoutEngine.bench.ts` shows non-linear scaling beyond 200 nodes — 400 nodes takes more than 2x the time of 200 nodes
+- Layout worker thread spends > 50% of its time in sort operations (visible via Chrome DevTools Performance flame chart)
+- The `elkTime` metric in `LayoutMetrics` grows super-linearly with node count
 
 **Phase to address:**
-Phase 1 (In-Memory Graph Engine) — architectural decision must be made before any code is written. The choice of preload vs. threads vs. external coordination shapes everything else.
+Phase 1 (layout engine refactoring) — fix before adding mixed layout strategies, otherwise any benchmark comparisons are tainted by the sorting overhead.
 
 ---
 
-### Pitfall 2: Graph Rebuild Race Condition During ETL Updates
+### Pitfall 2: ClusterBackground Bounding Box Uses Stale `measured` Dimensions After Layout
 
 **What goes wrong:**
-ETL job finishes at 2 AM, calls `/api/v2/cache/invalidate` (which already exists), then triggers graph rebuild. The graph rebuild is implemented as: acquire lock → drop old graph dict → load new rows from Teradata → build new adjacency dicts → release lock. A request arrives at `acquire lock` while the rebuild is in progress — it blocks. Then ETL is delayed, the rebuild takes 45 seconds on 100K rows, and 30 blocked requests pile up behind the lock. When the lock releases, 30 BFS traversals execute simultaneously on the fresh graph, CPU spikes to 100%, and the app becomes unresponsive for users.
+`ClusterBackground.tsx` reads `node.measured?.width` and `node.measured?.height` from the React Flow store's `nodeLookup` to compute cluster bounding boxes. After a layout runs and `setNodes` is called with new positions, React Flow renders nodes with their new positions but the `measured` dimensions are only populated after the ResizeObserver fires — which happens on the next browser paint, not synchronously. If `ClusterBackground` reads `nodeLookup` immediately after `setNodes`, it may see `node.measured` as `undefined` or reflecting the pre-layout dimensions, causing cluster boxes to render at incorrect sizes before snapping to the correct size on the next paint. On large graphs (400+ nodes), the ResizeObserver firings are staggered — some nodes report measured dimensions before others, making cluster boxes visibly resize during the render sequence.
 
 **Why it happens:**
-"Replace the graph atomically" sounds simple but is a two-phase operation: tear down + rebuild. Any gap between those phases is a window for blocked or failed requests. Developers don't anticipate rebuild time at production data scale (100K rows = non-trivial load time).
+React Flow's architecture separates position (set externally via `setNodes`) from dimensions (measured internally by ResizeObserver). There is no synchronous way to get measured dimensions after a layout call — the only correct time to read `measured` is after the component has rendered AND the ResizeObserver has fired. The `useMemo` in `ClusterBackground` subscribes to `nodeInternals` changes, which fire on every ResizeObserver update, so cluster boxes resize incrementally as nodes measure themselves.
 
 **How to avoid:**
-1. Use a read-write lock pattern (`readerwriterlock` library) — allow unlimited concurrent reads, block only during write (rebuild)
-2. Blue-green graph pattern: build the new graph into a separate variable (`_graph_building`), then atomically swap the reference (`_graph_active = _graph_building`) — zero downtime during rebuild
-3. Never destroy the old graph before the new one is fully built — serve stale data during rebuild rather than blocking or erroring
-4. Log rebuild start/end times and row counts — rebuild time is a key operational metric
-5. Add a circuit breaker: if rebuild takes > 60s, abandon it and keep the old graph
+1. Pre-calculate node dimensions in the layout engine using the same formulas as the node components (`calculateTableNodeWidth`, `calculateTableNodeHeight`) and attach them as `width`/`height` on the node object passed to `setNodes`. React Flow uses these as initial dimensions before measurement completes, making the cluster bounding box correct from the first render.
+2. Add `width` and `height` to every node in `layoutedNodes` before calling `setNodes` — the existing `calculateTableNodeWidth` and `calculateTableNodeHeight` functions already exist for this purpose.
+3. Gate cluster box rendering with a `isLayoutComplete` flag that transitions to `true` only after the double-`requestAnimationFrame` in `DatabaseLineageGraph.tsx` fires (`stage === 'complete'`).
 
 **Warning signs:**
-- Requests queue up immediately after ETL runs
-- "Building graph" log entry followed by timeout errors
-- CPU spike immediately after rebuild completes (pent-up requests)
-- P99 latency spikes on ETL schedule cadence
+- Cluster boxes visibly resize/reposition during graph load — start small then expand to correct size
+- `ClusterBackground` re-renders many times in React Profiler during a single graph load
+- Cluster boxes appear to "catch up" to node positions with a visible delay on large graphs
 
 **Phase to address:**
-Phase 1 (In-Memory Graph Engine) — rebuild concurrency must be designed into the initial architecture, not added as a patch after production incidents.
+Phase 1 (layout foundation) — the width/height pre-calculation fix prevents the problem permanently and makes cluster boxes correct from the first render.
 
 ---
 
-### Pitfall 3: Memory Leak in Long-Running Flask Process from Graph Object Accumulation
+### Pitfall 3: Mixed Layout Strategy Breaks the `separateDatabaseClusters` Bounding-Box Assumption
 
 **What goes wrong:**
-The graph is rebuilt every ETL cycle. Each rebuild allocates a new set of Python dicts for adjacency lists (or a new networkx Graph object). The old graph object is dereferenced but Python's garbage collector doesn't immediately reclaim memory — especially if any request-handler closures or cache entries hold references to the old graph. After 10 ETL cycles, the process RSS grows from 400 MB to 1.2 GB. With Gunicorn workers, this multiplies by worker count. The app runs for 3 weeks until the server OOMs. This is invisible in dev (one rebuild) and staging (manual restarts).
+`separateDatabaseClusters` assumes all nodes within a database are contiguous along the primary axis after ELK/topological layout — it shifts entire database groups along X (or Y) to prevent overlap. When a mixed layout strategy is introduced (e.g., isolated tables without lineage use a grid layout, connected tables use hierarchical layout), nodes from the same database can end up in non-contiguous X ranges. Applying `separateDatabaseClusters` to a mixed layout produces incorrect shifts: the function computes `lo` and `hi` from the min/max positions of all database nodes, then applies a uniform offset. But if database A has two table-groups — one at x=0 and one at x=800 (because one is isolated, one is connected) — the shift moves both groups together, ignoring the gap between them. The bounding box becomes artificially large, making the cluster box for database A engulf the adjacent database B's territory.
 
 **Why it happens:**
-Python's GC collects objects with zero references, but cyclic references (common in graph data structures — node A points to edge, edge points to node A) require GC cycle collection, which is not immediate. Networkx graphs have cyclic internal structures. Closures in request handlers that capture a reference to the old graph prevent collection even after the graph variable is reassigned.
+`separateDatabaseClusters` was designed for single-component lineage where all tables in a database form a contiguous block. Multi-component graphs break this assumption by design.
 
 **How to avoid:**
-1. Use Python's `gc.collect()` explicitly after graph swaps to force immediate cycle collection
-2. Track process RSS before and after each rebuild with `resource.getrusage(resource.RUSAGE_SELF).ru_maxrss` — log it as a metric
-3. Use `tracemalloc` or `memray` to profile memory in staging with simulated ETL cycles
-4. Prefer plain Python dicts over networkx for the adjacency structure — networkx adds 5-10x memory overhead per node/edge due to attribute dicts (pure adjacency: `{node_id: set(neighbor_ids)}` is far leaner)
-5. Set Gunicorn `--max-requests N` and `--max-requests-jitter M` to recycle workers after N requests, capping leak accumulation
-6. Avoid storing the full `OL_COLUMN_LINEAGE` row data in the graph — store only the IDs and transformation type; fetch metadata on demand from Redis/DB
+Before introducing mixed layout strategies, refactor `separateDatabaseClusters` to compute the bounding box correctly for non-contiguous node groups. Two approaches:
+1. Group nodes by (database, connected-component) pairs, separate each pair independently, then compute the per-database bounding box from the post-separation positions.
+2. Run `separateDatabaseClusters` only after the mixed layout positions are finalized — i.e., as the absolute last step, reading actual node positions rather than pre-computed extents.
+
+Always verify the bounding box output against `ClusterBackground`'s rendering by running the visual regression test after any `separateDatabaseClusters` change.
 
 **Warning signs:**
-- Process RSS grows monotonically after each ETL cycle
-- `gc.get_count()` shows growing generation-2 count between rebuilds
-- Memory reported as "available" in Redis (`INFO memory`) stays flat while Flask process RSS grows
-- Workers being killed by OOM killer in production logs
+- Cluster boxes for databases with isolated tables are wider than expected
+- Isolated table nodes appear inside the cluster box of a different database
+- `separateDatabaseClusters` produces a non-zero shift for a database that should not move (e.g., the first in topological order)
 
 **Phase to address:**
-Phase 1 (In-Memory Graph Engine) — data structure choice (plain dict vs networkx) and GC discipline must be established at design time, not retrofitted.
+Phase 1 (layout foundation) — `separateDatabaseClusters` must be refactored before mixed layout is introduced. Do not add connected-component analysis until the separation step handles non-contiguous node groups correctly.
 
 ---
 
-### Pitfall 4: Stale In-Memory Graph After ETL — Three-Layer Consistency Problem
+### Pitfall 4: `onlyRenderVisibleElements` Hides Nodes Before ClusterBackground Can Measure Them
 
 **What goes wrong:**
-The system now has three sources of truth: Teradata (authoritative), Redis (cached query results), and the in-memory graph (derived from Teradata). ETL updates Teradata. The cache invalidation endpoint clears Redis. But the in-memory graph is not rebuilt — it silently serves pre-ETL lineage. Users hit the "Refresh" button, which calls `?refresh=true`, which bypasses Redis, which triggers a BFS on the in-memory graph — which is still stale. The user sees "fresh" data that is actually old. This is worse than obvious staleness because the user was explicitly told data is refreshed.
+Both `DatabaseLineageGraph.tsx` and `AllDatabasesLineageGraph.tsx` use `onlyRenderVisibleElements={nodes.length > 50}` (or `> 30`). When this flag is active, React Flow only mounts DOM nodes for visible elements. `ClusterBackground` computes bounding boxes by reading `nodeLookup` from the React Flow store — but `nodeLookup` only contains entries for nodes that have been measured by ResizeObserver, which requires the node to be mounted in the DOM. For a database cluster where all member tables are currently off-screen (panned away), `onlyRenderVisibleElements` means those nodes are never mounted, `nodeLookup` has no `measured` dimensions for them, and `calculateClusterBounds` returns `null` — the cluster box disappears entirely as the user pans across the graph.
 
 **Why it happens:**
-Cache invalidation was designed for the two-layer system (Redis + Teradata). Adding the in-memory graph creates a third layer that the existing `/invalidate` endpoint knows nothing about. Developers wire the invalidation for Redis but forget the in-memory graph because it doesn't behave like a cache — it behaves like application state.
+`onlyRenderVisibleElements` is a correct performance optimization, but `ClusterBackground` was written assuming all nodes are always mounted. The two features are fundamentally incompatible in their current form.
 
 **How to avoid:**
-1. Extend the existing `/api/v2/cache/invalidate` endpoint to ALSO trigger graph rebuild (or mark graph as stale) — single invalidation call clears all layers atomically from the caller's perspective
-2. Add a `graph_version` integer that increments on each rebuild — Redis cache keys should embed this version so that Redis entries from the old graph are automatically invalid after rebuild
-3. Document the three-layer architecture explicitly: Teradata → in-memory graph → Redis → client. Every layer's invalidation path must be tested
-4. Test this flow explicitly: run ETL mock → call invalidate → call lineage API → verify result reflects ETL changes (not cached pre-ETL state)
-5. Add a `X-Graph-Version` response header so clients can detect graph generation changes
+Pre-calculate cluster bounds from layout positions (not from `node.measured`) and pass them to `ClusterBackground` directly as props. Use the `width`/`height` set on node objects at layout time (from `calculateTableNodeWidth`/`calculateTableNodeHeight`) rather than the ResizeObserver-measured values from `nodeLookup`. The `viewport transform + position` math in `ClusterBackground` will still work correctly for off-screen clusters because the layout positions are accurate — only the dimension source changes.
 
 **Warning signs:**
-- Cache invalidation tests pass but lineage results don't change after ETL
-- `?refresh=true` queries return same results as cached queries after ETL
-- Graph rebuild logs don't appear after ETL-triggered invalidations
-- Users report "data hasn't updated" after being told cache was cleared
+- Cluster boxes disappear when panning to areas of the graph with no visible nodes
+- `ClusterBackground` renders 0 clusters after panning even though the graph has multiple databases
+- Setting `onlyRenderVisibleElements={false}` makes cluster boxes reappear
 
 **Phase to address:**
-Phase 1 (In-Memory Graph Engine) for the architecture; Phase 3 (integration) for the explicit test that proves all three layers invalidate together.
+Phase 1 (layout foundation) — fix the dimension source before enabling large-graph optimizations. This must be resolved before testing with 200+ node database graphs, as `onlyRenderVisibleElements` will activate automatically.
 
 ---
 
-### Pitfall 5: Progressive Depth Loading Causes Layout Thrash and Edge Jitter
+### Pitfall 5: Connected Component Analysis Is O(V+E) but the Main-Thread Layout Blocks During It
 
 **What goes wrong:**
-Progressive loading delivers depth-1 results immediately, then depth-2 results as a second response, then depth-3. Each new depth batch triggers `setNodes` + `setEdges` + `layoutGraph()` (the custom topological layout). The depth-1 layout positions table nodes at x=0, y=0 and x=400, y=0. When depth-2 results arrive, new upstream tables are inserted and Kahn's algorithm re-runs — existing table nodes are reassigned different layer positions because their topological rank changed. The depth-1 nodes visibly jump from x=400 to x=800 (they were pushed right by the new upstream). Users see nodes teleporting as they watch, which is disorienting and looks like a bug. Edge splines also recalculate and animate to new endpoints.
+The current `layoutGraph` function runs on the main thread in `DatabaseLineageGraph.tsx` (not in the worker). Adding connected component analysis (union-find or BFS-based) to determine which tables are isolated vs. connected increases the sequential work in `layoutGraph`. For a database with 500 tables and 2000 edges, connected component analysis adds ~5ms. Harmless alone. But combined with the existing topological sort, layering, and separation steps, the total synchronous work grows from ~8ms to ~15ms — still safe. The problem is that database lineage graphs can have more nodes than column/table lineage: a database could have 1000 tables with sparse lineage. At 1000 nodes, all steps compound: sort (O(V log V)), layering (O(V+E)), connected components (O(V+E)), grid placement for isolated nodes (O(isolated_count)) = ~80ms of synchronous blocking. The main thread freezes the UI for 80ms during layout, causing perceptible jank.
 
 **Why it happens:**
-Topological layout assigns positions based on the global graph structure — adding any upstream node changes the relative depth of all downstream nodes. This is a fundamental property of layered layout algorithms, not a bug. The existing `layoutGraph()` function recalculates all positions from scratch on every call. It has no concept of "stable positions for already-rendered nodes."
+`DatabaseLineageGraph.tsx` calls `layoutGraph` directly on the main thread (unlike the column/table lineage views which use `useLayoutWorker`). The comment in the code says "topological layout is O(V+E), completes in ms" — which was true before adding connected component analysis on large database graphs.
 
 **How to avoid:**
-1. Show a loading skeleton/placeholder for the full expected graph extent during depth-1 load — do not commit node positions until the full requested depth is loaded
-2. If incremental display is required, add a "position stability" pass: if a node's new computed position is within N pixels of its current position, keep its current position to avoid imperceptible-but-jarring micro-jumps
-3. Disable CSS transitions during graph refreshes (`toggleTransitions(false)` — already used in the codebase) to prevent animated node teleporting
-4. Consider a two-phase UX: depth-1 shows immediately with a "Loading more..." indicator; the full graph (all depths) replaces it once complete — no visible incremental updates
-5. For the Zustand store update, batch all depth results into a single `setNodes`/`setEdges` call rather than updating on each depth response
+Route database lineage layout through `useLayoutWorker` (the existing Comlink worker) instead of calling `layoutGraph` directly. The worker is already set up and accepts the same function signature. This eliminates the main-thread blocking entirely. Before doing this, verify that `layoutGraph` does not use any browser-only APIs that would fail in a Worker context (`performance.now()` is available in workers; `import.meta.env` is Vite-specific but also available in workers built by Vite).
 
 **Warning signs:**
-- Node positions change during graph load (visible teleport/jump)
-- Edges animate to new endpoints as depth batches arrive
-- User feedback: "nodes are moving around while I'm reading them"
-- React Profiler shows multiple full layout cycles during a single graph load
+- Chrome DevTools shows > 16ms Long Tasks in the main thread during database lineage load
+- Frame drops occur when switching to a database with 200+ tables
+- `useProfiler('DatabaseLineageGraph')` shows render duration > 50ms on first mount
 
 **Phase to address:**
-Phase 2 (Progressive Loading) — the UX model (skeleton vs. incremental vs. deferred) must be decided before implementation, as it fundamentally changes the API contract.
+Phase 1 (layout foundation) — move database lineage layout to the worker before adding connected component analysis. The worker migration is low-risk and eliminates an entire class of future performance problems.
 
 ---
 
-### Pitfall 6: SSE/Streaming Incompatible with Standard Gunicorn Sync Workers
+### Pitfall 6: ELK `separateConnectedComponents` Option Interacts Badly with Custom Post-Layout Steps
 
 **What goes wrong:**
-Progressive depth loading is implemented using Server-Sent Events (SSE) or chunked HTTP streaming — the backend sends depth-1 results, then depth-2, then depth-3 over a single long-lived HTTP connection. This works in development (`flask run`, single-threaded). In production with Gunicorn sync workers, the SSE connection holds a worker thread for the entire streaming duration (potentially 5-10 seconds). With 4 sync workers and 4 concurrent users loading large graphs, all workers are busy and new requests queue indefinitely. The app appears hung for new users.
+If ELK is used for any layout pass (e.g., for isolated component grid arrangement via `elk.algorithm: 'disco'`), the `elk.separateConnectedComponents: true` option tells ELK to process each connected component independently then pack them. The packing algorithm positions components relative to the ELK graph's `(0,0)` origin. The custom `separateDatabaseClusters` post-processing step then tries to shift groups along the primary axis — but ELK's component packing has already handled separation. Applying `separateDatabaseClusters` on top of ELK-packed components double-shifts nodes: ELK places component A at x=0 and component B at x=500; `separateDatabaseClusters` then sees them as "overlapping" (because the bounding box check uses the node positions without accounting for ELK's packing gaps) and shifts component B further right to x=700. The resulting layout has unnecessary whitespace.
 
 **Why it happens:**
-Gunicorn's default sync worker model handles one request per worker at a time. SSE connections are long-lived by design. WSGI servers are synchronous by nature — they don't support concurrent request handling within a single worker without async primitives. This is a well-documented Flask-SSE limitation: "Server-sent events do not work with Flask's built-in development server because it handles HTTP requests one at a time."
+The two separation systems do not know about each other. `separateDatabaseClusters` was written for the custom topological layout path which has no component-packing. If ELK is reintroduced for any part of the pipeline, the post-processing steps must be conditionally disabled or redesigned.
 
 **How to avoid:**
-1. Do not use SSE with standard Gunicorn sync workers — it will starve the worker pool
-2. If streaming is required, use Gunicorn with gevent workers (`--worker-class gevent`) — gevent patches I/O to be non-blocking so a streaming response doesn't block other requests
-3. Simpler alternative: use polling — client makes separate requests for depth-1, then depth-2, etc. Each is a normal stateless request that completes quickly. No streaming, no worker starvation
-4. Simplest alternative: accept slight latency, keep synchronous responses but respond with depth-1 first (fast, from in-memory graph), and a separate "enrich" endpoint for additional metadata
-5. If threading is used instead of multiprocessing (`--worker-class gthread`), standard SSE works within the thread budget, but requires careful analysis of thread count vs concurrent stream count
+Establish a clear rule: either use ELK's component-packing OR the custom `separateDatabaseClusters` — never both for the same layout pass. Document this as an invariant in `layoutEngine.ts`. If ELK's disco algorithm is used for grid-packing isolated components, disable `separateDatabaseClusters` for those nodes and only apply it to the hierarchical component group.
 
 **Warning signs:**
-- All Gunicorn workers show status "busy" in process monitoring during graph loads
-- New requests get 504 timeouts during periods of graph-loading activity
-- Works fine in dev/test (single worker) but fails in production (multi-worker)
-- Gunicorn access logs show requests piling up in queue
+- Isolated table nodes (no lineage) appear far to the right of the main hierarchical graph with a large empty gap between them
+- The gap between database clusters grows disproportionately when some tables have no lineage
+- Adding `elk.separateConnectedComponents: false` to ELK options reduces whitespace noticeably
 
 **Phase to address:**
-Phase 2 (Progressive Loading) — streaming mechanism must be validated against the production WSGI worker model before implementation, not after.
+Phase 2 (mixed layout strategy) — this pitfall only manifests when both ELK component-handling and the custom separation step are active simultaneously. Establish the invariant in Phase 1 documentation before Phase 2 implementation begins.
 
 ---
 
-### Pitfall 7: TanStack Query Cache Invalidation Gets Out of Sync with In-Memory Graph Rebuild
+### Pitfall 7: Grid Layout for Isolated Nodes Creates Inter-Database Edge Crossings
 
 **What goes wrong:**
-The frontend uses TanStack Query with `queryClient.setQueryData` to imperatively populate the cache when the user hits "Refresh" (already implemented in `LineageGraph.tsx`). Progressive loading adds more complexity: depth-1 data is stored in query cache entry A, depth-2 in entry A (updated), depth-3 in entry A (updated again). A second component navigates to the same column while depth loading is in progress — TanStack Query returns the partial depth-1 data from cache while the background depth-3 fetch is running. The second component renders an incomplete graph. When depth-3 arrives, `setQueryData` updates the cache and both components re-render — but the second component may have already triggered a user interaction on a node that no longer exists at its previous position.
+A mixed layout places connected tables in a hierarchical left-to-right layout and isolated tables (no edges) in a grid below or to the side. When a database has 50 tables in the hierarchical region and 30 isolated tables in the grid region, edges from the hierarchical region that pass near the grid region visually cross through the grid cells. React Flow renders all edges using the same coordinate space — edges from database A's hierarchical section can visually intersect with database B's isolated-node grid if the two regions overlap on the Y axis. Users misread these visual crossings as lineage relationships.
 
 **Why it happens:**
-TanStack Query's cache is keyed by `[queryKey, depth, direction]`. Progressive loading either: (a) uses the same query key for all depths and updates in-place — confusing to other observers, or (b) uses different keys per depth — creates N cache entries that diverge when any depth is invalidated. Neither model is well-suited to "streaming accumulation" because TanStack Query is designed for atomic request/response cycles.
+Grid layout for isolated nodes does not account for edge routing from the hierarchical region. The custom topological layout does not use ELK's edge routing (it produces no edge bend-points). React Flow renders edges as straight bezier curves between source and target handles. Straight bezier curves from deep-hierarchy nodes to other deep-hierarchy nodes will pass through any grid region that occupies the same vertical band.
 
 **How to avoid:**
-1. Keep the existing single-response model for TanStack Query — one cache key returns the complete graph at the requested depth. Progressive loading is a separate, ephemeral display concern managed in local component state, not in the TanStack Query cache
-2. If progressive loading does populate the cache incrementally, use `queryClient.cancelQueries` before each update to prevent stale observers from re-rendering on intermediate states
-3. Add a `depth` parameter to the cache key — `['openlineage', 'lineage', datasetId, fieldName, direction, maxDepth, depth]` — so each depth level is an independent, stable cache entry that doesn't conflict
-4. Never call `queryClient.setQueryData` with partial results that are structurally identical to complete results — use a distinct `partial: true` flag in the data to signal incompleteness
-5. Test the scenario: two browser tabs on the same column, one triggering progressive load, verify the second tab doesn't show corrupted intermediate state
+1. Place isolated nodes outside the primary layout axis entirely: if the main layout is left-to-right (direction=RIGHT), place isolated nodes below the entire hierarchical section (increment Y by the hierarchical section's max height + padding). This ensures no hierarchical edges cross through the isolated region.
+2. Use a minimum Y-separation constant equal to the cluster box padding (currently 60px) plus the tallest node height in the hierarchical section.
+3. Do not use a grid that shares the same X range as any hierarchical layer.
 
 **Warning signs:**
-- Graph renders with missing nodes that appear a moment later
-- Console shows: "setQueryData called while query is fetching" warnings
-- User clicks a node that disappears because depth loading added upstream nodes and layout shifted
-- Different browser tabs show different graph states for the same column
+- Visual inspection of the database lineage graph shows edges passing through isolated node grid cells
+- Users report confusion about whether isolated nodes are "connected" to the lineage
+- Zooming out reveals edge paths that appear to terminate inside the grid region
 
 **Phase to address:**
-Phase 2 (Progressive Loading) — the TanStack Query data model for progressive loading must be explicitly designed. The current pattern (`queryClient.setQueryData` in `handleRefresh`) is a good model to extend, not replace.
-
----
-
-### Pitfall 8: Graph Data Structure Choice Doesn't Scale to 100K Rows per Worker
-
-**What goes wrong:**
-The in-memory graph is implemented as a networkx `DiGraph`. NetworkX is a pure Python library that stores each node and edge as nested Python dicts. For 100K `OL_COLUMN_LINEAGE` rows: each edge stores source_id, target_id, transformation_type plus internal networkx metadata — approximately 800-1000 bytes per edge in networkx. 100K edges = ~100 MB per worker, times 4 workers = 400 MB just for the graph. The full process RSS including Flask, imports, and Redis client approaches 600 MB per worker. On a 4GB server, this exhausts memory before handling any traffic.
-
-**Why it happens:**
-NetworkX is the "default" Python graph library developers reach for, but it is explicitly not designed for production memory efficiency: "The heavy memory requirements of networkx limit its potential to be used as a production tool in realistic contexts with huge graphs." Its nested dict design for arbitrary attribute storage has 5-10x overhead vs. a bare adjacency list for simple traversal.
-
-**How to avoid:**
-1. Use plain Python dicts for the adjacency structure — `upstream: dict[str, list[str]]` and `downstream: dict[str, list[str]]` where keys are `"dataset.field"` strings. This is sufficient for BFS/DFS traversal. Memory: ~150 bytes per edge (string keys + list overhead) = 15 MB for 100K edges
-2. Store transformation types in a separate flat dict keyed by `"source->target"` — only fetched when needed for graph rendering, not for traversal
-3. If networkx features are needed (cycle detection, shortest path), load networkx lazily for specific operations, not as the persistent store
-4. Benchmark memory with realistic data before committing to a structure: load a sample of 100K rows from Teradata and measure `resource.getrusage().ru_maxrss` before/after graph construction
-5. Consider igraph as a middle ground if traversal performance matters more than memory: igraph uses C internals (32 bytes per edge) vs Python dicts, but still has a Python API
-
-**Warning signs:**
-- Process RSS exceeds 200 MB per worker with a small test dataset
-- Gunicorn workers are OOM-killed before serving their first request
-- Time to build graph from Teradata is slow (networkx's `add_edge` is slower than dict writes)
-- `sys.getsizeof(graph)` returns surprisingly small number (doesn't count referenced dicts — use `objgraph` or `pympler` for real size)
-
-**Phase to address:**
-Phase 1 (In-Memory Graph Engine) — structure choice must be validated on production-scale data before building BFS/DFS traversal on top of it. The wrong structure requires a complete rewrite of traversal logic.
+Phase 2 (mixed layout strategy) — grid placement algorithm must account for edge routing before implementation. Verify visually with a test database that has both connected and isolated tables.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 9: Data Normalization During Graph Load Creates Inconsistency with Existing Cache Keys
+### Pitfall 8: `applySmartViewport` with 150ms Timeout Is Too Short for Large Database Graphs
 
 **What goes wrong:**
-One of the v4.0 goals is normalizing TRIM() at write time — stripping whitespace from dataset and field names in the adjacency structure. BFS traversal on the normalized graph uses `"demo_user.customer"` as a key. But existing Redis cache keys were built using the old `TRIM(?)` parameterized query pattern — they embed the raw string `"demo_user.customer "` (with trailing space) from Teradata. After the in-memory graph goes live, Redis cache hits use normalized keys, but any cache entries written by the old CTE path (during the transition) use un-normalized keys. The two key spaces collide: normalized graph → normalized key → Redis miss → BFS traversal; old CTE path → un-normalized key → Redis hit → returns old CTE result. Inconsistent results depending on whether the Redis key was populated before or after the migration.
+Both `DatabaseLineageGraph.tsx` and `AllDatabasesLineageGraph.tsx` use `setTimeout(..., 150)` to delay `applySmartViewport` after layout completes — the comment says "to ensure React Flow has measured node dimensions." For column/table lineage with 20-50 nodes, 150ms is sufficient. For a database-lineage view with 400 nodes, React Flow's ResizeObserver fires for each node individually. On a slow machine or when the browser is under CPU load, not all 400 nodes will have reported their measured dimensions within 150ms. `applySmartViewport` calls `fitView` on nodes with zero or pre-measurement dimensions, producing a viewport that does not contain all nodes. The user sees nodes outside the viewport on initial load.
 
 **How to avoid:**
-1. Flush all existing Redis cache keys when deploying the in-memory graph (extend the `invalidate_all` call to the deployment runbook)
-2. Normalize cache key generation in `cache/keys.py` at the same time as normalization is added to the graph loader — both must use the same normalized form
-3. Add normalization at the boundary where data enters the system (the `populate_lineage.py` ingest), not at query time — then there is only one key space by definition
+Replace the fixed timeout with a measurement-completion gate. Two options:
+1. Use `reactFlowInstance.getNodes()` filtered to `node.measured !== undefined` — if the count matches the total node count, measurement is complete.
+2. Pre-set `width` and `height` on nodes at layout time (the pre-calculation fix from Pitfall 2), which makes `fitView` correct from the first render without waiting for ResizeObserver.
+
+The pre-calculation approach (option 2) is preferred because it eliminates the timing dependency entirely.
 
 **Warning signs:**
-- Cache hit rates drop to near-zero after deployment despite Redis containing entries
-- Some queries return correct results, others return old results, with no apparent pattern
-- `cache/keys.py` and the graph loader use different whitespace handling
+- `fitView` on initial load shows only part of the graph for large databases (200+ tables)
+- Increasing the timeout to 500ms makes the problem disappear
+- The issue is more frequent on slower machines or when the browser tab is in the background during load
 
 **Phase to address:**
-Phase 1 (normalization) and Phase 3 (integration) — verify cache key alignment explicitly in integration testing.
+Phase 1 (layout foundation) — the pre-calculation fix resolves this as a side-effect. If the timeout cannot be eliminated immediately, increase it to `Math.max(150, nodes.length * 0.5)` as a temporary workaround.
 
 ---
 
-### Pitfall 10: BFS Depth Limiting Differs from Recursive CTE Depth Semantics
+### Pitfall 9: Layout Cancellation Race Condition When User Changes Direction Mid-Layout
 
 **What goes wrong:**
-The existing recursive CTE counts depth as "hops from the starting column." BFS in Python counts depth as "levels from the starting node." These are equivalent for simple graphs. But the CTE uses `depth < max_depth` (exclusive upper bound) and the BFS implementation uses `depth <= max_depth` (inclusive). Off-by-one: CTE with `max_depth=5` returns columns 4 hops away; BFS with `max_depth=5` returns columns 5 hops away. Users who are accustomed to "depth 5 shows my full lineage" find that the in-memory graph now shows one extra level. The graph is technically "more correct" but it breaks user expectations and increases response size unexpectedly.
-
-**How to avoid:**
-1. Write explicit test cases for boundary depths before replacing the CTE: verify that BFS and CTE return identical results for `max_depth=1`, `max_depth=3`, `max_depth=5` on the same test data
-2. Match the CTE's exclusive depth bound in BFS: `if current_depth >= max_depth: continue` (not `>`
-3. Use the existing `insert_cte_test_data.py` patterns (CYCLE5, NESTED_DIAMOND, FANOUT10) to verify BFS produces identical output to CTE before the cutover
-
-**Warning signs:**
-- Integration tests comparing BFS output to baseline CTE output fail only at boundary depths
-- User reports seeing "more columns than expected" at the same depth settings
-- Response payload size increases by ~20% after migration (one extra depth level)
-
-**Phase to address:**
-Phase 1 (In-Memory Graph Engine) — BFS semantics must match CTE semantics exactly before the old path is removed.
-
----
-
-### Pitfall 11: Graph Singleton Initialization Blocks First Request (Cold Start)
-
-**What goes wrong:**
-The in-memory graph is loaded lazily on first request — the first user to access lineage after a restart waits 30-60 seconds while the app loads 100K rows from Teradata and builds adjacency dicts. All subsequent requests are fast. This first-request penalty is invisible in testing (always hit when the graph is warm), but users who restart the service during business hours will get a timeout or a very slow response. They'll assume the server is broken and file an incident.
-
-**How to avoid:**
-1. Eager initialization: build the graph in the application factory (`create_app()`) before the server starts accepting requests — Flask's `@app.before_first_request` is deprecated in Flask 2.3+; use explicit initialization in the factory
-2. Gunicorn `--preload` combined with graph initialization in module scope ensures the graph is ready before any worker forks
-3. Add a readiness check to the `/health` endpoint that returns 503 until the graph is fully loaded — load balancers will withhold traffic until ready
-
-**Warning signs:**
-- First request after restart consistently times out or takes 30+ seconds
-- Health checks pass immediately after restart but first lineage requests fail
-- "Graph building" log entries appear in response to the first user request, not at startup
-
-**Phase to address:**
-Phase 1 (In-Memory Graph Engine) — eager vs. lazy initialization decision is part of the initial architecture.
-
----
-
-### Pitfall 12: React Flow Re-Render Storm from setNodes Called on Each Progressive Depth Batch
-
-**What goes wrong:**
-Progressive loading calls `setNodes(prev => [...prev, ...newNodes])` and `setEdges(prev => [...prev, ...newEdges])` on each depth batch. React Flow's internal state subscribers detect changes and trigger re-renders of all mounted node components. With 50 existing nodes and 3 depth batches arriving 200ms apart, the graph re-renders 3 complete times. With `useLineageHighlight` and `useDatabaseClustersFromNodes` as computed values derived from `nodes`, those also recompute 3 times. Each full re-render of 50 nodes with column rows takes ~40ms (baseline from Phase 18 benchmarks). Three batches = 120ms of blocking render work during load, causing visible jank.
+`DatabaseLineageGraph.tsx` uses a `cancelled` boolean ref inside the layout effect to cancel stale results. When the user changes direction (e.g., RIGHT to DOWN) rapidly, the following sequence occurs: (1) layout for RIGHT starts, (2) user changes direction, (3) layout for DOWN starts, (4) layout for RIGHT completes and checks `cancelled` — but `cancelled` is `false` because the cleanup function resets it per-effect. The RIGHT layout resolves and calls `setNodes`/`setEdges` with RIGHT-direction positions, overwriting the in-progress DOWN layout computation. The graph briefly shows RIGHT-direction positions before DOWN layout completes and overwrites again. On slow machines, this creates a visible position-flash.
 
 **Why it happens:**
-React batches state updates from event handlers but does NOT batch state updates that arrive asynchronously (from polling or streaming). Each `setNodes` call is a separate asynchronous update that triggers its own render cycle. The existing `filteredNodesAndEdges` `useMemo` and `clusters` `useDatabaseClustersFromNodes` both depend on nodes — they recompute on every batch.
+The `cancelled` ref is reset in the cleanup function (`return () => { cancelled = true; reset(); }`). But if two effects fire in rapid succession, the first effect's cleanup may not run before the second effect starts — React batches cleanup/setup in a specific order but the async layout promise from the first effect can still resolve after the second effect's promise starts. The `cancelled` ref from the first effect is a closure over a different boolean than the second effect's `cancelled` variable.
 
 **How to avoid:**
-1. Batch all depth results at the data layer — the backend returns a single response containing all depths (or the frontend waits for all polling responses before calling `setNodes`/`setEdges` once)
-2. If incremental rendering is required, use React 18's `useTransition` to mark progressive updates as non-urgent — React defers them during user interactions
-3. Gate the layout computation (`layoutGraph`) to run only once, on the final depth batch — not on intermediate batches. Use a `pendingDepth` counter in the component to track when the last batch arrives
-4. The existing `cancelled` ref pattern in `LineageGraph.tsx` (cancelling stale layout promises) is the right model to extend — ensure it gates on batch completion, not on each arrival
+Use a single abort signal or generation counter at the module level (or in a ref outside the effect): `const layoutGeneration = useRef(0)`. At the start of each layout effect, increment the generation. At the end of the async layout, check if the current generation matches the expected generation before calling `setNodes`. This correctly handles multiple in-flight layout computations.
 
 **Warning signs:**
-- React Profiler shows 3+ renders of `LineageGraph` during a single progressive load
-- `useProfiler('LineageGraph')` `onRender` callback fires multiple times in rapid succession
-- Frame drops visible during graph load when progressive updates are enabled
-- `useDatabaseClustersFromNodes` is called more times than there are depth levels
+- Rapidly clicking direction change buttons causes the graph to visually flash between two layout directions before settling
+- React Profiler shows two `setNodes` calls within 100ms of each other when direction is changed quickly
+- `ProgressBanner` shows stale progress percentages after direction change
 
 **Phase to address:**
-Phase 2 (Progressive Loading frontend) — batching strategy must be decided before wiring up polling or streaming on the frontend.
+Phase 1 (layout foundation) — fix the cancellation pattern before adding mixed layout strategies, which will have longer computation times and make the race condition more pronounced.
 
 ---
 
-## Minor Pitfalls
-
-### Pitfall 13: API Timing Headers Add Overhead If Not Implemented Carefully
+### Pitfall 10: Database Color Assignment Is Non-Deterministic Across Re-Renders
 
 **What goes wrong:**
-The v4.0 goal includes timing headers (`X-Graph-Build-Time`, `X-BFS-Time`, etc.) for performance observability. Naive implementation wraps each BFS call with `time.perf_counter()` — fine. But if timing is also collected per-edge or per-depth (to help diagnose why a specific graph is slow), the overhead of the timing code exceeds the time saved by the in-memory graph. Python function call overhead is ~100ns; if timing is collected at each BFS dequeue (100K operations), that's 10ms of timing overhead on a 5ms BFS traversal.
+`useDatabaseClustersFromNodes` assigns colors to databases using `FALLBACK_COLORS[index % FALLBACK_COLORS.length]` where `index` is incremented as the `Map.forEach` iteration order. JavaScript `Map` iteration order is insertion order. If the API returns databases in a different order on each request (due to Teradata query result ordering), database A gets the blue color on one render and the green color on the next. The user sees cluster colors change between page loads, which is disorienting and breaks visual memory (users learn "sales_db is blue").
 
 **How to avoid:**
-Collect timing at coarse granularity: graph load time, BFS traversal time, response serialization time. Not per-node or per-edge. Use `time.perf_counter()` with three `t0/t1/t2` checkpoints, not a decorator on inner loop functions.
+Hash the database name to a stable color index. A simple implementation: `const hash = databaseName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0); return FALLBACK_COLORS[hash % FALLBACK_COLORS.length]`. This makes the color deterministic for any given database name regardless of iteration order. The existing `DATABASE_COLORS` hardcoded map is correct for known databases — only the fallback path needs the hash.
+
+**Warning signs:**
+- Cluster box colors change between page loads for the same database
+- Two databases with similar names get the same color (hash collision — inspect and adjust the hash function)
+- `useDatabaseClusters.test.ts` tests that check specific colors fail non-deterministically
 
 **Phase to address:**
-Phase 2 (API observability) — timing instrumentation design.
+Phase 1 (layout foundation) — this is a pre-existing bug that becomes more visible when database lineage is a primary view. Fix before UX testing begins.
 
 ---
 
-### Pitfall 14: Depth=1 "Instant" Promise is Broken If Graph Is Cold
+### Pitfall 11: Secondary-Axis Stacking Creates Excessively Tall Layers for Databases with Many Tables
 
 **What goes wrong:**
-The v4.0 goal promises "depth=1 instant." This is only true if the in-memory graph is warm. If the graph is cold (just rebuilt or first start), depth=1 falls back to the Teradata CTE path, which is not instant. Users who click a column immediately after an ETL rebuild see the old "slow" behavior and assume the feature didn't ship. The gap between "graph warm" and "graph cold" behavior is larger than the gap was before the migration.
+The topological layout stacks all tables within the same layer along the secondary axis (Y for direction=RIGHT). A database that contains 30 tables all at the same topological depth (e.g., all are source tables with no upstream) produces a single layer that is 30 * (node_height + node_spacing) pixels tall — approximately 30 * (200 + 40) = 7,200px. The adjacent database has 3 tables, stacked to 720px. The cluster box for the 30-table database dwarfs the 3-table database, making the layout look unbalanced. Users cannot see all tables without excessive scrolling in one direction.
+
+**Why it happens:**
+The secondary-axis stacking is linear with no wrapping or column limit. This is sufficient for column/table lineage where layers typically have 1-5 nodes. Database lineage layers can have 10-50 nodes.
 
 **How to avoid:**
-1. Guarantee that graph rebuilds happen out-of-band, never on the request path
-2. During graph rebuild, continue serving from the old graph (blue-green swap) — there is no "cold" period visible to users
-3. The health endpoint should not report "ready" until the graph is fully built
+For layers exceeding a configurable threshold (e.g., 10 nodes), introduce column-wrapping within the layer: arrange tables in a sub-grid of N columns × ceil(count/N) rows, where N is determined by `Math.ceil(Math.sqrt(tableCount))`. Each sub-grid column advances the secondary cursor by the widest node in that column. The primary cursor advances by the widest sub-grid plus layer spacing. This produces more balanced layouts without requiring ELK.
+
+**Warning signs:**
+- A single database dominates the vertical (or horizontal) extent of the graph by 10x or more
+- `fitView` produces a tiny zoom level to fit the entire graph (graph is too tall/wide)
+- Users scroll in one direction to see all tables in a single layer but find nothing else in that direction
 
 **Phase to address:**
-Phase 1 (In-Memory Graph Engine) — warm/cold transition behavior is part of the core design.
+Phase 2 (mixed layout strategy) — the column-wrapping logic is part of the "grid for dense layers" feature. Design the wrapping threshold and column count formula before implementation.
+
+---
+
+### Pitfall 12: React Flow Edge Re-Renders When Highlighting Changes All Edge Objects
+
+**What goes wrong:**
+`useLineageHighlight` updates the `style` property of every edge in the graph whenever a node is selected — highlighted edges get a different color/width, non-highlighted edges get dimmed styles. This is done by mapping over all edges and creating new objects with updated styles. React Flow re-renders every edge component because they receive new object references for `style`. On a database lineage graph with 1000 edges, this is 1000 edge re-renders per click. The existing edge type `lineageEdge` uses a custom `LineageEdge.tsx` component — if it is not wrapped in `React.memo` with a correct comparison function, all 1000 edges re-render even though only a small subset changed their highlight state.
+
+**Why it happens:**
+Spread-cloning edges (`edges.map(e => ({ ...e, style: newStyle }))`) always creates new object references. React Flow compares nodes/edges by reference equality. `React.memo` on the edge component helps only if the props it receives do not change — but since `style` changes on every edge, `React.memo` does not prevent re-renders.
+
+**How to avoid:**
+Move highlight state out of edge `style` objects and into CSS classes via the `className` prop. Set `className="highlighted"` or `className="dimmed"` on edges instead of changing `style`. With CSS classes, the `className` string is the same primitive reference for all non-changed edges, preventing re-renders. Add `.highlighted` and `.dimmed` CSS rules to the React Flow stylesheet.
+
+**Warning signs:**
+- React Profiler shows all 1000 edges re-rendering on each node click
+- Node click response time degrades linearly with edge count (> 16ms at 500 edges)
+- `LineageEdge` appears in the React Profiler "Flamegraph" as the top-cost component during interactions
+
+**Phase to address:**
+Phase 2 or 3 — this is an existing issue that becomes critical at database-lineage scale. Fix before UX testing with large databases.
 
 ---
 
@@ -340,70 +274,58 @@ Shortcuts that seem reasonable during implementation but create long-term proble
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |----------|-------------------|----------------|-----------------|
-| Use networkx for the graph because it's familiar | Faster initial development | 5-10x memory overhead; 400 MB per worker at 100K edges | Only for prototype/benchmarking, never production |
-| Lazy graph initialization on first request | Simpler startup code | Cold-start penalty; first user after restart gets timeout | Never — eager init during app factory is equally simple |
-| Per-depth polling without batching | Simpler streaming design | React re-render storm on each batch; jank during load | Only if graphs are small (< 20 nodes per depth level) |
-| Skip blue-green graph swap; rebuild in-place | Less code | Requests fail or block during rebuild | Never — rebuild time at 100K rows is non-trivial |
-| Use the same cache keys for in-memory BFS and old CTE results | No key changes needed | Cache entries from old CTE path poison in-memory BFS cache and vice versa | Never — flush Redis on migration day explicitly |
-| Test progressive loading with 1 Gunicorn worker | Fast iteration | Hides multi-worker graph inconsistency; SSE worker starvation invisible | Dev only, never for staging sign-off |
-| Store full edge metadata (all OL_COLUMN_LINEAGE columns) in adjacency dict | Avoids second lookup for metadata | Graph memory 3-5x larger; defeats purpose of lean adjacency structure | Only if response time is more important than memory |
-| Skip BFS/CTE semantic equivalence tests | Faster to ship | Off-by-one depth bugs; users see "wrong" lineage | Never — equivalence tests are the migration correctness gate |
+| Sort inside Kahn's while-loop for determinism | Simpler code, stable output | O(V log V) per iteration — non-linear scaling past 200 nodes | Never in production; sort once per layer discovery instead |
+| Call `layoutGraph` on main thread in DatabaseLineageGraph | Avoids worker wiring complexity | Blocks UI during layout for 400+ table databases | Dev-only while validating algorithm correctness; must move to worker before production |
+| Read `node.measured` for cluster bounding boxes | Uses authoritative post-render dimensions | Cluster boxes wrong/invisible when `onlyRenderVisibleElements` is active | Never for database lineage; always pre-calculate from layout dimensions |
+| Fixed 150ms timeout before `applySmartViewport` | Simple, works for small graphs | Unreliable for 400+ nodes — `fitView` runs before measurement completes | Only when node count is guaranteed < 50 |
+| Linear secondary-axis stacking (no wrapping) | Simple algorithm | Excessively tall/wide single layers for databases with many same-depth tables | Only when max layer size is guaranteed < 10 nodes |
+| Color by insertion order in `Map.forEach` | Easy to implement | Non-deterministic colors across page loads; user mental model breaks | Never; use name-hash for stable color assignment |
 
 ---
 
 ## Integration Gotchas
 
-Common mistakes when connecting the three-layer stack (Teradata → In-Memory Graph → Redis → Frontend).
+Common mistakes when connecting the mixed layout strategy to the existing system.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| In-memory graph + Gunicorn | Using a module-level global in multi-worker deployment | Use `--preload` for read-only graph (CoW safe) or `--workers 1 --threads N` |
-| In-memory graph + Redis | Not flushing Redis when graph normalization changes key format | Flush Redis as part of deployment runbook; add version to cache key prefix |
-| In-memory graph + ETL invalidation | `/invalidate` endpoint clears Redis but not the graph | Extend invalidation endpoint to also trigger graph rebuild or graph stale flag |
-| Progressive loading + TanStack Query | Using same cache key for partial and complete data | Use separate keys per depth OR local state for progressive display, TanStack Query for final result |
-| Progressive loading + layoutGraph | Running layout on each depth batch | Gate layout to run only on final batch; use `cancelled` ref pattern already in codebase |
-| BFS traversal + existing Redis cache | BFS results stored under different key format than CTE results | Normalize both path: use `cache/keys.py` for all key generation; BFS must use same keys as CTE |
-| SSE streaming + Gunicorn sync workers | Long-lived SSE connection starves worker pool | Use polling (stateless requests) or gevent workers (`--worker-class gevent`) |
-| Graph rebuild + active BFS requests | Tearing down old graph while BFS is traversing it | Blue-green swap: build new graph, swap reference atomically; never destroy old graph first |
+| Mixed layout + `separateDatabaseClusters` | Running separation after ELK component-packing adds double-shift | Disable `separateDatabaseClusters` for nodes that ELK has already packed; use one system per layout pass |
+| Connected component analysis + topological sort | Running connected component detection on the full graph then topo-sorting each component separately — losing inter-component edges | Run topo-sort on the full graph first (inter-component edges are preserved); then use component membership only for secondary-axis placement decisions |
+| Grid layout for isolated nodes + hierarchical edges | Placing isolated-node grids in the same X/Y range as hierarchical edges | Place isolated grids outside the primary axis extent (below or to the right of the full hierarchical section) |
+| `onlyRenderVisibleElements` + ClusterBackground | Cluster boxes disappear for off-screen databases | Pre-calculate bounds from layout positions, not from `node.measured` |
+| Database lineage layout + Web Worker | Main-thread layout blocks on 400+ tables | Route all database lineage layout through `useLayoutWorker` — the worker already handles the same `layoutGraph` function |
+| `separateDatabaseClusters` + non-contiguous database groups | Bounding box encompasses gap between isolated and connected tables from same database | Compute extents per (database, component) pair, not per database |
+| Direction change + in-flight layout | Cancelled layout resolves and overwrites new layout positions | Use generation counter pattern instead of simple boolean `cancelled` ref |
 
 ---
 
 ## Performance Traps
 
-Patterns that work at small scale (dev test data) but fail at production scale (100K rows).
+Patterns that work at small scale (20-50 tables) but fail at database-lineage scale (200-500 tables).
 
 | Trap | Symptoms | Prevention | When It Breaks |
 |------|----------|------------|----------------|
-| NetworkX graph as persistent store | Memory exhaustion; workers OOM at startup | Plain Python dict adjacency: `dict[str, list[str]]` | > 50K edges per worker |
-| Lazy graph initialization | First request timeout 30-60s; users file incident | Eager init in app factory; health returns 503 until ready | Every cold start |
-| In-place graph rebuild (no blue-green swap) | Blocked requests during rebuild; pent-up CPU spike on release | Build new graph → atomic reference swap → GC old graph | Any rebuild > 1 second |
-| setNodes/setEdges on each progressive batch | Multiple full re-renders during load; jank | Batch at data layer; call setNodes once with complete data | > 20 nodes per batch |
-| BFS without explicit visited set | Exponential traversal on diamond/cycle patterns | Always track visited node IDs; the CTE path tracking is the equivalent | Any graph with diamonds or cycles (lineage has many) |
-| Storing full row data in adjacency dict | Memory 3-5x higher than necessary | Store only IDs and transformation type; fetch metadata separately | > 30K edges in-memory |
-| Global graph rebuilt on every ETL run | Unnecessary rebuilds when ETL adds no new lineage | Track ETL row count or hash; skip rebuild if unchanged | High-frequency ETL (hourly or more) |
-| SSE with sync Gunicorn workers | All workers busy; new requests timeout | Polling pattern or gevent workers | > workers/4 concurrent users loading graphs |
-
----
-
-## Security Mistakes
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Exposing graph rebuild endpoint publicly | Adversary triggers repeated rebuilds, exhausting Teradata connections | Protect `/invalidate` with secret token or restrict to internal network only (already a concern for the existing endpoint) |
-| Storing sensitive column/table names in process memory indefinitely | In-memory graph is accessible via heap dumps; lineage data is metadata about data | Accept this risk for an internal tool; document it explicitly |
-| No timeout on BFS traversal | Malicious depth=50 request triggers O(n) BFS consuming CPU for minutes | Apply `max_depth` cap at the BFS level, not just the HTTP parameter level |
+| Sort inside Kahn's while-loop | Layout time scales non-linearly; 400 nodes takes 4x longer than expected | Sort only newly discovered zero-indegree candidates; not the full queue | > 100 nodes in a single layout pass |
+| Main-thread `layoutGraph` for database views | > 16ms Long Tasks in DevTools; frame drops during layout | Move to `useLayoutWorker` (worker already exists) | > 200 table nodes |
+| Linear secondary-axis stacking | Single layer fills entire viewport height; user must scroll 5000px | Column-wrap layers exceeding N nodes | > 10 nodes in a single layer |
+| Read `node.measured` for cluster bounds | Cluster boxes resize incrementally during render; wrong size with `onlyRenderVisibleElements` | Pre-set `width`/`height` on layouted nodes; compute bounds from those | Any time `onlyRenderVisibleElements` is active (30+ nodes) |
+| Update all edge objects on highlight change | 1000 edge re-renders per click; interaction latency > 100ms | Use `className` instead of `style` for highlight state | > 200 edges visible |
+| Fixed 150ms `applySmartViewport` timeout | `fitView` shows partial graph on initial load for large databases | Pre-calculate node dimensions; or use measurement-complete gate | > 200 nodes on a slow device |
+| Rebuilding cluster bounds every render in `useDatabaseClustersFromNodes` | `useMemo` recomputes on every `setNodes` call during load | Memoize on stable layout output, not on live React Flow node state | > 30 nodes with `showDatabaseClusters` enabled |
 
 ---
 
 ## UX Pitfalls
 
+Common user experience mistakes specific to database lineage graph views.
+
 | Pitfall | User Impact | Better Approach |
 |---------|-------------|-----------------|
-| Node positions shift as depth batches arrive | Disorienting; looks broken | Full-depth skeleton → single layout render; or two-phase (depth-1 immediate, then "load all" replaces) |
-| "Instant" depth-1 shows incomplete lineage without clear indication | User thinks lineage is sparse; doesn't realize more is loading | Show loading indicator for additional depths alongside depth-1 result; "Showing 1 of 3 depth levels" |
-| ETL rebuild causes briefly stale graph during blue-green swap | Users see data from 5 minutes ago | Show "Data last updated: N minutes ago" timestamp; users understand context |
-| Graph cold-start timeout with no feedback | User sees loading spinner for 60s, assumes app is broken | 503 + "Service initializing, please retry in 30s" during cold start; use readiness probe |
-| Edge jitter when new nodes added upstream shift existing layout | Perceived as animation bug | Disable transitions during progressive updates (existing `toggleTransitions(false)` mechanism) |
+| No wrapping for large same-depth layers | Users must scroll vertically 5000+ pixels to see all source tables | Column-wrap layers > 10 nodes; configure via `maxNodesPerColumn` option |
+| Isolated nodes mixed into hierarchical layout | Users mistake proximity for lineage; visual noise obscures actual relationships | Separate isolated nodes into a distinct visual region with a label ("No lineage data") |
+| Database color changes between page loads | Users lose visual memory ("sales_db was blue"); must re-learn layout every visit | Hash database name to stable color index |
+| Cluster boxes disappear during pan on large graphs | Users lose database context when panning; do not know which table belongs to which database | Fix cluster bounds computation to use pre-calculated layout dimensions |
+| No indication that only N of M tables are shown (pagination) | Users believe graph is complete when it is partial | Show "Showing 50 of 320 tables — Load More" consistently; do not run layout until load decision is made |
 
 ---
 
@@ -411,15 +333,15 @@ Patterns that work at small scale (dev test data) but fail at production scale (
 
 Things that appear complete but are missing critical pieces.
 
-- [ ] **In-Memory Graph:** BFS tested with production-scale data (100K edges) for memory and latency — verify worker RSS stays under target
-- [ ] **BFS Semantics:** BFS and CTE produce identical results for same inputs at all depth levels — verify with CYCLE5, NESTED_DIAMOND, FANOUT10 test patterns
-- [ ] **Multi-Worker Safety:** Tested with `--workers 4` in staging — verify all workers serve consistent lineage from same graph generation
-- [ ] **Graph Rebuild:** Blue-green swap tested with concurrent requests — verify zero requests fail or block during ETL rebuild
-- [ ] **Three-Layer Invalidation:** ETL → invalidate → verify graph rebuilt → verify Redis cleared → verify client sees updated lineage — all steps in a single test
-- [ ] **Progressive Loading UX:** Node positions stable (no jumps) after all depth batches arrive — verify no position delta > 1px for previously rendered nodes
-- [ ] **SSE/Polling Worker Safety:** Concurrent graph loads tested with multiple workers — verify no worker starvation under load
-- [ ] **Cold Start:** Health endpoint returns 503 until graph is fully built — verify load balancer withholds traffic during initialization
-- [ ] **Memory Leak:** Process RSS tracked across 3 ETL rebuild cycles — verify RSS does not grow monotonically
+- [ ] **Layout worker migration:** Database lineage layout calls `layoutGraph` via `useLayoutWorker` — verify DevTools shows no Long Tasks > 16ms during layout of 400+ node databases
+- [ ] **Cluster bounds pre-calculation:** All nodes in `layoutedNodes` have `width` and `height` set — verify `ClusterBackground` cluster boxes are correct from first render without resize flash
+- [ ] **Kahn sort fix:** `topoQueue.sort()` is not inside the while-loop — verify `layoutEngine.bench.ts` shows linear scaling from 100 to 400 nodes
+- [ ] **Cluster separation with non-contiguous groups:** Test a database that has both isolated tables and connected tables — verify cluster box width matches only the connected table extent, not the full combined extent
+- [ ] **`onlyRenderVisibleElements` compatibility:** Pan to a database cluster where all member tables are off-screen — verify cluster box remains visible and correct
+- [ ] **Direction change cancellation:** Rapidly change direction three times — verify only the final direction's layout is applied (no position flash from intermediate layouts)
+- [ ] **Isolated node grid placement:** Add a database with 20 isolated tables and 5 connected tables — verify isolated nodes appear below (or to the right of) the hierarchical section with no edge crossings through the grid
+- [ ] **Color stability:** Reload the database lineage page five times — verify the same database always gets the same cluster color
+- [ ] **Edge highlight performance:** Select a node with 100+ connected edges — verify the interaction response is < 100ms and React Profiler shows no full edge-list re-render
 
 ---
 
@@ -429,15 +351,15 @@ When pitfalls occur despite prevention, how to recover.
 
 | Pitfall | Recovery Cost | Recovery Steps |
 |---------|---------------|----------------|
-| Multi-worker graph inconsistency in production | MEDIUM | Restart with `--workers 1 --threads 4`; implement `--preload` properly; re-test with N workers |
-| Graph rebuild blocking requests | LOW | Add blue-green swap; deploy fix; old graph continues serving during next rebuild |
-| Memory leak accumulating across ETL cycles | MEDIUM | Add `--max-requests 1000` to Gunicorn; implement `gc.collect()` after swap; profile with memray |
-| Stale in-memory graph after ETL (three-layer inconsistency) | LOW | Extend invalidation endpoint to trigger rebuild; flush Redis; one deploy |
-| Node position jitter during progressive loading | MEDIUM | Switch to single-render model (no incremental display); one UI behavior change |
-| SSE worker starvation in production | HIGH | Switch from SSE to polling; requires backend + frontend change; plan 2-4 hour incident window |
-| TanStack Query partial-data cache poisoning | LOW | Clear TanStack cache on navigation; use distinct cache keys per depth; component fix |
-| BFS off-by-one depth vs CTE | MEDIUM | Add equivalence test suite; fix BFS bounds; re-run all 73 DB tests |
-| networkx OOM in production | HIGH | Rewrite adjacency structure to plain dicts; full graph engine rebuild; 1-3 days |
+| Kahn sort-per-iteration degrading performance | LOW | Remove `sort()` from inside while-loop; sort only new candidates before push; validate with bench |
+| ClusterBackground resize flash | LOW | Pre-set `width`/`height` on layouted nodes before `setNodes`; one change in `layoutGraph` return value |
+| Mixed layout breaks `separateDatabaseClusters` | MEDIUM | Refactor to compute bounding box per (database, component) pair; add regression test with non-contiguous database |
+| `onlyRenderVisibleElements` hides cluster bounds | MEDIUM | Switch `ClusterBackground` to use pre-calculated layout dimensions instead of `nodeLookup`; remove dependency on React Flow store for bounds |
+| Main-thread layout jank on large databases | LOW | Wrap existing `layoutGraph(...)` call in `await workerApi.layout(...)` in `DatabaseLineageGraph.tsx`; worker already handles same API |
+| Grid and hierarchical nodes overlap with edge crossings | HIGH | Redesign grid placement to be strictly outside primary-axis extent; requires re-testing all layout configurations |
+| Non-deterministic database colors | LOW | Replace `index` counter with name-hash in `getColorForDatabase`; add test for color stability across reorders |
+| Direction change race condition causing position flash | LOW | Replace `cancelled` boolean with generation counter ref; one change in layout effect |
+| Edge highlight re-render storm | MEDIUM | Move highlight state from `style` to `className` on edges; add CSS rules for `.highlighted`/`.dimmed`; validate with React Profiler |
 
 ---
 
@@ -447,94 +369,51 @@ How roadmap phases should address these pitfalls.
 
 | Pitfall | Prevention Phase | Verification |
 |---------|------------------|--------------|
-| Multi-worker graph inconsistency | Phase 1 (architecture) | Load test with `--workers 4`, all workers return same results |
-| Graph rebuild race condition | Phase 1 (architecture) | Concurrent requests during ETL rebuild return valid results, no timeouts |
-| Memory leak across rebuilds | Phase 1 (data structure design) | RSS stable across 3 simulated ETL cycles |
-| Three-layer cache inconsistency | Phase 1 (design) + Phase 3 (integration test) | ETL → invalidate → lineage API returns updated data end-to-end |
-| Progressive loading layout jitter | Phase 2 (UX design decision) | Node positions do not change for previously rendered nodes when new depth arrives |
-| SSE/Gunicorn incompatibility | Phase 2 (architecture) | Concurrent graph loads with `--workers 4` do not starve worker pool |
-| TanStack Query partial cache | Phase 2 (frontend) | Two components on same column during progressive load show same final state |
-| Graph data structure memory | Phase 1 (spike: benchmark memory at 100K edges) | Worker RSS under target with production-scale data |
-| BFS/CTE semantic equivalence | Phase 1 (before CTE removal) | Test suite confirms identical output for all depth values on all test patterns |
-| Data normalization key mismatch | Phase 1 (normalization) + deployment runbook | Redis flush on deploy; cache hit rate normal within 5 minutes |
-| Cold start penalty | Phase 1 (eager init design) | Health returns 503 until graph ready; first user request < 500ms |
-| React re-render storm | Phase 2 (batching design) | React Profiler shows single render cycle per graph load, not per depth batch |
-
----
-
-## Phase-Specific Research Flags
-
-**Phase 1 (In-Memory Graph Engine):**
-- HIGH confidence: multi-worker isolation is a well-understood Gunicorn behavior
-- HIGH confidence: blue-green swap pattern for atomic reference replacement
-- MEDIUM confidence: memory footprint at 100K edges — depends on data (column name lengths, average degree). Needs a spike with production data sample before committing to data structure
-- MEDIUM confidence: preload_app safety with the existing connection lifecycle — factory pattern creates connection inside `create_app()`, not at module scope, which appears fork-safe; verify experimentally
-- LOW confidence: whether `gc.collect()` timing is predictable enough to prevent RSS growth between collections — may need `--max-requests` as backup
-
-**Phase 2 (Progressive Loading):**
-- HIGH confidence: SSE+sync workers is incompatible — well-documented limitation
-- MEDIUM confidence: polling interval tuning — depends on how fast BFS is at each depth; needs measurement with production data
-- MEDIUM confidence: React `useTransition` effectiveness for progressive node additions — requires profiling with the actual graph component
-- LOW confidence: "position stability" algorithm to prevent node jitter during incremental adds — no reference implementation found; may need custom logic
-
-**Phase 3 (Integration):**
-- HIGH confidence: three-layer invalidation test structure is straightforward to implement
-- HIGH confidence: existing `/invalidate` endpoint is the right extension point
-- MEDIUM confidence: end-to-end latency targets achievable — depends on Teradata connectivity and graph size in production
+| Kahn sort-per-iteration performance | Phase 1 (layout engine refactor) | `layoutEngine.bench.ts` shows linear scaling 100→400 nodes |
+| Cluster bounds from stale `measured` dimensions | Phase 1 (layout foundation) | Cluster boxes correct from first render; no resize flash on load |
+| `separateDatabaseClusters` breaks with non-contiguous groups | Phase 1 (before mixed layout) | Test database with isolated + connected tables; cluster box width correct |
+| `onlyRenderVisibleElements` hides cluster bounds | Phase 1 (layout foundation) | Pan to off-screen database; cluster box remains visible |
+| Main-thread layout blocks on 400+ nodes | Phase 1 (worker migration) | No Long Tasks > 16ms in DevTools during database lineage load |
+| ELK component-packing conflicts with custom separation | Phase 2 (mixed layout design) | Document invariant: ELK packing XOR `separateDatabaseClusters`, never both |
+| Grid placement causes edge crossings | Phase 2 (mixed layout implementation) | Visual inspection of database with isolated + connected tables; no edges cross grid cells |
+| Secondary-axis stacking creates excessively tall layers | Phase 2 (layout improvement) | No layer exceeds `maxNodesPerColumn` in secondary direction; configured via option |
+| `applySmartViewport` timeout unreliable for large graphs | Phase 1 (foundation) | `fitView` shows all nodes on initial load for 400-node database graph |
+| Direction change race condition | Phase 1 (layout foundation) | Rapid direction changes settle to correct final direction without position flash |
+| Non-deterministic database colors | Phase 1 (pre-existing bug fix) | Same database always gets same color across five reloads |
+| Edge highlight re-render storm | Phase 2 or 3 (performance) | Node click interaction < 100ms with 500+ edges; validated with React Profiler |
 
 ---
 
 ## Sources
 
-**Gunicorn Worker Model and Shared State:**
-- [Gunicorn Application Preloading - Joel Sleppy](https://www.joelsleppy.com/blog/gunicorn-application-preloading/)
-- [Sharing data across workers in a Gunicorn + Flask application - Medium](https://medium.com/@jgleeee/sharing-data-across-workers-in-a-gunicorn-flask-application-2ad698591875)
-- [Rippling's Gunicorn pre-fork journey - Rippling Engineering](https://www.rippling.com/blog/rippling-gunicorn-pre-fork-journey-memory-savings-and-cost-reduction)
-- [How to share in memory resources between Flask methods when deploying with Gunicorn - AppSloveWorld](https://www.appsloveworld.com/coding/flask/3/how-to-share-in-memory-resources-between-flask-methods-when-deploying-with-gunico)
+**ELKjs Layout Algorithm and Configuration:**
+- [ELK Layout Options Reference](https://eclipse.dev/elk/reference/options.html) — `elk.separateConnectedComponents`, `elk.spacing.componentComponent`, `elk.algorithm: disco`
+- [ELK Layered Algorithm Reference](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html) — Sugiyama algorithm phases
+- [ELK Separate Connected Components Option](https://eclipse.dev/elk/reference/options/org-eclipse-elk-separateConnectedComponents.html)
+- [React Flow Layouting Overview](https://reactflow.dev/learn/layouting/layouting) — ELKjs complexity warning; async requirement; dagre subflow limitations
 
-**Flask SSE and WSGI Streaming Limitations:**
-- [Server-sent events in Flask without extra dependencies - Max Halford](https://maxhalford.github.io/blog/flask-sse-no-deps/)
-- [Flask-SSE Quickstart documentation](https://flask-sse.readthedocs.io/en/latest/quickstart.html)
-- [How to use Flask with gevent - iximiuz](https://iximiuz.com/en/posts/flask-gevent-tutorial/)
+**React Flow Performance and Node Positioning:**
+- [React Flow Performance Guide](https://reactflow.dev/learn/advanced-use/performance) — unnecessary re-renders, memoization strategy, hidden property pattern
+- [React Flow initialize→measure→layout→render Discussion #2973](https://github.com/xyflow/xyflow/discussions/2973) — ResizeObserver timing issue, opacity:0 workaround, dimension uncertainty
+- [React Flow Layout Issue #991](https://github.com/xyflow/xyflow/issues/991) — layout with dynamic width/height values
+- [React Flow Large Node Count Discussion #4975](https://github.com/xyflow/xyflow/discussions/4975) — 80+ nodes with event handlers; CSS class pattern vs style updates
+- [React Flow `getNodesBounds` utility](https://reactflow.dev/api-reference/utils/get-nodes-bounds) — official API for bounding box calculation
 
-**Python Graph Library Memory Characteristics:**
-- [graph-tool performance comparison](https://graph-tool.skewed.de/performance.html)
-- [Benchmark of popular graph/network packages - timlrx](https://www.timlrx.com/blog/benchmark-of-popular-graph-network-packages/)
-- [NetworkX memory issue discussion](https://groups.google.com/g/networkx-discuss/c/Etd4GpkjPdA)
-- [igraph memory: 32 bytes per edge vs. NetworkX ~100+ bytes per edge](https://groups.google.com/g/networkx-discuss/c/dmfkwgY2llQ)
-
-**React Flow Incremental Update Pitfalls:**
-- [React Flow Performance documentation](https://reactflow.dev/learn/advanced-use/performance)
-- [Progressive loading for big diagrams - React Flow GitHub Discussion #3033](https://github.com/xyflow/xyflow/discussions/3033)
-- [Simultaneous updateNodeData/updateEdgeData freeze issue - GitHub #4779](https://github.com/xyflow/xyflow/issues/4779)
-- [The Ultimate Guide to Optimize React Flow Project Performance - Synergy Codes](https://www.synergycodes.com/webbook/guide-to-optimize-react-flow-project-performance)
-
-**TanStack Query Cache Behavior:**
-- [Query Invalidation - TanStack Query v5 docs](https://tanstack.com/query/v5/docs/framework/react/guides/query-invalidation)
-- [setQueryData stale time interaction - TanStack GitHub Discussion #4716](https://github.com/TanStack/query/discussions/4716)
-- [invalidateQueries race condition - TanStack GitHub Issue #8060](https://github.com/TanStack/query/issues/8060)
-
-**Python Threading and Read-Write Locks:**
-- [readerwriterlock - PyPI](https://pypi.org/project/readerwriterlock/)
-- [Python Thread Safety - Real Python](https://realpython.com/python-thread-lock/)
-- [Data Races in Python Despite the GIL - verdagon.dev](https://verdagon.dev/blog/python-data-races)
-
-**Redis Pub/Sub for Multi-Process Cache Invalidation:**
-- [Managing In-Memory Cache Invalidation Using Redis Pub/Sub - Osmos](https://osmos-tech-blog.medium.com/managing-in-memory-cache-invalidation-using-redis-pub-sub-c2bd60c13b69)
-
-**Python Memory Profiling:**
-- [Debugging Python server memory leaks with the Fil profiler - Python Speed](https://pythonspeed.com/articles/python-server-memory-leaks/)
+**Graph Layout Theory:**
+- [Topological Sorting - Wikipedia](https://en.wikipedia.org/wiki/Topological_sorting) — O(V+E) standard complexity for Kahn's algorithm
+- [Kahn's Algorithm - GeeksforGeeks](https://www.geeksforgeeks.org/dsa/topological-sorting-indegree-based-solution/) — standard O(V+E) implementation without sort inside loop
+- [Connected Components Grid Layout](https://cambridge-intelligence.com/layouts/) — grid-based isolated component packing
 
 **Project-Specific Sources (Codebase):**
-- `lineage-api/python_server.py` — app factory pattern; connection created inside `create_app()`, not module scope (fork-safe)
-- `lineage-api/cache/invalidation.py` — existing Redis invalidation (SCAN-based, two-layer only)
-- `lineage-api/cache/__init__.py` — Redis graceful degradation pattern (model for graph build fallback)
-- `lineage-api/repositories/lineage_repository.py` — CTE depth semantics (`depth < max_depth` exclusive)
-- `lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx` — `cancelled` ref pattern, `handleRefresh` with `setQueryData`, `toggleTransitions` usage
-- `lineage-ui/src/utils/graph/layoutEngine.ts` — Kahn's topological sort; position assignment from global graph structure (explains jitter on partial data)
-- `lineage-ui/src/components/domain/LineageGraph/LargeGraphWarning.tsx` — `LARGE_GRAPH_THRESHOLD` (existing large-graph guard; in-memory graph may increase what reaches the frontend)
+- `lineage-ui/src/utils/graph/layoutEngine.ts` — `topoQueue.sort()` inside while-loop (Pitfall 1); `separateDatabaseClusters` bounding-box assumption (Pitfall 3); `topoSortDatabases` same sort-per-iteration issue
+- `lineage-ui/src/components/domain/LineageGraph/ClusterBackground.tsx` — `calculateClusterBounds` reads `node.measured` from `nodeLookup` (Pitfall 2, Pitfall 4); `padding = 60` constant matches `CLUSTER_BOX_PADDING` in layoutEngine
+- `lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx` — calls `layoutGraph` on main thread (Pitfall 5); 150ms `applySmartViewport` timeout (Pitfall 8); `cancelled` boolean ref pattern (Pitfall 9)
+- `lineage-ui/src/components/domain/LineageGraph/AllDatabasesLineageGraph.tsx` — `onlyRenderVisibleElements={nodes.length > 30}` (Pitfall 4)
+- `lineage-ui/src/components/domain/LineageGraph/hooks/useDatabaseClusters.ts` — color assignment by iteration index (Pitfall 10)
+- `lineage-ui/src/components/domain/LineageGraph/hooks/useLayoutWorker.ts` — existing worker infrastructure available for database lineage layout migration
+- `lineage-ui/src/utils/graph/disableTransitions.ts` — `TRANSITION_THRESHOLD = 200`; existing mechanism for large-graph animation suppression
 
 ---
-*Pitfalls research for: Adding in-memory graph engine + progressive loading to Flask+React Teradata lineage app*
-*Researched: 2026-02-20*
-*Milestone: v4.0 First-Time Load Performance*
+*Pitfalls research for: Adding mixed layout strategies (hierarchical + grid) to existing ELKjs + React Flow database lineage graph*
+*Researched: 2026-02-21*
+*Milestone: Database lineage graph layout improvement*
