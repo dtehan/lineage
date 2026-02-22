@@ -101,11 +101,11 @@ Plans:
   3. No node overlaps between the connected hierarchical section and the disconnected grid section
   4. Both DatabaseLineageGraph and AllDatabasesLineageGraph show the correct two-zone layout without any caller changes
   5. ELK simple-node fallback path also produces non-overlapping component separation when triggered
-**Plans:** TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 20-01: Implement detectConnectedComponents() and refactor Kahn + longest-path layering to run per component
-- [ ] 20-02: Add isolated table grid placement and layoutSimpleNodes ELK config fix (separateConnectedComponents, componentComponent spacing, aspectRatio)
+- [ ] 20-01-PLAN.md — detectConnectedComponents + kahnSort helper + per-component Kahn/longest-path layering (TDD)
+- [ ] 20-02-PLAN.md — Isolated table grid placement + layoutSimpleNodes ELK config fix
 
 #### Phase 21: UX Polish
 
