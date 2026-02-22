@@ -11,11 +11,13 @@ import {
   ConnectionMode,
   type Node,
   type Edge,
+  type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
 import { useOpenLineageDatabaseLineage } from '../../../api/hooks/useOpenLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
+import { useUIStore } from '../../../stores/useUIStore';
 import { type TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
@@ -38,8 +40,22 @@ import {
 import { useLayoutWorker } from './hooks/useLayoutWorker';
 import { LineageMiniMap } from './LineageMiniMap';
 
+interface SectionLabelNodeData {
+  count: number;
+  [key: string]: unknown;
+}
+
+function SectionLabelNode({ data }: NodeProps<Node<SectionLabelNodeData>>) {
+  return (
+    <div className="px-3 py-1.5 text-sm font-medium text-slate-500 bg-slate-50/90 border border-slate-200 rounded-lg whitespace-nowrap select-none pointer-events-none shadow-sm">
+      Tables without lineage connections ({data.count})
+    </div>
+  );
+}
+
 const nodeTypes = {
   tableNode: TableNode,
+  sectionLabelNode: SectionLabelNode,
 };
 
 const edgeTypes = {
@@ -94,6 +110,19 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     toggleMultiSelectMode,
     // Note: setAssetTypeFilter is available but not used in current implementation
   } = useLineageStore();
+
+  // Phase 21: isolated table UX
+  const {
+    hideIsolatedTables,
+    toggleHideIsolatedTables,
+    setIsolatedTableCount,
+    setConnectedTableCount,
+    isolatedTableCount,
+    connectedTableCount,
+  } = useUIStore();
+
+  // Track isolated node IDs for hide filtering
+  const isolatedNodeIdsRef = useRef<Set<string>>(new Set());
 
   // Fetch database lineage using OpenLineage API
   const { data, isLoading, error } = useOpenLineageDatabaseLineage(databaseName, direction, maxDepth || 3);
@@ -160,7 +189,10 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     reset();
     hasAppliedViewportRef.current = false;
     hasUserInteractedRef.current = false;
-  }, [databaseName, reset]);
+    setIsolatedTableCount(0);
+    setConnectedTableCount(0);
+    isolatedNodeIdsRef.current = new Set();
+  }, [databaseName, reset, setIsolatedTableCount, setConnectedTableCount]);
 
   // Update nodes/edges when data changes
   useEffect(() => {
@@ -178,14 +210,41 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
 
     // Strip onProgress (not structured-clone-able across Worker boundary)
     // and run layout in Worker thread to keep main thread responsive
-    workerLayoutGraph(converted.nodes, converted.edges, {
-      direction,
-    })
-      .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
+    // Note: layout direction is always RIGHT for database lineage graphs.
+    // The 'direction' variable is lineage traversal direction (upstream/downstream/both),
+    // which is distinct from layout direction (RIGHT/LEFT/DOWN/UP).
+    workerLayoutGraph(converted.nodes, converted.edges, {})
+      .then(({ nodes: layoutedNodes, edges: layoutedEdges, isolatedCount, connectedCount, isolatedGridOrigin, isolatedNodeIds }) => {
         if (generation !== generationRef.current) return; // Stale result — discard
         setProgress(90); // Layout complete, entering render stage
         setStage('rendering');
-        setNodes(layoutedNodes);
+
+        // Store counts in useUIStore for header badges and toolbar
+        setIsolatedTableCount(isolatedCount);
+        setConnectedTableCount(connectedCount);
+
+        // Track isolated node IDs for hide filtering
+        isolatedNodeIdsRef.current = new Set(isolatedNodeIds);
+
+        // Inject section label node if isolated tables exist
+        let allNodes = layoutedNodes;
+        if (isolatedCount > 0 && isolatedGridOrigin) {
+          const labelNode: Node = {
+            id: '__isolated-section-label__',
+            type: 'sectionLabelNode',
+            position: {
+              x: isolatedGridOrigin.x,
+              y: isolatedGridOrigin.y - 36,
+            },
+            data: { count: isolatedCount },
+            draggable: false,
+            selectable: false,
+            focusable: false,
+          };
+          allNodes = [labelNode, ...layoutedNodes];
+        }
+
+        setNodes(allNodes);
         setEdges(layoutedEdges);
         setGraph(converted.nodes, converted.edges);
         requestAnimationFrame(() => {
@@ -204,7 +263,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     return () => {
       reset();
     };
-  }, [data, direction, workerLayoutGraph, setNodes, setEdges, setGraph, setStage, setProgress, reset]);
+  }, [data, workerLayoutGraph, setNodes, setEdges, setGraph, setStage, setProgress, reset, setIsolatedTableCount, setConnectedTableCount]);
 
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
@@ -394,6 +453,21 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     [setSelectedEdge, openPanel, setViewMode]
   );
 
+  // Filter nodes and edges for hide-isolated-tables toggle
+  const visibleNodes = useMemo(() => {
+    if (!hideIsolatedTables || isolatedNodeIdsRef.current.size === 0) return nodes;
+    return nodes.filter(
+      (n) => !isolatedNodeIdsRef.current.has(n.id) && n.id !== '__isolated-section-label__'
+    );
+  }, [nodes, hideIsolatedTables]);
+
+  const visibleEdges = useMemo(() => {
+    if (!hideIsolatedTables || isolatedNodeIdsRef.current.size === 0) return edges;
+    return edges.filter(
+      (e) => !isolatedNodeIdsRef.current.has(e.source) && !isolatedNodeIdsRef.current.has(e.target)
+    );
+  }, [edges, hideIsolatedTables]);
+
   // Show progress during any loading stage (fetching, layout, or rendering)
   const showProgress = isLoading || (stage !== 'idle' && stage !== 'complete');
 
@@ -451,6 +525,16 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         <div className="flex items-center gap-2">
           <Database className="w-5 h-5 text-blue-600" />
           <span className="font-medium text-blue-800">Database: {databaseName}</span>
+          {connectedTableCount > 0 && (
+            <span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full">
+              {connectedTableCount} in lineage
+            </span>
+          )}
+          {isolatedTableCount > 0 && (
+            <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              {isolatedTableCount} isolated
+            </span>
+          )}
         </div>
       </div>
 
@@ -470,14 +554,17 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         isLoading={isLoading}
         isMultiSelectMode={isMultiSelectMode}
         onToggleMultiSelectMode={toggleMultiSelectMode}
+        hideIsolatedTables={hideIsolatedTables}
+        onToggleHideIsolatedTables={toggleHideIsolatedTables}
+        isolatedTableCount={isolatedTableCount}
       />
 
       {/* Graph View */}
       {viewMode === 'graph' && (
         <div className="flex-1 relative">
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={visibleNodes}
+            edges={visibleEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onNodeClick={onNodeClick}
@@ -492,7 +579,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
             connectionMode={ConnectionMode.Loose}
             minZoom={0.1}
             maxZoom={2}
-            onlyRenderVisibleElements={nodes.length > 50}
+            onlyRenderVisibleElements={visibleNodes.length > 50}
             proOptions={{ hideAttribution: true }}
           >
             {showDatabaseClusters && (

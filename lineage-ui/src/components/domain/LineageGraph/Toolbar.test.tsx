@@ -346,6 +346,58 @@ describe('Toolbar', () => {
     });
   });
 
+  describe('hide isolated tables toggle', () => {
+    it('renders hide-isolated toggle when onToggleHideIsolatedTables and isolatedTableCount > 0', () => {
+      render(<Toolbar {...defaultProps} onToggleHideIsolatedTables={vi.fn()} isolatedTableCount={5} />);
+      expect(screen.getByTestId('hide-isolated-toggle')).toBeInTheDocument();
+    });
+
+    it('does not render when onToggleHideIsolatedTables not provided', () => {
+      render(<Toolbar {...defaultProps} isolatedTableCount={5} />);
+      expect(screen.queryByTestId('hide-isolated-toggle')).not.toBeInTheDocument();
+    });
+
+    it('does not render when isolatedTableCount is 0', () => {
+      render(<Toolbar {...defaultProps} onToggleHideIsolatedTables={vi.fn()} isolatedTableCount={0} />);
+      expect(screen.queryByTestId('hide-isolated-toggle')).not.toBeInTheDocument();
+    });
+
+    it('calls onToggleHideIsolatedTables when clicked', () => {
+      const onToggle = vi.fn();
+      render(<Toolbar {...defaultProps} onToggleHideIsolatedTables={onToggle} isolatedTableCount={3} />);
+      fireEvent.click(screen.getByTestId('hide-isolated-toggle'));
+      expect(onToggle).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows active styling when hideIsolatedTables is true', () => {
+      render(
+        <Toolbar
+          {...defaultProps}
+          hideIsolatedTables={true}
+          onToggleHideIsolatedTables={vi.fn()}
+          isolatedTableCount={5}
+        />
+      );
+      const button = screen.getByTestId('hide-isolated-toggle');
+      expect(button).toHaveAttribute('aria-pressed', 'true');
+      expect(button).toHaveClass('bg-slate-200');
+    });
+
+    it('shows inactive styling when hideIsolatedTables is false', () => {
+      render(
+        <Toolbar
+          {...defaultProps}
+          hideIsolatedTables={false}
+          onToggleHideIsolatedTables={vi.fn()}
+          isolatedTableCount={5}
+        />
+      );
+      const button = screen.getByTestId('hide-isolated-toggle');
+      expect(button).toHaveAttribute('aria-pressed', 'false');
+      expect(button).not.toHaveClass('bg-slate-200');
+    });
+  });
+
   describe('multi-select toggle', () => {
     it('renders multi-select toggle button when onToggleMultiSelectMode provided', () => {
       const onToggleMultiSelectMode = vi.fn();

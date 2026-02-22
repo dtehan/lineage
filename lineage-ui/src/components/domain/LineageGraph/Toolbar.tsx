@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair, RefreshCw, MousePointerClick } from 'lucide-react';
+import { Search, Maximize2, Download, ChevronDown, Focus, Filter, Crosshair, RefreshCw, MousePointerClick, Eye, EyeOff } from 'lucide-react';
 import { Tooltip } from '../../common/Tooltip';
 
 export type ViewMode = 'graph' | 'table';
@@ -29,6 +29,9 @@ export interface ToolbarProps {
   onAssetTypeFilterChange?: (types: AssetTypeFilter[]) => void;
   isMultiSelectMode?: boolean;
   onToggleMultiSelectMode?: () => void;
+  hideIsolatedTables?: boolean;
+  onToggleHideIsolatedTables?: () => void;
+  isolatedTableCount?: number;
 }
 
 export const Toolbar: React.FC<ToolbarProps> = ({
@@ -54,6 +57,9 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAssetTypeFilterChange,
   isMultiSelectMode = false,
   onToggleMultiSelectMode,
+  hideIsolatedTables = false,
+  onToggleHideIsolatedTables,
+  isolatedTableCount = 0,
 }) => {
   const [showAssetTypeDropdown, setShowAssetTypeDropdown] = React.useState(false);
   const dropdownRef = React.useRef<HTMLDivElement>(null);
@@ -253,6 +259,29 @@ export const Toolbar: React.FC<ToolbarProps> = ({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-1 ml-auto">
+        {onToggleHideIsolatedTables && isolatedTableCount > 0 && (
+          <Tooltip
+            content={hideIsolatedTables
+              ? `Show ${isolatedTableCount} tables without lineage connections`
+              : `Hide ${isolatedTableCount} tables without lineage connections`}
+            position="bottom"
+          >
+            <button
+              onClick={onToggleHideIsolatedTables}
+              className={`p-2 rounded-lg transition-colors ${
+                hideIsolatedTables
+                  ? 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+              aria-label={hideIsolatedTables ? 'Show isolated tables' : 'Hide isolated tables'}
+              aria-pressed={hideIsolatedTables}
+              data-testid="hide-isolated-toggle"
+            >
+              {hideIsolatedTables ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </button>
+          </Tooltip>
+        )}
+
         {onToggleMultiSelectMode && (
           <Tooltip content={isMultiSelectMode ? "Exit multi-select mode (Esc)" : "Multi-select mode: click nodes to select, drag to move group"} position="bottom">
             <button
