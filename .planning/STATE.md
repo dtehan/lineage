@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 20 of 21 in v5.0 (Mixed Layout Strategy)
-Plan: 1 of 3 in current phase — Plan 20-01 COMPLETE
-Status: In progress — Plan 20-01 done, ready for Plan 20-02
-Last activity: 2026-02-22 — Plan 20-01 complete: BFS component detection + per-component Kahn layering
+Plan: 2 of 3 in current phase — Plan 20-02 COMPLETE
+Status: In progress — Plan 20-02 done, ready for Plan 20-03
+Last activity: 2026-02-22 — Plan 20-02 complete: placeIsolatedGrid two-zone layout + ELK separateConnectedComponents
 
-Progress: [███░░░░░░░] 30% (v5.0)
+Progress: [████░░░░░░] 40% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -25,7 +25,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 40 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 3)
+- Total plans completed: 41 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 4)
 
 **By Milestone:**
 
@@ -36,7 +36,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
-| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 in progress (3/5 plans done) |
+| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 in progress (4/5 plans done) |
 
 ## Accumulated Context
 
@@ -60,6 +60,13 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 - Emit fixed progress milestones (35 before Worker, 90 after) rather than passing onProgress callback — functions are not structured-clone-able across Worker boundary (Comlink uses structured clone)
 - Generation counter (not boolean cancelled flag) protects against stale layout results from rapid direction changes
 
+### Key Decisions (20-02 execution)
+
+- gridGap = componentGap (80px) for visual consistency with inter-component spacing
+- maxRowWidth = max(1200, maxConnectedPrimaryExtent) ensures isolated grid never collapses to tiny width with small connected sections
+- placeIsolatedGrid kept internal (not exported) — layoutGraph is the public contract; callers don't need to know the internal grid strategy
+- ELK separateConnectedComponents added to layoutSimpleNodes with componentComponent=nodeSpacing*2 and aspectRatio=1.7
+
 ### Key Decisions (20-01 execution)
 
 - Self-loops filtered in undirected adjacency build: a table pointing only to itself has zero undirected neighbors and is isolated
@@ -78,5 +85,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 20-01-PLAN.md — detectConnectedComponents + kahnSort + per-component layoutGraph, 76 tests pass
+Stopped at: Completed 20-02-PLAN.md — placeIsolatedGrid two-zone layout + ELK separateConnectedComponents, 83 tests pass
 Resume file: None
