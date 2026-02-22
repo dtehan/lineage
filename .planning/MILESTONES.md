@@ -91,3 +91,19 @@ Project milestone history tracking completed phases and shipped features.
 
 ---
 
+
+## v5.0 Database Lineage Layout (Shipped: 2026-02-22)
+
+**Phases completed:** 3 phases (19-21), 5 plans
+
+**Delivered:** 34 files modified (+6,659/-1,320 lines), 27 commits over 1 day (2026-02-21 → 2026-02-22)
+
+**Key accomplishments:**
+1. O(V+E) Kahn Sort & Deterministic Colors — Fixed quadratic sort degradation via binary-search insertion, replaced iteration-order cluster colors with djb2 hash for stable colors across page refreshes
+2. Connected Component Detection — BFS-based partitioning of table adjacency graph into independent lineage chains and isolated tables, enabling per-component topological layering
+3. Two-Zone Database Layout — Connected tables flow left-to-right in topological order within each lineage chain; disconnected tables appear in a compact alphabetical grid below, separated by 80px gap
+4. ELK Fallback Fix — Enabled separateConnectedComponents on layoutSimpleNodes path with component spacing and 1.7 aspect ratio
+5. Isolated Table UX — Canvas section label "Tables without lineage connections (N)", Eye/EyeOff hide-isolated toggle in toolbar, database header count badges for lineage vs isolated tables
+
+---
+

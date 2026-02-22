@@ -2,25 +2,26 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-21)
+See: .planning/PROJECT.md (updated 2026-02-22)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v5.0 COMPLETE — all phases shipped
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 21 of 21 in v5.0 — Phase 21 COMPLETE
-Plan: 1 of 1 in phase 21 — Plan 21-01 COMPLETE
-Status: v5.0 milestone complete — all 3 phases, 5 plans shipped
-Last activity: 2026-02-22 — Phase 21 complete: canvas section label, hide-isolated toggle, header count badges. Verification passed 5/5 must-haves.
+Phase: None active — v5.0 milestone archived
+Plan: None active
+Status: Between milestones — v5.0 shipped, next milestone not started
+Last activity: 2026-02-22 — v5.0 Database Lineage Layout milestone archived
 
-Progress: [██████████] 100% (v5.0)
+Progress:
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
 v3.0: ██████████ 100% (7/7 phases) — shipped 2026-02-19
 v4.0: ██████████ 100% (5/5 phases) — shipped 2026-02-21
 Draggable Minimap: ██████████ 100% (1/1 plans) — complete 2026-02-22
+v5.0: ██████████ 100% (3/3 phases) — shipped 2026-02-22
 
 ## Performance Metrics
 
@@ -40,47 +41,6 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 
 ## Accumulated Context
 
-### Key Decisions (v5.0 research)
-
-- All layout changes confined to `layoutEngine.ts` — no caller interface changes, no API changes, no React Flow component changes
-- Phase 19 before Phase 20 is a hard dependency: separateDatabaseClusters bounding-box bug breaks multi-database graphs the moment non-contiguous nodes exist
-- Worker migration (Phase 19) must precede new BFS algorithm (Phase 20): connected component analysis adds ~5ms per 500 tables, acceptable in worker, jank on main thread
-- layoutSimpleNodes ELK config change ships in Phase 20 alongside main path fix (atomic release, same symptom)
-- ELK DisCo explicitly rejected: known hang risk on dense graphs
-- No new npm packages: ELKjs 0.9.3 already supports all required options
-
-### Key Decisions (19-02 execution)
-
-- Binary-search splice insertion chosen for Kahn sort: queue stays sorted at O(log n) per push, eliminates O(n log n) re-sort inside while loop
-- djb2 hash for cluster color lookup: deterministic unsigned 32-bit, color stable across page refreshes regardless of Map iteration order
-- separateDatabaseClusters extended with secLo/secHi non-breaking: existing { lo, hi } destructuring sites unchanged, secondary bounds available for Phase 20
-
-### Key Decisions (19-01 execution)
-
-- Emit fixed progress milestones (35 before Worker, 90 after) rather than passing onProgress callback — functions are not structured-clone-able across Worker boundary (Comlink uses structured clone)
-- Generation counter (not boolean cancelled flag) protects against stale layout results from rapid direction changes
-
-### Key Decisions (20-02 execution)
-
-- gridGap = componentGap (80px) for visual consistency with inter-component spacing
-- maxRowWidth = max(1200, maxConnectedPrimaryExtent) ensures isolated grid never collapses to tiny width with small connected sections
-- placeIsolatedGrid kept internal (not exported) — layoutGraph is the public contract; callers don't need to know the internal grid strategy
-- ELK separateConnectedComponents added to layoutSimpleNodes with componentComponent=nodeSpacing*2 and aspectRatio=1.7
-
-### Key Decisions (20-01 execution)
-
-- Self-loops filtered in undirected adjacency build: a table pointing only to itself has zero undirected neighbors and is isolated
-- topoSortDatabases delegates to kahnSort — eliminates duplicated Kahn loop logic
-- Components stack vertically (componentYOffset along secondary axis) so all layer-0 tables align at the same x in RIGHT direction
-- Isolated tables given sequential placeholder layout in 20-01; Plan 20-02 replaces with alphabetical wrap grid
-
-### Key Decisions (21-01 execution)
-
-- SectionLabelNode injected into allNodes array after layout (not via ELK): positioned at isolatedGridOrigin.y - 36px, type='sectionLabelNode', draggable/selectable/focusable=false
-- render-time filtering chosen over layout re-run: visibleNodes/visibleEdges useMemo, isolatedNodeIdsRef tracks IDs from last layout result
-- Layout direction bug fixed: DatabaseLineageGraph was passing lineage traversal direction (upstream/downstream/both) as layout direction (RIGHT/LEFT/DOWN/UP); fixed by removing direction from layout options (defaults to RIGHT)
-- Header count badges conditional on count > 0: badges hidden during loading, appear after layout callback fires
-
 ### Pending Todos
 
 None.
@@ -92,5 +52,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: v5.0 milestone complete — all phases shipped, verification passed
+Stopped at: v5.0 milestone archived
 Resume file: None
