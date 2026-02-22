@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react';
 import { useStore, useViewport, ReactFlowState } from '@xyflow/react';
 import { Folder } from 'lucide-react';
+import { calculateTableNodeWidth, calculateTableNodeHeight } from '../../../utils/graph/layoutEngine';
+import type { ColumnDefinition } from './TableNode/ColumnRow';
 
 export interface DatabaseCluster {
   id: string;
@@ -87,8 +89,21 @@ function calculateClusterBounds(
     if (node && node.position) {
       const x = node.position.x;
       const y = node.position.y;
-      const width = (node.measured?.width ?? node.width ?? 280) as number;
-      const height = (node.measured?.height ?? node.height ?? 100) as number;
+
+      // Use pre-calculated dimensions from node data when available (LFND-02 fix).
+      // node.measured comes from React Flow's ResizeObserver which is stale during
+      // layout transitions. The layout engine's dimension functions are deterministic.
+      const nodeData = node.data as { tableName?: string; columns?: ColumnDefinition[]; isExpanded?: boolean } | undefined;
+      let width: number;
+      let height: number;
+      if (nodeData?.tableName && nodeData?.columns && nodeData.columns.length > 0) {
+        width = calculateTableNodeWidth(nodeData.tableName, nodeData.columns);
+        height = calculateTableNodeHeight(nodeData.columns.length, nodeData.isExpanded ?? true);
+      } else {
+        // Fallback for non-table nodes or nodes without data
+        width = (node.measured?.width ?? node.width ?? 280) as number;
+        height = (node.measured?.height ?? node.height ?? 100) as number;
+      }
 
       minX = Math.min(minX, x);
       minY = Math.min(minY, y);

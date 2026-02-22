@@ -290,21 +290,30 @@ export function separateDatabaseClusters(
 
   const isHorizontal = direction === 'RIGHT' || direction === 'LEFT';
 
-  // Bounding extent along the primary axis (node position + node size)
-  const dbExtent = new Map<string, { lo: number; hi: number }>();
+  // Bounding extent along both axes (primary axis used for separation, secondary for completeness).
+  // Tracking both enables future callers (Phase 20 grid placement) to use full bounding boxes.
+  const dbExtent = new Map<string, { lo: number; hi: number; secLo: number; secHi: number }>();
   dbNodeMap.forEach((dbNodes, db) => {
     let lo = Infinity;
     let hi = -Infinity;
+    let secLo = Infinity;
+    let secHi = -Infinity;
     dbNodes.forEach((node) => {
       const td = tableNodeData.find((t) => t.id === node.id)!;
-      const size = isHorizontal
+      const priSize = isHorizontal
         ? calculateTableNodeWidth(td.tableName, td.columns)
         : calculateTableNodeHeight(td.columns.length, td.isExpanded);
-      const pos = isHorizontal ? node.position.x : node.position.y;
-      lo = Math.min(lo, pos);
-      hi = Math.max(hi, pos + size);
+      const secSize = isHorizontal
+        ? calculateTableNodeHeight(td.columns.length, td.isExpanded)
+        : calculateTableNodeWidth(td.tableName, td.columns);
+      const priPos = isHorizontal ? node.position.x : node.position.y;
+      const secPos = isHorizontal ? node.position.y : node.position.x;
+      lo = Math.min(lo, priPos);
+      hi = Math.max(hi, priPos + priSize);
+      secLo = Math.min(secLo, secPos);
+      secHi = Math.max(secHi, secPos + secSize);
     });
-    dbExtent.set(db, { lo, hi });
+    dbExtent.set(db, { lo, hi, secLo, secHi });
   });
 
   // Order databases by dbOrder (lineage flow); unknowns fall back to current position
