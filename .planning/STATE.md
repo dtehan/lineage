@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 ## Current Position
 
 Phase: 19 of 21 in v5.0 (Layout Engine Foundation)
-Plan: 0 of 2 in current phase
-Status: Ready to plan
-Last activity: 2026-02-21 — v5.0 roadmap created; phases 19-21 defined
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-22 — Plan 19-01 complete: Worker-based layout + generation counter in DatabaseLineageGraph
 
-Progress: [░░░░░░░░░░] 0% (v5.0)
+Progress: [█░░░░░░░░░] 10% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -25,7 +25,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1)
+- Total plans completed: 38 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 1)
 
 **By Milestone:**
 
@@ -49,6 +49,11 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 - ELK DisCo explicitly rejected: known hang risk on dense graphs
 - No new npm packages: ELKjs 0.9.3 already supports all required options
 
+### Key Decisions (19-01 execution)
+
+- Emit fixed progress milestones (35 before Worker, 90 after) rather than passing onProgress callback — functions are not structured-clone-able across Worker boundary (Comlink uses structured clone)
+- Generation counter (not boolean cancelled flag) protects against stale layout results from rapid direction changes
+
 ### Pending Todos
 
 None.
@@ -59,6 +64,6 @@ None active.
 
 ## Session Continuity
 
-Last session: 2026-02-21
-Stopped at: v5.0 roadmap created — ready to plan Phase 19
+Last session: 2026-02-22
+Stopped at: Completed 19-01-PLAN.md — Plan 1 of 2 in Phase 19 done
 Resume file: None
