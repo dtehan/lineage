@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, fireEvent } from '@testing-library/react';
 import { render } from '../../../test/test-utils';
 import { LineageGraph } from './LineageGraph';
 import * as useOpenLineageModule from '../../../api/hooks/useOpenLineage';
@@ -425,6 +425,32 @@ describe('LineageGraph Component', () => {
       });
 
       // Background is configured with color="#e2e8f0" gap={16}
+    });
+
+    it('renders shared LineageMiniMap when minimap toggle is clicked', async () => {
+      // Verifies that the shared LineageMiniMap component is rendered when toggled on.
+      // LineageMiniMap wraps MiniMap with pannable={true} and zoomable={true} --
+      // the MiniMap mock intercepts that import so the testid still appears.
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="_all" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
+      });
+
+      // Minimap hidden by default
+      expect(screen.queryByTestId('react-flow-minimap')).not.toBeInTheDocument();
+
+      // Toggle minimap on
+      const minimapToggle = screen.getByLabelText(/toggle minimap/i);
+      fireEvent.click(minimapToggle);
+
+      // Minimap should now be visible
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow-minimap')).toBeInTheDocument();
+      });
+
+      // Toggle button should show expanded state
+      expect(minimapToggle).toHaveAttribute('aria-expanded', 'true');
     });
   });
 
