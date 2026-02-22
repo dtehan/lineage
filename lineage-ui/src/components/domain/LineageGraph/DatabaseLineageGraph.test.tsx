@@ -47,7 +47,14 @@ vi.mock('@xyflow/react', () => ({
 
 // Mock the layout engine
 vi.mock('../../../utils/graph/layoutEngine', () => ({
-  layoutGraph: vi.fn().mockResolvedValue({ nodes: [], edges: [] }),
+  layoutGraph: vi.fn().mockResolvedValue({
+    nodes: [],
+    edges: [],
+    isolatedCount: 0,
+    connectedCount: 0,
+    isolatedGridOrigin: undefined,
+    isolatedNodeIds: [],
+  }),
 }));
 
 const mockDatabaseLineageData = {

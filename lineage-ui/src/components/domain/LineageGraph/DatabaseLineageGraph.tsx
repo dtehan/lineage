@@ -18,7 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { useOpenLineageDatabaseLineage } from '../../../api/hooks/useOpenLineage';
 import { useLineageStore } from '../../../stores/useLineageStore';
 import { useUIStore } from '../../../stores/useUIStore';
-import { type TableNodeData } from '../../../utils/graph/layoutEngine';
+import { layoutGraph, type TableNodeData } from '../../../utils/graph/layoutEngine';
 import { convertOpenLineageGraph } from '../../../utils/graph/openLineageAdapter';
 import { TableNode } from './TableNode/';
 import { LineageEdge } from './LineageEdge';
@@ -37,7 +37,6 @@ import {
   useSmartViewport,
   useMultiSelect,
 } from './hooks';
-import { useLayoutWorker } from './hooks/useLayoutWorker';
 import { LineageMiniMap } from './LineageMiniMap';
 
 interface SectionLabelNodeData {
@@ -74,8 +73,6 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   const hasAppliedViewportRef = useRef(false);
   const hasUserInteractedRef = useRef(false);
 
-  // Worker-based layout to keep main thread responsive
-  const { layoutGraph: workerLayoutGraph } = useLayoutWorker();
   // Generation counter for race-condition protection on rapid direction changes
   const generationRef = useRef(0);
 
@@ -208,14 +205,19 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
 
     setProgress(35); // Entering layout stage
 
-    // Strip onProgress (not structured-clone-able across Worker boundary)
-    // and run layout in Worker thread to keep main thread responsive
+    // Track whether this effect run has been superseded (data changed or component unmounted).
+    let cancelled = false;
+
+    // Run layout on main thread — the custom topological layout is O(V+E) and
+    // completes in ~15ms even for large databases, so a Worker is unnecessary.
     // Note: layout direction is always RIGHT for database lineage graphs.
     // The 'direction' variable is lineage traversal direction (upstream/downstream/both),
     // which is distinct from layout direction (RIGHT/LEFT/DOWN/UP).
-    workerLayoutGraph(converted.nodes, converted.edges, {})
+    layoutGraph(converted.nodes, converted.edges, {
+      onProgress: (p) => setProgress(p),
+    })
       .then(({ nodes: layoutedNodes, edges: layoutedEdges, isolatedCount, connectedCount, isolatedGridOrigin, isolatedNodeIds }) => {
-        if (generation !== generationRef.current) return; // Stale result — discard
+        if (cancelled || generation !== generationRef.current) return; // Stale result — discard
         setProgress(90); // Layout complete, entering render stage
         setStage('rendering');
 
@@ -254,16 +256,17 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         });
       })
       .catch((err) => {
-        if (generation !== generationRef.current) return; // Stale result — discard
+        if (cancelled || generation !== generationRef.current) return; // Stale result — discard
         console.error('Database layout error:', err);
         setGraph(converted.nodes, converted.edges);
         setStage('complete');
       });
 
     return () => {
+      cancelled = true;
       reset();
     };
-  }, [data, workerLayoutGraph, setNodes, setEdges, setGraph, setStage, setProgress, reset, setIsolatedTableCount, setConnectedTableCount]);
+  }, [data, setNodes, setEdges, setGraph, setStage, setProgress, reset, setIsolatedTableCount, setConnectedTableCount]);
 
   // Apply smart viewport after layout completes (only once per data load, never after user interaction)
   useEffect(() => {
