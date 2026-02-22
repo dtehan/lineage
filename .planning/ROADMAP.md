@@ -6,7 +6,7 @@
 - ✅ **v2.0 Performance Optimization** — Phases 4-6 (shipped 2026-02-16)
 - ✅ **v3.0 Wildcard Expansion & Graph Enhancements** — Phases 7-13 (shipped 2026-02-19)
 - ✅ **v4.0 First-Time Load Performance** — Phases 14-18 (shipped 2026-02-21)
-- 🚧 **v5.0 Database Lineage Layout** — Phases 19-21 (in progress)
+- ✅ **v5.0 Database Lineage Layout** — Phases 19-21 (shipped 2026-02-22)
 
 ## Phases
 
@@ -69,7 +69,7 @@ Standalone mini-phase outside main sequence. See `.planning/phases/01-foundation
 
 </details>
 
-### 🚧 v5.0 Database Lineage Layout (In Progress)
+### ✅ v5.0 Database Lineage Layout (SHIPPED 2026-02-22)
 
 **Milestone Goal:** Fix database lineage graph layout so connected tables flow left-to-right and disconnected tables arrange in a compact grid, replacing the broken vertical stack.
 
@@ -119,7 +119,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 21-01-PLAN.md — Section label for isolated grid, hide toggle in toolbar (useUIStore), header count badges
+- [x] 21-01-PLAN.md — Section label for isolated grid, hide toggle in toolbar (useUIStore), header count badges
 
 ## Progress
 
@@ -145,4 +145,4 @@ Plans:
 | 18. Redis Serialization | v4.0 | 1/1 | Complete | 2026-02-21 |
 | 19. Layout Engine Foundation | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 20. Mixed Layout Strategy | v5.0 | 2/2 | Complete | 2026-02-22 |
-| 21. UX Polish | v5.0 | 0/1 | Not started | - |
+| 21. UX Polish | v5.0 | 1/1 | Complete | 2026-02-22 |

@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** v5.0 — Phase 21: UX Polish
+**Current focus:** v5.0 COMPLETE — all phases shipped
 
 ## Current Position
 
-Phase: 21 of 21 in v5.0 — Phase 21 in progress
+Phase: 21 of 21 in v5.0 — Phase 21 COMPLETE
 Plan: 1 of 1 in phase 21 — Plan 21-01 COMPLETE
-Status: Phase 21 in progress — Plan 01 complete
-Last activity: 2026-02-22 — Phase 21 Plan 01 complete: canvas section label, hide-isolated toggle, header count badges
+Status: v5.0 milestone complete — all 3 phases, 5 plans shipped
+Last activity: 2026-02-22 — Phase 21 complete: canvas section label, hide-isolated toggle, header count badges. Verification passed 5/5 must-haves.
 
-Progress: [████████░░] 80% (v5.0)
+Progress: [██████████] 100% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -36,7 +36,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
-| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 complete (5/5 plans done) |
+| v5.0 Database Lineage Layout | 3 | 5 | Shipped 2026-02-22 |
 
 ## Accumulated Context
 
@@ -92,5 +92,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Completed 21-01-PLAN.md — Phase 21 Plan 01 complete
+Stopped at: v5.0 milestone complete — all phases shipped, verification passed
 Resume file: None
