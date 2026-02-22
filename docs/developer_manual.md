@@ -66,6 +66,46 @@ Open `http://localhost:3000` to view the application.
 
 For detailed configuration, QVCI setup, and production deployment, see the [Operations Guide](operations_guide.md).
 
+### Quick Start (ClearScape Analytics)
+
+For quick testing with the provided ClearScape Analytics test database:
+
+```bash
+# 1. Clone and setup Python environment
+cd play/
+python3 -m venv .venv
+source .venv/bin/activate
+pip install teradatasql flask flask-cors requests
+
+# 2. Setup database schema and load test data
+cd database/
+python scripts/setup/setup_lineage_schema.py
+python scripts/setup/setup_test_data.py
+python scripts/populate/populate_lineage.py
+python scripts/utils/insert_cte_test_data.py
+
+# 3. Run database tests (optional)
+python tests/run_tests.py
+
+# 4. Start backend API
+cd ../lineage-api/
+python python_server.py &
+
+# 5. Start frontend
+cd ../lineage-ui/
+npm install
+npm run dev &
+
+# 6. Run E2E tests
+npx playwright install chromium
+npx playwright test
+
+# 7. Access the application
+# Open http://localhost:3000 in your browser
+```
+
+
+
 ---
 
 ## Environment Setup

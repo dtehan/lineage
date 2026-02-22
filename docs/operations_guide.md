@@ -220,13 +220,82 @@ python scripts/populate/populate_test_metadata.py
 
 This populates `OL_NAMESPACE`, `OL_DATASET`, and `OL_DATASET_FIELD` records for the tables referenced in the lineage data.
 
+### 4.5 DBQL Prerequisites
+
+Before using DBQL extraction, ensure these requirements are met:
+
+1. **Query Logging Enabled**: Your DBA must enable query logging with SQL text capture:
+   ```sql
+   BEGIN QUERY LOGGING WITH SQL, OBJECTS ON ALL;
+   ```
+
+2. **DBQL Access**: Your user needs SELECT privileges on DBQL tables:
+   ```sql
+   GRANT SELECT ON DBC.DBQLogTbl TO your_user;
+   GRANT SELECT ON DBC.DBQLSQLTbl TO your_user;
+   ```
+
+3. **SQLGlot Library**: Install the SQL parsing library (included in `requirements.txt`):
+   ```bash
+   pip install sqlglot>=25.0.0
+   ```
+
+### 4.6 What DBQL Extraction Captures
+
+The extractor parses the following statement types from DBQL:
+- `INSERT INTO ... SELECT` statements
+- `MERGE INTO` statements
+- `CREATE TABLE ... AS SELECT` statements
+- `CREATE VIEW` statements
+- `UPDATE` statements
+
+For each statement, it extracts column-level lineage by parsing the SQL using SQLGlot with Teradata dialect support.
+
+**Wildcard Expansion:**
+
+The extractor automatically resolves wildcards in SQL statements to actual column names:
+
+| Pattern | Example | How It's Resolved |
+|---------|---------|-------------------|
+| Simple wildcard | `SELECT *` | Expanded to all columns from the source table via DBC.ColumnsJQV metadata |
+| Qualified wildcard | `SELECT t1.*, t2.*` | Each alias resolved to its table, then expanded to that table's columns |
+| INSERT with wildcard | `INSERT INTO target SELECT * FROM source` | Columns matched by ordinal position (1st to 1st, 2nd to 2nd) |
+| CREATE AS wildcard | `CREATE TABLE target AS SELECT * FROM source` | Target columns derived from source column names |
+| View wildcards | `SELECT * FROM my_view` | View definition retrieved and wildcards recursively expanded (up to 3 levels) |
+
+Wildcard-expanded lineage records receive a confidence score of 0.70. Multi-table unqualified `SELECT *` (ambiguous source attribution) is skipped with a warning.
+
+### 4.7 DBQL Extraction Limitations
+
+- **Query text truncation**: DBQL may truncate very long SQL statements
+- **Dynamic SQL**: Dynamically generated SQL may not be fully captured
+- **Complex expressions**: Some complex column expressions may not parse correctly
+- **Parse failures**: The extractor gracefully handles parse failures and continues
+
+### 4.8 Troubleshooting DBQL Extraction
+
+**"No access to DBQL tables" error:**
+- DBQL logging may not be enabled on your Teradata system
+- Your user may lack SELECT privileges on DBC.DBQLogTbl
+- Contact your DBA to enable logging and grant access
+
+**No lineage records found:**
+- Check that queries have been executed since the `--since` date
+- Verify query logging is capturing SQL text (not just metadata)
+- Use `--verbose` flag to see detailed processing information
+
+**Parse errors:**
+- Some Teradata-specific SQL syntax may not parse correctly
+- The extractor logs failures and continues with other queries
+- Use `--verbose` to see which queries failed
+
 ---
 
 ## Redis Caching (Optional)
 
 The application includes an optional Redis caching layer that reduces lineage query response times from 2-4 seconds to under 100ms for repeated queries. The application works normally without Redis (gracefully degrades to in-memory caching).
 
-### 4.6 Redis Setup
+### 4.9 Redis Setup
 
 **Install Redis** (if not already available):
 
@@ -266,7 +335,7 @@ redis-cli ping
 # Expected output: PONG
 ```
 
-### 4.7 Cache Configuration
+### 4.10 Cache Configuration
 
 Add Redis configuration to your `.env` file:
 
@@ -278,7 +347,7 @@ CACHE_TTL=3600  # Cache expiration in seconds (1 hour)
 
 **If Redis is not configured or unavailable**, the application automatically falls back to in-memory SimpleCache. This provides graceful degradation but does not share cache across requests.
 
-### 4.8 Graph Engine Redis Persistence
+### 4.11 Graph Engine Redis Persistence
 
 The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the networkx DiGraph in Redis, separate from the query cache:
 
@@ -287,7 +356,7 @@ The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the net
 - **On cache invalidation:** Snapshot is deleted and rebuilt along with the in-memory graph
 - **No TTL:** Snapshot is invalidated explicitly only (not subject to `CACHE_TTL`)
 
-### 4.9 Cache Behavior
+### 4.12 Cache Behavior
 
 **With Redis:**
 - Cold start (first ever): 2-4 seconds (Teradata load + graph build + Redis save)
@@ -302,7 +371,7 @@ The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the net
 - No cross-request caching, no graph persistence
 - Application functions normally (no errors)
 
-### 4.10 Cache Management Endpoints
+### 4.13 Cache Management Endpoints
 
 The application provides REST API endpoints for cache management:
 
