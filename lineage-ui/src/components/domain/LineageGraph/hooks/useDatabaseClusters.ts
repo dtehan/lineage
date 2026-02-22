@@ -43,11 +43,24 @@ const FALLBACK_COLORS = [
   'rgba(245, 158, 11, 0.08)',   // amber
 ];
 
-function getColorForDatabase(databaseName: string, index: number): string {
+/**
+ * Deterministic hash for database name → color index.
+ * djb2 variant: same name always maps to same color regardless of insertion order.
+ */
+function hashDatabaseName(name: string): number {
+  let h = 5381;
+  for (let i = 0; i < name.length; i++) {
+    h = ((h << 5) + h) ^ name.charCodeAt(i);
+    h = h >>> 0; // unsigned 32-bit
+  }
+  return h;
+}
+
+function getColorForDatabase(databaseName: string): string {
   if (DATABASE_COLORS[databaseName]) {
     return DATABASE_COLORS[databaseName];
   }
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  return FALLBACK_COLORS[hashDatabaseName(databaseName) % FALLBACK_COLORS.length];
 }
 
 function calculateClusterBounds(
@@ -112,17 +125,15 @@ export function useDatabaseClusters({
 
     // Build cluster objects
     const clusterList: DatabaseCluster[] = [];
-    let index = 0;
 
     databaseGroups.forEach((tableIds, databaseName) => {
       clusterList.push({
         id: `cluster-${databaseName}`,
         databaseName,
-        backgroundColor: getColorForDatabase(databaseName, index),
+        backgroundColor: getColorForDatabase(databaseName),
         tables: tableIds,
         bounds: calculateClusterBounds(tableIds, nodes),
       });
-      index++;
     });
 
     return clusterList;

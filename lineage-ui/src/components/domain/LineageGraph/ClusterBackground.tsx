@@ -37,20 +37,33 @@ const FALLBACK_COLORS = [
 ];
 
 /**
+ * Deterministic hash for database name → color index.
+ * djb2 variant: same name always maps to same color regardless of insertion order.
+ */
+function hashDatabaseName(name: string): number {
+  let h = 5381;
+  for (let i = 0; i < name.length; i++) {
+    h = ((h << 5) + h) ^ name.charCodeAt(i);
+    h = h >>> 0; // unsigned 32-bit
+  }
+  return h;
+}
+
+/**
  * Gets color for a database
  */
-export function getDatabaseColor(databaseName: string, index: number): string {
+export function getDatabaseColor(databaseName: string): string {
   if (DATABASE_COLORS[databaseName]) {
     return DATABASE_COLORS[databaseName];
   }
-  return FALLBACK_COLORS[index % FALLBACK_COLORS.length];
+  return FALLBACK_COLORS[hashDatabaseName(databaseName) % FALLBACK_COLORS.length];
 }
 
 /**
  * Gets border color (slightly more opaque) for a database
  */
-function getDatabaseBorderColor(databaseName: string, index: number): string {
-  const bgColor = getDatabaseColor(databaseName, index);
+function getDatabaseBorderColor(databaseName: string): string {
+  const bgColor = getDatabaseColor(databaseName);
   // Make border more visible
   return bgColor.replace('0.08)', '0.2)');
 }
@@ -108,11 +121,11 @@ export const ClusterBackground = memo(function ClusterBackground({
 
   // Calculate cluster bounds
   const clusterBounds = useMemo(() => {
-    return clusters.map((cluster, index) => ({
+    return clusters.map((cluster) => ({
       cluster,
       bounds: calculateClusterBounds(cluster.tableNodeIds, nodeInternals),
-      color: getDatabaseColor(cluster.databaseName, index),
-      borderColor: getDatabaseBorderColor(cluster.databaseName, index),
+      color: getDatabaseColor(cluster.databaseName),
+      borderColor: getDatabaseBorderColor(cluster.databaseName),
     }));
   }, [clusters, nodeInternals]);
 
@@ -198,16 +211,14 @@ export function useDatabaseClustersFromNodes(
     });
 
     const clusters: DatabaseCluster[] = [];
-    let index = 0;
 
     databaseGroups.forEach((tableNodeIds, databaseName) => {
       clusters.push({
         id: `cluster-${databaseName}`,
         databaseName,
-        backgroundColor: getDatabaseColor(databaseName, index),
+        backgroundColor: getDatabaseColor(databaseName),
         tableNodeIds,
       });
-      index++;
     });
 
     return clusters;

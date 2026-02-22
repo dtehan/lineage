@@ -228,17 +228,26 @@ export function topoSortDatabases(
 
   const queue = Array.from(allDatabases)
     .filter((db) => inDegree.get(db) === 0)
-    .sort(); // alphabetical tie-break
+    .sort(); // alphabetical tie-break — sort ONCE
 
   const result: string[] = [];
   while (queue.length > 0) {
-    queue.sort();
+    // queue is already sorted — no re-sort needed
     const db = queue.shift()!;
     result.push(db);
     adj.get(db)?.forEach((target) => {
       const d = (inDegree.get(target) || 0) - 1;
       inDegree.set(target, d);
-      if (d === 0) queue.push(target);
+      if (d === 0) {
+        // Binary search insertion to maintain sorted order
+        let lo = 0, hi = queue.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >>> 1;
+          if (queue[mid] < target) lo = mid + 1;
+          else hi = mid;
+        }
+        queue.splice(lo, 0, target);
+      }
     });
   }
 
@@ -416,15 +425,24 @@ export async function layoutGraph(
   for (const [id, deg] of inDegCopy) {
     if (deg === 0) topoQueue.push(id);
   }
-  topoQueue.sort();
+  topoQueue.sort(); // Initial sort — once only
   while (topoQueue.length > 0) {
-    topoQueue.sort();
+    // topoQueue is already sorted — no re-sort needed
     const current = topoQueue.shift()!;
     topoOrder.push(current);
     for (const target of tableAdj.get(current) || new Set<string>()) {
       const nd = inDegCopy.get(target)! - 1;
       inDegCopy.set(target, nd);
-      if (nd === 0) topoQueue.push(target);
+      if (nd === 0) {
+        // Binary search insertion to maintain sorted order
+        let lo = 0, hi = topoQueue.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >>> 1;
+          if (topoQueue[mid] < target) lo = mid + 1;
+          else hi = mid;
+        }
+        topoQueue.splice(lo, 0, target);
+      }
     }
   }
   // Append any cycle-trapped nodes
