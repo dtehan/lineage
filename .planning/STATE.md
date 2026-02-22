@@ -9,12 +9,12 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 ## Current Position
 
-Phase: 20 of 21 in v5.0 — Phase 20 COMPLETE
-Plan: 2 of 2 in phase 20 — Phase 20 COMPLETE
-Status: Phase complete — ready for Phase 21
-Last activity: 2026-02-22 — Phase 20 complete: two-zone layout (connected L→R + isolated grid) live
+Phase: 21 of 21 in v5.0 — Phase 21 in progress
+Plan: 1 of 1 in phase 21 — Plan 21-01 COMPLETE
+Status: Phase 21 in progress — Plan 01 complete
+Last activity: 2026-02-22 — Phase 21 Plan 01 complete: canvas section label, hide-isolated toggle, header count badges
 
-Progress: [██████░░░░] 60% (v5.0)
+Progress: [████████░░] 80% (v5.0)
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -25,7 +25,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 41 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 4)
+- Total plans completed: 42 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 5)
 
 **By Milestone:**
 
@@ -36,7 +36,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
-| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 complete (4/5 plans done) |
+| v5.0 Database Lineage Layout | 3 | 5 | Phase 20 complete (5/5 plans done) |
 
 ## Accumulated Context
 
@@ -74,6 +74,13 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — complete 
 - Components stack vertically (componentYOffset along secondary axis) so all layer-0 tables align at the same x in RIGHT direction
 - Isolated tables given sequential placeholder layout in 20-01; Plan 20-02 replaces with alphabetical wrap grid
 
+### Key Decisions (21-01 execution)
+
+- SectionLabelNode injected into allNodes array after layout (not via ELK): positioned at isolatedGridOrigin.y - 36px, type='sectionLabelNode', draggable/selectable/focusable=false
+- render-time filtering chosen over layout re-run: visibleNodes/visibleEdges useMemo, isolatedNodeIdsRef tracks IDs from last layout result
+- Layout direction bug fixed: DatabaseLineageGraph was passing lineage traversal direction (upstream/downstream/both) as layout direction (RIGHT/LEFT/DOWN/UP); fixed by removing direction from layout options (defaults to RIGHT)
+- Header count badges conditional on count > 0: badges hidden during loading, appear after layout callback fires
+
 ### Pending Todos
 
 None.
@@ -85,5 +92,5 @@ None active.
 ## Session Continuity
 
 Last session: 2026-02-22
-Stopped at: Phase 20 complete — verification passed 9/9 must-haves, ready for Phase 21
+Stopped at: Completed 21-01-PLAN.md — Phase 21 Plan 01 complete
 Resume file: None
