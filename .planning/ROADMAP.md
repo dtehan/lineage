@@ -82,11 +82,11 @@ See archive: `.planning/milestones/v4.0-ROADMAP.md`
 | 17. Observability | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 18. Redis Serialization | v4.0 | 1/1 | Complete | 2026-02-21 |
 
-### Phase 1: Draggable Minimap Viewport
+### Phase 1: Draggable Minimap Viewport — ✓ Complete (2026-02-22)
 
 **Goal:** Enable interactive minimap navigation (drag-to-pan, scroll-to-zoom) across all graph views with shared component and cursor feedback
 **Depends on:** Phase 0
 **Plans:** 1 plan
 
 Plans:
-- [ ] 01-01-PLAN.md — Shared LineageMiniMap component with pannable/zoomable props, cursor CSS, and test updates
+- [x] 01-01-PLAN.md — Shared LineageMiniMap component with pannable/zoomable props, cursor CSS, and test updates — completed 2026-02-22

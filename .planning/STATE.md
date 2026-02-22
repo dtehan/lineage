@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-02-21)
 
 Phase: 01-draggable-minimap-viewport
 Plan: 01 complete (1/1 plans done)
-Status: In progress
-Last activity: 2026-02-22 — completed 01-01 interactive minimap plan
+Status: Phase complete — verified 6/6 must-haves
+Last activity: 2026-02-22 — phase 1 verified and complete
 
 Progress: [██████████] 100% (18/18 prior milestone phases complete)
 
@@ -20,7 +20,7 @@ v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
 v3.0: ██████████ 100% (7/7 phases) — shipped 2026-02-19
 v4.0: ██████████ 100% (5/5 phases) — shipped 2026-02-21
-Draggable Minimap: ██████████ 100% (1/1 plans) — in progress 2026-02-22
+Draggable Minimap: ██████████ 100% (1/1 plans) — complete 2026-02-22
 
 ## Performance Metrics
 
@@ -35,7 +35,7 @@ Draggable Minimap: ██████████ 100% (1/1 plans) — in progre
 | v2.0 Performance | 3 | 8 | Shipped 2026-02-16 |
 | v3.0 Wildcard Expansion | 7 | 7 | Shipped 2026-02-19 |
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
-| Draggable Minimap Viewport | 1 | 1 | In progress 2026-02-22 |
+| Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
 
 ## Accumulated Context
 
