@@ -1273,3 +1273,59 @@ describe('per-component layout', () => {
     expect(posT3.x).toBeLessThan(posT4.x);
   });
 });
+
+// layoutSimpleNodes ELK component separation tests (Plan 20-02 Task 2)
+describe('layoutSimpleNodes ELK component separation', () => {
+  it('ELK fallback separates disconnected table nodes — t3 not overlapping t1 or t2', async () => {
+    // t1->t2 connected pair, t3 isolated — all type='table' so they hit the ELK fallback
+    const nodes: LineageNode[] = [
+      { id: 't1', type: 'table', databaseName: 'db', tableName: 'table1' },
+      { id: 't2', type: 'table', databaseName: 'db', tableName: 'table2' },
+      { id: 't3', type: 'table', databaseName: 'db', tableName: 'table3' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: 't1', target: 't2' },
+    ];
+
+    const result = await layoutGraph(nodes, edges);
+
+    expect(result.nodes).toHaveLength(3);
+
+    const posMap = new Map(result.nodes.map(n => [n.id, n.position]));
+    const posT1 = posMap.get('t1')!;
+    const posT2 = posMap.get('t2')!;
+    const posT3 = posMap.get('t3')!;
+
+    // t3 must not have the exact same position as t1 or t2
+    const t3SameAsT1 = posT3.x === posT1.x && posT3.y === posT1.y;
+    const t3SameAsT2 = posT3.x === posT2.x && posT3.y === posT2.y;
+    expect(t3SameAsT1).toBe(false);
+    expect(t3SameAsT2).toBe(false);
+  });
+
+  it('ELK fallback produces non-overlapping positions for 4 unconnected database nodes', async () => {
+    // 4 database-type nodes with no edges — all hit the ELK fallback
+    const nodes: LineageNode[] = [
+      { id: 'db1', type: 'database', databaseName: 'db1' },
+      { id: 'db2', type: 'database', databaseName: 'db2' },
+      { id: 'db3', type: 'database', databaseName: 'db3' },
+      { id: 'db4', type: 'database', databaseName: 'db4' },
+    ];
+    const edges: LineageEdge[] = [];
+
+    const result = await layoutGraph(nodes, edges);
+
+    expect(result.nodes).toHaveLength(4);
+
+    // All positions should have finite coordinates
+    result.nodes.forEach(node => {
+      expect(Number.isFinite(node.position.x)).toBe(true);
+      expect(Number.isFinite(node.position.y)).toBe(true);
+    });
+
+    // No two nodes should share the exact same position (x, y pair)
+    const positions = result.nodes.map(n => `${n.position.x},${n.position.y}`);
+    const uniquePositions = new Set(positions);
+    expect(uniquePositions.size).toBe(4);
+  });
+});
