@@ -1,0 +1,85 @@
+# Requirements: Lineage v5.0 Database Lineage Layout
+
+**Defined:** 2026-02-21
+**Core Value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
+
+## v5.0 Requirements
+
+Requirements for database lineage layout fix. Each maps to roadmap phases.
+
+### Layout Foundation
+
+- [ ] **LFND-01**: Kahn sort runs in O(V+E) without sort-per-iteration degradation
+- [ ] **LFND-02**: ClusterBackground uses pre-calculated node dimensions instead of stale ResizeObserver values
+- [ ] **LFND-03**: separateDatabaseClusters correctly handles non-contiguous node groups across layout zones
+- [ ] **LFND-04**: Database lineage layout runs in Web Worker via existing useLayoutWorker infrastructure
+- [ ] **LFND-05**: Direction-change cancellation uses generation counter to prevent race conditions
+- [ ] **LFND-06**: Database cluster colors are deterministic based on name hash, not iteration index
+
+### Mixed Layout Strategy
+
+- [ ] **MLST-01**: Connected component detection identifies distinct lineage chains in the table adjacency graph
+- [ ] **MLST-02**: Connected tables flow left-to-right in topological order within each lineage chain
+- [ ] **MLST-03**: Disconnected tables arrange in a compact alphabetical grid below the connected section
+- [ ] **MLST-04**: No node overlap between connected and disconnected sections
+- [ ] **MLST-05**: layoutSimpleNodes ELK path has separateConnectedComponents enabled with component spacing
+- [ ] **MLST-06**: Both DatabaseLineageGraph and AllDatabasesLineageGraph benefit from the layout fix
+
+### UX Polish
+
+- [ ] **UXPL-01**: Visual section label "Tables without lineage connections (N)" marks the disconnected grid
+- [ ] **UXPL-02**: User can toggle "hide tables without lineage" to show/hide disconnected tables
+- [ ] **UXPL-03**: Database header displays isolated table count alongside connected table count
+
+## Future Requirements
+
+Deferred to future release. Tracked but not in current roadmap.
+
+### Performance Scaling
+
+- **PERF-01**: Pagination for the disconnected grid at very large database sizes
+- **PERF-02**: Animated transitions for isolated nodes moving into grid positions
+
+### Backend Enhancement
+
+- **BACK-01**: Backend API tags `has_lineage` per node to avoid frontend computation
+
+## Out of Scope
+
+| Feature | Reason |
+|---------|--------|
+| ELK DisCo algorithm | Known hang risk on dense graphs; custom topological layout is proven and correct |
+| New layout libraries (dagre, d3-dag) | Existing ELKjs + custom topological algorithm covers all requirements |
+| Backend API changes | Layout problem is entirely frontend; no API changes needed |
+| Animation for layout transitions | Documented jank at 200+ nodes; disableTransitions mechanism already exists |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| LFND-01 | — | Pending |
+| LFND-02 | — | Pending |
+| LFND-03 | — | Pending |
+| LFND-04 | — | Pending |
+| LFND-05 | — | Pending |
+| LFND-06 | — | Pending |
+| MLST-01 | — | Pending |
+| MLST-02 | — | Pending |
+| MLST-03 | — | Pending |
+| MLST-04 | — | Pending |
+| MLST-05 | — | Pending |
+| MLST-06 | — | Pending |
+| UXPL-01 | — | Pending |
+| UXPL-02 | — | Pending |
+| UXPL-03 | — | Pending |
+
+**Coverage:**
+- v5.0 requirements: 15 total
+- Mapped to phases: 0
+- Unmapped: 15
+
+---
+*Requirements defined: 2026-02-21*
+*Last updated: 2026-02-21 after initial definition*
