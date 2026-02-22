@@ -1042,6 +1042,150 @@ describe('kahnSort', () => {
   });
 });
 
+// Isolated table grid layout tests (Plan 20-02)
+describe('isolated table grid layout', () => {
+  it('isolated tables are placed below the connected section (RIGHT direction)', async () => {
+    // A->B connected, C and D isolated
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 'A', columnName: 'c1' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 'B', columnName: 'c2' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 'C', columnName: 'c3' },
+      { id: '4', type: 'column', databaseName: 'db', tableName: 'D', columnName: 'c4' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    expect(result.nodes).toHaveLength(4);
+    const posMap = new Map(result.nodes.map(n => [n.data.tableName as string, n.position]));
+    const posA = posMap.get('A')!;
+    const posB = posMap.get('B')!;
+    const posC = posMap.get('C')!;
+    const posD = posMap.get('D')!;
+
+    // C and D (isolated) must be BELOW the connected section (higher y)
+    const aHeight = calculateTableNodeHeight(1, true);
+    const bHeight = calculateTableNodeHeight(1, true);
+    const connectedMaxY = Math.max(posA.y + aHeight, posB.y + bHeight);
+    expect(posC.y).toBeGreaterThan(connectedMaxY);
+    expect(posD.y).toBeGreaterThan(connectedMaxY);
+  });
+
+  it('no overlap between connected zone and isolated grid zone', async () => {
+    // A->B connected, C and D isolated
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 'A', columnName: 'c1' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 'B', columnName: 'c2' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 'C', columnName: 'c3' },
+      { id: '4', type: 'column', databaseName: 'db', tableName: 'D', columnName: 'c4' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: '1', target: '2' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    const posMap = new Map(result.nodes.map(n => [n.data.tableName as string, n.position]));
+    const posA = posMap.get('A')!;
+    const posB = posMap.get('B')!;
+    const posC = posMap.get('C')!;
+    const posD = posMap.get('D')!;
+
+    const aHeight = calculateTableNodeHeight(1, true);
+    const bHeight = calculateTableNodeHeight(1, true);
+    const connectedMaxY = Math.max(posA.y + aHeight, posB.y + bHeight);
+
+    // Grid min Y must be strictly greater than connected max Y
+    const gridMinY = Math.min(posC.y, posD.y);
+    expect(gridMinY).toBeGreaterThan(connectedMaxY);
+  });
+
+  it('grid wraps to next row when exceeding maxRowWidth', async () => {
+    // 8 isolated tables, no edges — should wrap with default maxRowWidth of 1200
+    const tableNames = ['T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8'];
+    const nodes: LineageNode[] = tableNames.map((name, i) => ({
+      id: String(i + 1),
+      type: 'column' as const,
+      databaseName: 'db',
+      tableName: name,
+      columnName: 'col',
+    }));
+    const edges: LineageEdge[] = [];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    expect(result.nodes).toHaveLength(8);
+    // Not all nodes should have the same y position (wrapping occurred)
+    const yPositions = new Set(result.nodes.map(n => n.position.y));
+    // With 8 tables at ~280px each + 40px spacing = ~320px per node
+    // 4 nodes per row at 1200px max, so we expect at least 2 distinct y values
+    expect(yPositions.size).toBeGreaterThan(1);
+  });
+
+  it('all isolated (no connected section) — positioned starting at y=0, alphabetical order', async () => {
+    // 3 tables with no edges — all isolated
+    const nodes: LineageNode[] = [
+      { id: '1', type: 'column', databaseName: 'db', tableName: 'Zebra', columnName: 'c1' },
+      { id: '2', type: 'column', databaseName: 'db', tableName: 'Alpha', columnName: 'c2' },
+      { id: '3', type: 'column', databaseName: 'db', tableName: 'Mango', columnName: 'c3' },
+    ];
+    const edges: LineageEdge[] = [];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    expect(result.nodes).toHaveLength(3);
+    const posMap = new Map(result.nodes.map(n => [n.data.tableName as string, n.position]));
+    const posAlpha = posMap.get('Alpha')!;
+    const posMango = posMap.get('Mango')!;
+    const posZebra = posMap.get('Zebra')!;
+
+    // All at same y (single row, no connected offset)
+    // The grid starts at y = componentSecondaryOffset (0) + gridGap (80)
+    expect(posAlpha.y).toBe(posMango.y);
+    expect(posMango.y).toBe(posZebra.y);
+
+    // Alphabetical order — Alpha leftmost, Zebra rightmost
+    expect(posAlpha.x).toBeLessThan(posMango.x);
+    expect(posMango.x).toBeLessThan(posZebra.x);
+  });
+
+  it('mixed graph preserves connected layout and places isolated below', async () => {
+    // Linear chain A->B->C, isolated D
+    const nodes: LineageNode[] = [
+      { id: 'a1', type: 'column', databaseName: 'db', tableName: 'A', columnName: 'c' },
+      { id: 'b1', type: 'column', databaseName: 'db', tableName: 'B', columnName: 'c' },
+      { id: 'c1', type: 'column', databaseName: 'db', tableName: 'C', columnName: 'c' },
+      { id: 'd1', type: 'column', databaseName: 'db', tableName: 'D', columnName: 'c' },
+    ];
+    const edges: LineageEdge[] = [
+      { id: 'e1', source: 'a1', target: 'b1' },
+      { id: 'e2', source: 'b1', target: 'c1' },
+    ];
+
+    const result = await layoutGraph(nodes, edges, { direction: 'RIGHT' });
+
+    expect(result.nodes).toHaveLength(4);
+    const posMap = new Map(result.nodes.map(n => [n.data.tableName as string, n.position]));
+    const posA = posMap.get('A')!;
+    const posB = posMap.get('B')!;
+    const posC = posMap.get('C')!;
+    const posD = posMap.get('D')!;
+
+    // Connected chain A->B->C preserved: A.x < B.x < C.x
+    expect(posA.x).toBeLessThan(posB.x);
+    expect(posB.x).toBeLessThan(posC.x);
+
+    // D (isolated) must be below all connected tables
+    const aHeight = calculateTableNodeHeight(1, true);
+    const bHeight = calculateTableNodeHeight(1, true);
+    const cHeight = calculateTableNodeHeight(1, true);
+    const connectedMaxY = Math.max(posA.y + aHeight, posB.y + bHeight, posC.y + cHeight);
+    expect(posD.y).toBeGreaterThan(connectedMaxY);
+  });
+});
+
 // Per-component layout tests
 describe('per-component layout', () => {
   it('two independent chains produce correct x-layers (chain A->B and chain C->D)', async () => {

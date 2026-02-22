@@ -449,6 +449,65 @@ export function kahnSort(
 }
 
 /**
+ * Places isolated tables in a compact alphabetical grid.
+ * For horizontal directions (RIGHT/LEFT): grid flows left-to-right, wraps below.
+ * For vertical directions (UP/DOWN): grid flows top-to-bottom, wraps right.
+ *
+ * @param isolated - Alphabetically sorted list of isolated table IDs
+ * @param tableNodeData - All table node data (used to calculate dimensions)
+ * @param startPrimary - Secondary-axis start coordinate for the grid zone
+ * @param nodeSpacing - Spacing between nodes within the grid
+ * @param isHorizontal - true for RIGHT/LEFT directions, false for UP/DOWN
+ * @param maxRowWidth - Maximum primary-axis extent before wrapping to next row
+ */
+function placeIsolatedGrid(
+  isolated: string[],
+  tableNodeData: TableNodeData[],
+  startPrimary: number,
+  nodeSpacing: number,
+  isHorizontal: boolean,
+  maxRowWidth: number,
+): Node[] {
+  const nodes: Node[] = [];
+  let currentPrimary = 0;    // primary axis position within grid (resets per row)
+  let currentSecondary = startPrimary;
+  let rowMaxSecondary = 0;   // tracks tallest/widest node in current row for wrapping
+
+  for (const tableId of isolated) {
+    const td = tableNodeData.find((t) => t.id === tableId)!;
+    const width = calculateTableNodeWidth(td.tableName, td.columns);
+    const height = calculateTableNodeHeight(td.columns.length, td.isExpanded);
+
+    // For horizontal directions: grid rows flow along x (primary), wrap along y (secondary)
+    // For vertical directions: grid rows flow along y (primary), wrap along x (secondary)
+    const primarySize = isHorizontal ? width : height;
+    const secondarySize = isHorizontal ? height : width;
+
+    // Wrap to next row if this node would exceed maxRowWidth
+    if (currentPrimary > 0 && currentPrimary + primarySize > maxRowWidth) {
+      currentSecondary += rowMaxSecondary + nodeSpacing;
+      currentPrimary = 0;
+      rowMaxSecondary = 0;
+    }
+
+    nodes.push({
+      id: tableId,
+      type: 'tableNode',
+      position: {
+        x: isHorizontal ? currentPrimary : currentSecondary,
+        y: isHorizontal ? currentSecondary : currentPrimary,
+      },
+      data: td,
+    } as Node);
+
+    rowMaxSecondary = Math.max(rowMaxSecondary, secondarySize);
+    currentPrimary += primarySize + nodeSpacing;
+  }
+
+  return nodes;
+}
+
+/**
  * Main layout function - transforms LineageNodes/Edges to React Flow format
  * with table-grouped nodes and column-level edge routing.
  * Uses ELK compound nodes to ensure tables stay within their database boundaries.
@@ -620,34 +679,36 @@ export async function layoutGraph(
     componentSecondaryOffset = maxSecondaryCursor + componentGap;
   }
 
-  // Place isolated tables: temporary sequential placement below all connected components
-  // (Plan 20-02 will replace this with a proper alphabetical grid)
+  // Place isolated tables in a compact alphabetical grid below (RIGHT/LEFT) or
+  // to the right of (UP/DOWN) the connected section.
   if (isolated.length > 0) {
-    let isolatedSecondaryCursor = componentSecondaryOffset;
-    let isolatedPrimaryCursor = 0;
-    let isolatedRowMaxSecondary = isolatedSecondaryCursor;
+    const gridGap = componentGap; // 80px — same as componentGap
 
-    for (const tableId of isolated) {
-      const td = tableNodeData.find((t) => t.id === tableId);
+    // Compute the maximum primary-axis extent of connected nodes (for maxRowWidth)
+    let maxConnectedPrimaryExtent = 0;
+    for (const node of layoutedNodes) {
+      const td = tableNodeData.find((t) => t.id === node.id);
       if (!td) continue;
-      const width = calculateTableNodeWidth(td.tableName, td.columns);
-      const height = calculateTableNodeHeight(td.columns.length, td.isExpanded);
-      const primarySize = isHorizontal ? width : height;
-      const secondarySize = isHorizontal ? height : width;
-
-      layoutedNodes.push({
-        id: td.id,
-        type: 'tableNode',
-        position: {
-          x: isHorizontal ? isolatedPrimaryCursor : isolatedSecondaryCursor,
-          y: isHorizontal ? isolatedSecondaryCursor : isolatedPrimaryCursor,
-        },
-        data: td,
-      } as Node);
-
-      isolatedRowMaxSecondary = Math.max(isolatedRowMaxSecondary, isolatedSecondaryCursor + secondarySize);
-      isolatedPrimaryCursor += primarySize + layerSpacing;
+      const primarySize = isHorizontal
+        ? calculateTableNodeWidth(td.tableName, td.columns)
+        : calculateTableNodeHeight(td.columns.length, td.isExpanded);
+      const priPos = isHorizontal ? node.position.x : node.position.y;
+      maxConnectedPrimaryExtent = Math.max(maxConnectedPrimaryExtent, priPos + primarySize);
     }
+
+    const startSecondary = componentSecondaryOffset + gridGap;
+    const maxRowWidth = Math.max(1200, maxConnectedPrimaryExtent);
+
+    const gridNodes = placeIsolatedGrid(
+      isolated,
+      tableNodeData,
+      startSecondary,
+      nodeSpacing,
+      isHorizontal,
+      maxRowWidth,
+    );
+
+    for (const n of gridNodes) layoutedNodes.push(n);
   }
 
   // Flip positions for LEFT/UP directions
