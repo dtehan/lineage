@@ -72,8 +72,7 @@ Open [http://localhost:3000](http://localhost:3000) to access the application.
 
 | Technology | Purpose |
 |------------|---------|
-| Go 1.23 + Chi Router | Backend API |
-| Python 3 + Flask | Alternative backend |
+| Python 3 + Flask | Backend API |
 | React 18 + TypeScript | Frontend |
 | React Flow (@xyflow/react) | Graph visualization |
 | ELKjs | Graph layout engine |
@@ -87,7 +86,7 @@ Open [http://localhost:3000](http://localhost:3000) to access the application.
 
 ```mermaid
 graph LR
-    A[React Frontend<br/>:3000] -->|REST API| B[Go / Python Backend<br/>:8080]
+    A[React Frontend<br/>:3000] -->|REST API| B[Python Flask Backend<br/>:8080]
     B --> C[(Teradata<br/>Database)]
     B -.->|Optional| D[(Redis<br/>Cache)]
 ```
@@ -109,7 +108,7 @@ The frontend makes REST API calls to the backend, which queries Teradata for lin
 
 | Directory | Description | Details |
 |-----------|-------------|---------|
-| [`lineage-api/`](lineage-api/README.md) | Go/Python backend (hexagonal architecture) | REST API, Teradata queries, Redis cache |
+| [`lineage-api/`](lineage-api/README.md) | Python Flask backend | REST API, Teradata queries, Redis cache |
 | [`lineage-ui/`](lineage-ui/README.md) | React frontend (TypeScript, React Flow) | Asset browser, lineage graph, detail panel |
 | [`database/`](database/README.md) | Schema, scripts, and tests (OpenLineage-aligned) | OL_* tables, population scripts, 73 tests |
 | `docs/` | User and operations documentation | User guide, security guide |

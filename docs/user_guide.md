@@ -1043,11 +1043,11 @@ No environment variables needed - API calls to `/api/*` are automatically proxie
 
 The backend allows cross-origin requests from:
 - `http://localhost:3000` (Vite configured port)
+- `http://localhost:3001`
+- `http://localhost:3004`
 - `http://localhost:5173` (Vite default)
 
-Allowed methods: GET, POST, PUT, DELETE, OPTIONS
-
-**Note:** The frontend is configured to use port 3000 in `vite.config.ts`.
+For production CORS requirements, see [SECURITY.md](SECURITY.md#5-cors-configuration).
 
 ---
 

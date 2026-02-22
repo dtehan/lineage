@@ -124,6 +124,13 @@ Developer-specific notes:
 
 - **Vite proxy:** The Vite dev server proxies all `/api/*` requests to `http://localhost:8080` (configured in `lineage-ui/vite.config.ts`). No CORS configuration is needed during local development.
 - **Frontend ports:** `npm run dev` runs the frontend on `:3000` with hot module replacement -- changes to React components appear instantly without a full page reload. Playwright E2E tests use a separate instance on `:5173` (auto-started by Playwright's `webServer` config).
+- **CORS:** The backend allows CORS from `localhost:3000`, `localhost:3001`, `localhost:3004`, and `localhost:5173` during development. No additional CORS setup needed.
+- **Testing auth headers:** To test audit logging with simulated authentication headers from a proxy:
+  ```bash
+  curl -H "X-Auth-Request-User: test-user" \
+       -H "X-Auth-Request-Email: test@example.com" \
+       http://localhost:8080/api/v2/openlineage/namespaces
+  ```
 
 ### Database Setup
 
