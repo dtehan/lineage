@@ -24,9 +24,17 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - **Impact Analysis:** Complete downstream impact visualization with TanStack Table UI
 - **Production Ready:** ~18,616 Python + ~23,977 TypeScript LOC; graceful degradation throughout; structured JSON logging
 
-## Next Milestone Goals
+## Current Milestone: v5.0 Database Lineage Layout
 
-**Future considerations:**
+**Goal:** Fix database lineage graph layout so connected tables flow left-to-right and disconnected tables arrange in a compact grid.
+
+**Target features:**
+- Hierarchical left-to-right layout for tables with lineage relationships
+- Compact grid arrangement for disconnected tables (no overlaps)
+- Proper database lineage view replacing single-column vertical stack
+
+## Future Considerations
+
 - Security Hardening: Authentication, rate limiting, input validation for multi-user deployment
 - Feature Expansion: Version tracking, batch operations, data quality metrics
 - Production Validation: CI benchmarking, multi-worker Gunicorn support, load testing
@@ -89,7 +97,10 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 <!-- Current scope. Building toward these. -->
 
-(No active milestone — next milestone TBD)
+**v5.0 Database Lineage Layout:**
+- [ ] Connected tables flow left-to-right based on lineage direction
+- [ ] Disconnected tables arranged in compact grid layout
+- [ ] No overlapping nodes in database lineage view
 
 ### Out of Scope
 
@@ -180,4 +191,4 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | No TTL on Redis graph snapshot (v4.0) | Persists until explicitly invalidated by ETL; routine restarts restore from Redis | ✓ Good — Reliable cold-start behavior |
 
 ---
-*Last updated: 2026-02-21 after v4.0 milestone*
+*Last updated: 2026-02-21 after v5.0 milestone start*

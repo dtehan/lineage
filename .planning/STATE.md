@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-21)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Draggable minimap viewport feature
+**Current focus:** v5.0 Database Lineage Layout
 
 ## Current Position
 
-Phase: 01-draggable-minimap-viewport
-Plan: 01 complete (1/1 plans done)
-Status: Phase complete — verified 6/6 must-haves
-Last activity: 2026-02-22 — phase 1 verified and complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-21 — Milestone v5.0 started
 
-Progress: [██████████] 100% (18/18 prior milestone phases complete)
+Progress: [░░░░░░░░░░] 0%
 
 v1.0: ██████████ 100% (3/3 phases) — shipped 2026-02-15
 v2.0: ██████████ 100% (3/3 phases) — shipped 2026-02-16
@@ -61,6 +61,6 @@ None active. Previous concerns resolved:
 
 ## Session Continuity
 
-Last session: 2026-02-22
-Stopped at: Completed 01-draggable-minimap-viewport/01-01-PLAN.md
+Last session: 2026-02-21
+Stopped at: Starting v5.0 milestone
 Resume file: None
