@@ -87,8 +87,8 @@ Standalone mini-phase outside main sequence. See `.planning/phases/01-foundation
 **Plans:** 2 plans
 
 Plans:
-- [ ] 19-01-PLAN.md — Wire useLayoutWorker + generation counter into DatabaseLineageGraph (LFND-04, LFND-05)
-- [ ] 19-02-PLAN.md — Fix Kahn sort O(V^2), ClusterBackground stale dims, bounding box extents, deterministic colors (LFND-01, LFND-02, LFND-03, LFND-06)
+- [x] 19-01-PLAN.md — Wire useLayoutWorker + generation counter into DatabaseLineageGraph (LFND-04, LFND-05)
+- [x] 19-02-PLAN.md — Fix Kahn sort O(V^2), ClusterBackground stale dims, bounding box extents, deterministic colors (LFND-01, LFND-02, LFND-03, LFND-06)
 
 #### Phase 20: Mixed Layout Strategy
 
@@ -143,6 +143,6 @@ Plans:
 | 16. Progressive Depth Loading | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 17. Observability | v4.0 | 2/2 | Complete | 2026-02-20 |
 | 18. Redis Serialization | v4.0 | 1/1 | Complete | 2026-02-21 |
-| 19. Layout Engine Foundation | v5.0 | 0/2 | Not started | - |
+| 19. Layout Engine Foundation | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 20. Mixed Layout Strategy | v5.0 | 0/2 | Not started | - |
 | 21. UX Polish | v5.0 | 0/1 | Not started | - |
