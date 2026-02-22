@@ -219,44 +219,15 @@ export function topoSortDatabases(
     adj.get(srcDb)!.add(tgtDb);
   });
 
-  // Kahn's algorithm for topological sort
+  // Build in-degree map for kahnSort
   const inDegree = new Map<string, number>();
   allDatabases.forEach((db) => inDegree.set(db, 0));
   adj.forEach((targets) =>
     targets.forEach((t) => inDegree.set(t, (inDegree.get(t) || 0) + 1))
   );
 
-  const queue = Array.from(allDatabases)
-    .filter((db) => inDegree.get(db) === 0)
-    .sort(); // alphabetical tie-break — sort ONCE
-
-  const result: string[] = [];
-  while (queue.length > 0) {
-    // queue is already sorted — no re-sort needed
-    const db = queue.shift()!;
-    result.push(db);
-    adj.get(db)?.forEach((target) => {
-      const d = (inDegree.get(target) || 0) - 1;
-      inDegree.set(target, d);
-      if (d === 0) {
-        // Binary search insertion to maintain sorted order
-        let lo = 0, hi = queue.length;
-        while (lo < hi) {
-          const mid = (lo + hi) >>> 1;
-          if (queue[mid] < target) lo = mid + 1;
-          else hi = mid;
-        }
-        queue.splice(lo, 0, target);
-      }
-    });
-  }
-
-  // Append cyclic or isolated databases
-  allDatabases.forEach((db) => {
-    if (!result.includes(db)) result.push(db);
-  });
-
-  return result;
+  // Delegate to kahnSort which handles binary-search insertion and cycle detection
+  return kahnSort(allDatabases, adj, inDegree);
 }
 
 /**
@@ -358,6 +329,126 @@ export function separateDatabaseClusters(
 }
 
 /**
+ * Detects connected components in the table adjacency graph using undirected BFS.
+ * O(V+E) time and space.
+ *
+ * Tables that share at least one edge (directly or transitively) form a connected
+ * component. Tables with no edges to any other table are isolated.
+ *
+ * Self-loops are skipped in the undirected adjacency build (a table pointing to
+ * itself does not count as a connection to another table).
+ *
+ * @param tableIds - All table IDs to partition
+ * @param tableAdj - Directed adjacency map from layoutGraph (already built)
+ * @returns connected: array of Sets (each Set = one group of connected tables),
+ *          isolated: alphabetically sorted array of table IDs with no connections
+ */
+export function detectConnectedComponents(
+  tableIds: string[],
+  tableAdj: Map<string, Set<string>>
+): { connected: Set<string>[]; isolated: string[] } {
+  // Build undirected adjacency for reachability (skip self-loops)
+  const undirected = new Map<string, Set<string>>();
+  for (const id of tableIds) undirected.set(id, new Set());
+  tableAdj.forEach((targets, src) => {
+    targets.forEach((tgt) => {
+      if (src !== tgt) {
+        undirected.get(src)?.add(tgt);
+        undirected.get(tgt)?.add(src);
+      }
+    });
+  });
+
+  const visited = new Set<string>();
+  const components: Set<string>[] = [];
+
+  for (const startId of tableIds) {
+    if (visited.has(startId)) continue;
+    const component = new Set<string>();
+    const queue: string[] = [startId];
+    visited.add(startId);
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      component.add(current);
+      for (const neighbor of undirected.get(current) ?? []) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
+        }
+      }
+    }
+    components.push(component);
+  }
+
+  // Partition: isolated = single node with zero undirected neighbors; everything else = connected
+  const isolated: string[] = [];
+  const connected: Set<string>[] = [];
+  for (const comp of components) {
+    const ids = [...comp];
+    if (ids.length === 1 && undirected.get(ids[0])!.size === 0) {
+      isolated.push(ids[0]);
+    } else {
+      connected.push(comp);
+    }
+  }
+  isolated.sort(); // Alphabetical for determinism
+  return { connected, isolated };
+}
+
+/**
+ * Topological sort via Kahn's algorithm with deterministic tie-breaking.
+ * Preserves the binary-search splice insertion from Phase 19 for O(V+E) performance.
+ *
+ * @param ids - Set of table IDs to sort (component subset, not all tables)
+ * @param adj - Adjacency map (may contain edges outside `ids`; only edges within `ids` are followed)
+ * @param inDeg - In-degree map for the given `ids`
+ * @returns Topologically ordered array; cycle-trapped nodes appended at the end
+ */
+export function kahnSort(
+  ids: Set<string>,
+  adj: Map<string, Set<string>>,
+  inDeg: Map<string, number>
+): string[] {
+  const result: string[] = [];
+  // Copy inDeg so we don't mutate the caller's map
+  const inDegCopy = new Map(inDeg);
+
+  // Build initial queue from nodes with zero in-degree, sort alphabetically
+  const queue: string[] = [];
+  for (const id of ids) {
+    if ((inDegCopy.get(id) ?? 0) === 0) queue.push(id);
+  }
+  queue.sort(); // sort once — maintained via binary-search splice
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    result.push(current);
+    for (const target of adj.get(current) ?? []) {
+      if (!ids.has(target)) continue; // only follow edges within this component
+      const nd = (inDegCopy.get(target) ?? 0) - 1;
+      inDegCopy.set(target, nd);
+      if (nd === 0) {
+        // Binary-search insertion to maintain sorted order — O(log n) per push
+        let lo = 0, hi = queue.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >>> 1;
+          if (queue[mid] < target) lo = mid + 1;
+          else hi = mid;
+        }
+        queue.splice(lo, 0, target);
+      }
+    }
+  }
+
+  // Append any cycle-trapped nodes (in ids but not yet in result)
+  for (const id of ids) {
+    if (!result.includes(id)) result.push(id);
+  }
+
+  return result;
+}
+
+/**
  * Main layout function - transforms LineageNodes/Edges to React Flow format
  * with table-grouped nodes and column-level edge routing.
  * Uses ELK compound nodes to ensure tables stay within their database boundaries.
@@ -428,37 +519,8 @@ export async function layoutGraph(
   }
 
   // Topological sort via Kahn's algorithm (deterministic tie-breaking)
-  const topoOrder: string[] = [];
-  const inDegCopy = new Map(tableInDeg);
-  const topoQueue: string[] = [];
-  for (const [id, deg] of inDegCopy) {
-    if (deg === 0) topoQueue.push(id);
-  }
-  topoQueue.sort(); // Initial sort — once only
-  while (topoQueue.length > 0) {
-    // topoQueue is already sorted — no re-sort needed
-    const current = topoQueue.shift()!;
-    topoOrder.push(current);
-    for (const target of tableAdj.get(current) || new Set<string>()) {
-      const nd = inDegCopy.get(target)! - 1;
-      inDegCopy.set(target, nd);
-      if (nd === 0) {
-        // Binary search insertion to maintain sorted order
-        let lo = 0, hi = topoQueue.length;
-        while (lo < hi) {
-          const mid = (lo + hi) >>> 1;
-          if (topoQueue[mid] < target) lo = mid + 1;
-          else hi = mid;
-        }
-        topoQueue.splice(lo, 0, target);
-      }
-    }
-  }
-  // Append any cycle-trapped nodes
-  const topoSet = new Set(topoOrder);
-  for (const t of tableNodeData) {
-    if (!topoSet.has(t.id)) topoOrder.push(t.id);
-  }
+  const allTableIds = new Set(tableNodeData.map((t) => t.id));
+  const topoOrder = kahnSort(allTableIds, tableAdj, tableInDeg);
 
   // Longest-path layering: layer[v] = max(layer[u] + 1) for all edges u→v
   const layerMap = new Map<string, number>();

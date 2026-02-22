@@ -12,6 +12,8 @@ import {
   getEdgeStyleByConfidence,
   topoSortDatabases,
   separateDatabaseClusters,
+  detectConnectedComponents,
+  kahnSort,
 } from './layoutEngine';
 import type { Node } from '@xyflow/react';
 import type { TableNodeData } from './layoutEngine';
@@ -892,5 +894,150 @@ describe('cross-database cluster layout', () => {
       expect(Number.isFinite(node.position.x)).toBe(true);
       expect(Number.isFinite(node.position.y)).toBe(true);
     });
+  });
+});
+
+// detectConnectedComponents unit tests
+describe('detectConnectedComponents', () => {
+  it('single connected component — all 3 tables share edges', () => {
+    // A->B->C: all three are reachable from each other
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['B'])],
+      ['B', new Set(['C'])],
+      ['C', new Set()],
+    ]);
+    const { connected, isolated } = detectConnectedComponents(['A', 'B', 'C'], adj);
+    expect(connected).toHaveLength(1);
+    expect(connected[0].has('A')).toBe(true);
+    expect(connected[0].has('B')).toBe(true);
+    expect(connected[0].has('C')).toBe(true);
+    expect(isolated).toHaveLength(0);
+  });
+
+  it('one connected component plus one isolated table', () => {
+    // A->B connected, C has no edges
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['B'])],
+      ['B', new Set()],
+      ['C', new Set()],
+    ]);
+    const { connected, isolated } = detectConnectedComponents(['A', 'B', 'C'], adj);
+    expect(connected).toHaveLength(1);
+    expect(connected[0].has('A')).toBe(true);
+    expect(connected[0].has('B')).toBe(true);
+    expect(isolated).toEqual(['C']);
+  });
+
+  it('two independent connected components — A->B and C->D', () => {
+    // A->B is one chain, C->D is a separate chain
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['B'])],
+      ['B', new Set()],
+      ['C', new Set(['D'])],
+      ['D', new Set()],
+    ]);
+    const { connected, isolated } = detectConnectedComponents(['A', 'B', 'C', 'D'], adj);
+    expect(connected).toHaveLength(2);
+    expect(isolated).toHaveLength(0);
+    // Each connected component has exactly 2 tables
+    const sizes = connected.map(c => c.size).sort();
+    expect(sizes).toEqual([2, 2]);
+    // A and B are together, C and D are together
+    const compAB = connected.find(c => c.has('A'));
+    expect(compAB?.has('B')).toBe(true);
+    const compCD = connected.find(c => c.has('C'));
+    expect(compCD?.has('D')).toBe(true);
+  });
+
+  it('all isolated — 3 tables with no edges', () => {
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set()],
+      ['B', new Set()],
+      ['C', new Set()],
+    ]);
+    const { connected, isolated } = detectConnectedComponents(['A', 'B', 'C'], adj);
+    expect(connected).toHaveLength(0);
+    expect(isolated).toEqual(['A', 'B', 'C']); // alphabetically sorted
+  });
+
+  it('self-loop handling — A->A has self-loop which is filtered, A has no edges to other tables', () => {
+    // tableAdj already filters src===tgt during build, but detectConnectedComponents
+    // also skips self-loops in undirected adjacency build
+    // After filtering: A has no edges to other tables, so A is isolated
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['A'])], // self-loop only
+    ]);
+    const { connected, isolated } = detectConnectedComponents(['A'], adj);
+    // A only has a self-loop; undirected neighbor count after filtering self-loops = 0
+    expect(isolated).toEqual(['A']);
+    expect(connected).toHaveLength(0);
+  });
+
+  it('isolated tables sorted alphabetically — zebra, alpha, mango all isolated', () => {
+    const adj = new Map<string, Set<string>>([
+      ['zebra', new Set()],
+      ['alpha', new Set()],
+      ['mango', new Set()],
+    ]);
+    const { connected, isolated } = detectConnectedComponents(['zebra', 'alpha', 'mango'], adj);
+    expect(connected).toHaveLength(0);
+    expect(isolated).toEqual(['alpha', 'mango', 'zebra']);
+  });
+});
+
+// kahnSort unit tests
+describe('kahnSort', () => {
+  it('linear chain A->B->C produces A first, C last', () => {
+    const ids = new Set(['A', 'B', 'C']);
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['B'])],
+      ['B', new Set(['C'])],
+      ['C', new Set()],
+    ]);
+    const inDeg = new Map<string, number>([['A', 0], ['B', 1], ['C', 1]]);
+    const result = kahnSort(ids, adj, inDeg);
+    expect(result[0]).toBe('A');
+    expect(result[result.length - 1]).toBe('C');
+    expect(result).toHaveLength(3);
+  });
+
+  it('diamond pattern — A first, D last, B and C sorted alphabetically between', () => {
+    // A->{B,C}->D
+    const ids = new Set(['A', 'B', 'C', 'D']);
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['B', 'C'])],
+      ['B', new Set(['D'])],
+      ['C', new Set(['D'])],
+      ['D', new Set()],
+    ]);
+    const inDeg = new Map<string, number>([['A', 0], ['B', 1], ['C', 1], ['D', 2]]);
+    const result = kahnSort(ids, adj, inDeg);
+    expect(result[0]).toBe('A');
+    expect(result[result.length - 1]).toBe('D');
+    // B and C are in alphabetical order between A and D
+    expect(result[1]).toBe('B');
+    expect(result[2]).toBe('C');
+  });
+
+  it('single node with no adjacency returns that node', () => {
+    const ids = new Set(['A']);
+    const adj = new Map<string, Set<string>>([['A', new Set()]]);
+    const inDeg = new Map<string, number>([['A', 0]]);
+    const result = kahnSort(ids, adj, inDeg);
+    expect(result).toEqual(['A']);
+  });
+
+  it('cycle-trapped nodes — A->B->A both appear in result', () => {
+    // A->B->A: both have in-degree 1, neither reaches 0
+    const ids = new Set(['A', 'B']);
+    const adj = new Map<string, Set<string>>([
+      ['A', new Set(['B'])],
+      ['B', new Set(['A'])],
+    ]);
+    const inDeg = new Map<string, number>([['A', 1], ['B', 1]]);
+    const result = kahnSort(ids, adj, inDeg);
+    expect(result).toHaveLength(2);
+    expect(result).toContain('A');
+    expect(result).toContain('B');
   });
 });
