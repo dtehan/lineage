@@ -107,3 +107,19 @@ Project milestone history tracking completed phases and shipped features.
 
 ---
 
+
+## v6.0 Full System Catalog (Shipped: 2026-02-23)
+
+**Phases completed:** 2 phases (22-23), 5 plans, 10 tasks
+
+**Delivered:** 37 files modified (+4,966/-1,400 lines), 26 commits over 1 day (2026-02-23)
+
+**Key accomplishments:**
+1. Full System Catalog Population — 43 Teradata system databases excluded via SYSTEM_DATABASES frozenset; safe-by-default re-run with `--full-refresh` flag and pre-flight QVCI/coverage checks
+2. Per-Database Lazy-Loading API — `GET /databases` endpoint with table/view/total counts via STRTOK; `?database=` filter on datasets using LIKE pattern for exact prefix matching
+3. Two-Phase AssetBrowser — Databases list on mount, tables per-database on expand; eliminates silent 1000-row truncation with server-provided totalCount per database
+4. Standalone Table Rendering — Valid `{nodes, edges}` response for all catalog tables; inline blue "No lineage connections" banner alongside canvas instead of error state
+5. Has-Lineage Indicator — Blue dot per table in Asset Browser distinguishing lineage-connected from catalog-only tables via EXISTS subquery on OL_COLUMN_LINEAGE
+
+---
+

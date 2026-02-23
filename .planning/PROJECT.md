@@ -2,26 +2,22 @@
 
 ## What This Is
 
-A column-level data lineage application for Teradata databases that visualizes data flow between database columns. Users can browse databases/tables/columns, view upstream and downstream lineage graphs, and perform impact analysis for change management. Built with Python Flask backend, React TypeScript frontend, and OpenLineage-aligned schema.
+A column-level data lineage application for Teradata databases that visualizes data flow between database columns. Users can browse the full system catalog of databases, tables, views, and columns — including those without lineage data — view upstream and downstream lineage graphs, and perform impact analysis for change management. Built with Python Flask backend, React TypeScript frontend, and OpenLineage-aligned schema.
 
 ## Core Value
 
 Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases.
 
-## Current Milestone: v6.0 Full System Catalog
-
-**Goal:** Make every database, table, view, and column on the Teradata system browsable and renderable — even without lineage data.
-
-**Target features:**
-- Complete metadata population of all system objects into OL_* tables
-- Standalone table rendering for tables with no lineage relationships
-
 ## Current State
 
-**Shipped:** v5.0 Database Lineage Layout (Feb 22, 2026)
+**Shipped:** v6.0 Full System Catalog (Feb 23, 2026)
 
 **What's working:**
-- **Database Lineage Layout:** Connected tables flow left-to-right in topological order; disconnected tables in compact alphabetical grid; section label + hide toggle + header count badges
+- **Full System Catalog:** All user databases, tables, views, and columns registered in OL_* tables; 43 Teradata system databases excluded; safe-by-default `--full-refresh` flag for re-population
+- **Two-Phase AssetBrowser:** Databases list on mount, tables per-database on expand; eliminates silent 1000-row truncation; server-provided totalCount per database
+- **Has-Lineage Indicator:** Blue dot per table in Asset Browser distinguishing lineage-connected from catalog-only tables
+- **Standalone Table Rendering:** Valid graph response for all catalog tables; inline blue "No lineage connections" banner alongside canvas (not error state)
+- **Database Lineage Layout:** Connected tables flow left-to-right in topological order; disconnected tables in compact alphabetical grid; hide toggle + header count badges
 - **In-Memory Graph Engine:** networkx DiGraph with BFS traversal serves all lineage in <100ms; blue-green swap for zero-downtime rebuilds; CTE fallback during warm-up
 - **Progressive Depth Loading:** Depth-1 graph renders instantly, full-depth expands in background with zero layout jitter via useProgressiveLineage hook
 - **Three-Layer Cache:** Redis cache-aside + in-memory graph + CTE fallback; single `/cache/invalidate` call clears all layers atomically
@@ -110,12 +106,20 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - ✓ Hide-isolated toggle in toolbar — v5.0
 - ✓ Header count badges for lineage vs isolated tables — v5.0
 
+**v6.0 Requirements (7/7 satisfied):**
+- ✓ Complete metadata population with system database exclusion (43 databases) — v6.0
+- ✓ System databases (DBC, SysAdmin, SYSLIB, etc.) excluded from catalog population — v6.0
+- ✓ Standalone table rendering as single node with columns (no error state) — v6.0
+- ✓ "No lineage connections" informational banner for zero-edge tables — v6.0
+- ✓ Backend valid `{nodes, edges}` response for tables with no lineage — v6.0
+- ✓ Asset Browser browsable without silent truncation (two-phase lazy loading) — v6.0
+- ✓ Has-lineage indicator per table in Asset Browser — v6.0
+
 ### Active
 
 <!-- Current scope. Building toward these. -->
 
-- [ ] Complete metadata population — all databases, tables, views, columns registered in OL_* tables
-- [ ] Standalone table rendering — tables with no lineage display as single node with columns
+(No active milestone — all v6.0 requirements shipped)
 
 ### Out of Scope
 
@@ -129,15 +133,15 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 ## Context
 
-**Codebase State (v5.0):**
-- Backend: Python Flask with layered architecture (repositories, services, blueprints) + GraphEngine (networkx BFS) + WildcardResolver + ViewLineageExtractor
-- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table; custom topological layout engine with two-zone layout, progressive depth loading, per-stage timing, multi-select with group drag
-- Database: Teradata with OpenLineage schema (OL_* tables) + 9 indexes on OL_COLUMN_LINEAGE; views surfaced as intermediate nodes
+**Codebase State (v6.0):**
+- Backend: Python Flask with layered architecture (repositories, services, blueprints) + GraphEngine (networkx BFS) + WildcardResolver + ViewLineageExtractor + full catalog population pipeline
+- Frontend: React 18 + TypeScript + React Flow + TanStack Query/Table; two-phase lazy-loading AssetBrowser, custom topological layout engine with two-zone layout, progressive depth loading, per-stage timing, multi-select with group drag
+- Database: Teradata with OpenLineage schema (OL_* tables) + 9 indexes on OL_COLUMN_LINEAGE; views surfaced as intermediate nodes; full system catalog registered
 - Graph Engine: networkx DiGraph with BFS traversal, blue-green swap, CTE fallback, Redis serialization
 - Layout Engine: Custom O(V+E) topological sort with per-component layering, isolated grid placement, ELK fallback with separateConnectedComponents
 - Caching: Redis 7.0.1 with Flask-Caching 2.3.1 (cache-aside + in-memory graph + CTE fallback)
 - LOC: ~18,616 Python + ~24,000+ TypeScript
-- Testing: 400+ tests (73 DB + 20 API + 260+ frontend + 21 E2E + 85 layout engine + graph engine + progressive loading tests)
+- Testing: 640+ tests (73 DB + 20 API + 260+ frontend + 21 E2E + 85 layout engine + graph engine + progressive loading + AssetBrowser lazy-load + has-lineage indicator + no-lineage banner tests)
 
 **Technical Stack:**
 - OpenLineage spec v2-0-2 implementation
@@ -149,13 +153,14 @@ Enable accurate impact analysis for database changes by visualizing complete col
 - Server-Timing headers + frontend per-stage timing for full-stack observability
 - Loguru for structured JSON logging with correlation IDs
 - Redis: cache-aside with hierarchical keys, stampede prevention, graph snapshot persistence
+- Catalog population: populate_lineage.py with SYSTEM_DATABASES exclusion, pre-flight checks, safe-by-default re-run
 
-**Recent Changes (v5.0):**
-- **Layout Engine:** Custom O(V+E) Kahn sort replacing ELK for database lineage; per-component topological layering via detectConnectedComponents + kahnSort; placeIsolatedGrid for disconnected tables
-- **Two-Zone Layout:** Connected tables flow left-to-right in topological order; isolated tables in compact alphabetical grid below with 80px gap separation
-- **Deterministic Clusters:** djb2 hash for stable cluster colors; pre-calculated dimensions replacing stale ResizeObserver values
-- **UX Polish:** SectionLabelNode canvas label, Eye/EyeOff hide-isolated toggle, header count badges (N in lineage / N isolated)
-- **Draggable Minimap:** Shared LineageMiniMap component with pannable/zoomable viewport (standalone phase)
+**Recent Changes (v6.0):**
+- **Full Catalog Population:** 43 Teradata system databases excluded via SYSTEM_DATABASES frozenset; safe-by-default `--full-refresh` flag; pre-flight QVCI and coverage checks
+- **Databases API:** GET /databases endpoint with per-database table/view/total counts via STRTOK; `?database=` filter on datasets using LIKE pattern
+- **Two-Phase AssetBrowser:** Databases list on mount, tables per-database on expand with server-provided totalCount; eliminates silent 1000-row truncation
+- **Standalone Table Rendering:** Valid `{nodes, edges}` for all catalog tables; inline blue "No lineage connections" banner alongside ReactFlow canvas
+- **Has-Lineage Indicator:** Blue dot per table via EXISTS subquery on OL_COLUMN_LINEAGE with TRIM for Teradata CHAR padding
 
 ## Constraints
 
@@ -211,6 +216,13 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | ELK DisCo explicitly rejected (v5.0) | Known hang risk on dense graphs; custom topological layout is proven and correct | ✓ Good — No hang risk |
 | Direct main-thread layout over Worker (v5.0) | Custom O(V+E) layout completes in ~15ms for 10K nodes; Worker overhead unnecessary | ✓ Good — Simpler architecture, no silent failures |
 | Render-time filtering for hide toggle (v5.0) | visibleNodes/visibleEdges useMemo avoids expensive layout re-run on toggle | ✓ Good — Instant toggle response |
+| SYSTEM_DATABASES frozenset with 43 entries (v6.0) | Immutable O(1) lookup; sorted() for deterministic SQL parameter order | ✓ Good — Prevents system catalog pollution |
+| Safe-by-default population with --full-refresh (v6.0) | NOT EXISTS guards preserve existing data; explicit flag for destructive repopulation | ✓ Good — No accidental data loss |
+| QVCI check as warning not hard failure (v6.0) | Systems with QVCI disabled can still populate table columns; view types degrade to UNKNOWN | ✓ Good — Graceful degradation |
+| Two-phase AssetBrowser lazy loading (v6.0) | Databases on mount, tables per-database on expand; eliminates 1000-row truncation | ✓ Good — Scales to any catalog size |
+| LIKE '{db}.%' for exact prefix matching (v6.0) | Dot suffix prevents substring matching (DEMO.% won't match DEMO_ARCHIVE.table) | ✓ Good — Correct filtering |
+| Empty graph response over 404 for no-fields tables (v6.0) | Dataset exists in catalog but has no fields — valid state, not error | ✓ Good — Every table browsable |
+| EXISTS subquery with TRIM for has_lineage (v6.0) | Handles Teradata CHAR padding on dataset names in OL_COLUMN_LINEAGE | ✓ Good — Correct cross-table matching |
 
 ---
-*Last updated: 2026-02-23 after v6.0 milestone start*
+*Last updated: 2026-02-23 after v6.0 milestone completion*
