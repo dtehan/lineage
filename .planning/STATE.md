@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 23 of 23 (Standalone Table Rendering)
-Plan: 2 of TBD in current phase
+Plan: 1 of 2 in current phase
 Status: In progress
-Last activity: 2026-02-23 — Phase 23 plan 02 complete: has-lineage indicator in Asset Browser
+Last activity: 2026-02-23 — Phase 23 plan 01 complete: standalone table rendering fix (backend empty graph + inline banner)
 
 Progress:
 
@@ -60,6 +60,8 @@ Recent decisions affecting current work:
 - [Phase 23-02]: has_lineage uses CASE WHEN EXISTS (SELECT 1 FROM OL_COLUMN_LINEAGE cl WHERE TRIM(cl.source_dataset) = TRIM(d.name) OR TRIM(cl.target_dataset) = TRIM(d.name)) — TRIM for Teradata CHAR padding
 - [Phase 23-02]: hasLineage is optional (?) in TypeScript type — endpoints not returning it default to undefined; strict === true prevents indicator showing for undefined
 - [Phase 23-02]: Indicator positioned after table name inside DatasetItem button, wrapped in Tooltip with 'Has lineage connections'
+- [Phase 23-01]: Return {nodes:[],edges:[]} (not DatasetNotFoundError) for datasets with no OL_DATASET_FIELD entries — valid catalog state, not an error
+- [Phase 23-01]: Inline banner alongside canvas (not replacing it) — every table browsable; blue color for informational vs red for errors
 
 ### Pending Todos
 
@@ -73,5 +75,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Phase 23 plan 02 complete — has-lineage indicator added to Asset Browser (2 tasks, 4 files, all tests pass).
+Stopped at: Completed 23-01-PLAN.md — standalone table rendering fix executed (2 tasks, 3 files, 33 tests pass).
 Resume file: None
