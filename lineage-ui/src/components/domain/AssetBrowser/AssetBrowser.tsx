@@ -1,9 +1,8 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronDown, Database, Table as TableIcon, Columns, Eye, Layers, RefreshCw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useOpenLineageNamespaces, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
-import { openLineageApi } from '../../../api/client';
+import { useOpenLineageNamespaces, useOpenLineageDatabases, useOpenLineageDatasets, useOpenLineageDataset } from '../../../api/hooks/useOpenLineage';
 import { LoadingSpinner } from '../../common/LoadingSpinner';
 import { Tooltip } from '../../common/Tooltip';
 import type { OpenLineageDataset } from '../../../types/openlineage';
@@ -43,12 +42,6 @@ const AssetTypeIcon = ({ sourceType }: { sourceType?: string }) => {
   }
 };
 
-// Parse database name from dataset name (e.g., "demo_user.customers" -> "demo_user")
-const parseDatabaseFromDatasetName = (datasetName: string): string => {
-  const parts = datasetName.split('.');
-  return parts.length > 1 ? parts[0] : datasetName;
-};
-
 // Parse table name from dataset name (e.g., "demo_user.customers" -> "customers")
 const parseTableFromDatasetName = (datasetName: string): string => {
   const parts = datasetName.split('.');
@@ -74,42 +67,18 @@ export function AssetBrowser() {
       })[0]
     : null;
 
-  // Fetch datasets from the default namespace
-  const { data: datasetsData, isLoading: isLoadingDatasets, isFetching: isFetchingDatasets } = useOpenLineageDatasets(
-    defaultNamespace?.id || '',
-    { limit: 1000, offset: 0 }
+  // Phase 1: Fetch database list only (lightweight — counts only, no dataset data)
+  const { data: databasesData, isLoading: isLoadingDatabases, isFetching: isFetchingDatabases } = useOpenLineageDatabases(
+    defaultNamespace?.id || ''
   );
-  const datasets = datasetsData?.datasets || [];
+  const databases = databasesData?.databases || [];
 
-  // Group datasets by database name (extracted from dataset name)
-  const datasetsByDatabase = useMemo(() => {
-    const grouped: Record<string, OpenLineageDataset[]> = {};
-    datasets.forEach((dataset) => {
-      const dbName = parseDatabaseFromDatasetName(dataset.name);
-      if (!grouped[dbName]) {
-        grouped[dbName] = [];
-      }
-      grouped[dbName].push(dataset);
-    });
-    return grouped;
-  }, [datasets]);
-
-  const databaseNames = Object.keys(datasetsByDatabase).sort();
-
-  // Handle refresh - fetch fresh data bypassing backend cache
+  // Handle refresh - invalidate all relevant query caches
   const handleRefresh = useCallback(async () => {
-    if (defaultNamespace) {
-      const [freshNamespaces, freshDatasets] = await Promise.all([
-        openLineageApi.getNamespaces({ refresh: true }),
-        openLineageApi.getDatasets(defaultNamespace.id, { limit: 1000, offset: 0 }, { refresh: true }),
-      ]);
-      queryClient.setQueryData(['openlineage', 'namespaces'], freshNamespaces);
-      queryClient.setQueryData(
-        ['openlineage', 'datasets', defaultNamespace.id, { limit: 1000, offset: 0 }],
-        freshDatasets
-      );
-    }
-  }, [defaultNamespace, queryClient]);
+    await queryClient.invalidateQueries({ queryKey: ['openlineage', 'namespaces'] });
+    await queryClient.invalidateQueries({ queryKey: ['openlineage', 'databases'] });
+    await queryClient.invalidateQueries({ queryKey: ['openlineage', 'datasets'] });
+  }, [queryClient]);
 
   const toggleDatabase = (dbName: string) => {
     setExpandedDatabases((prev) => {
@@ -135,7 +104,7 @@ export function AssetBrowser() {
     });
   };
 
-  if (isLoadingNamespaces || isLoadingDatasets) {
+  if (isLoadingNamespaces || isLoadingDatabases) {
     return (
       <div className="p-4">
         <LoadingSpinner />
@@ -159,23 +128,26 @@ export function AssetBrowser() {
           <Tooltip content="Refresh data (bypass cache)" position="right">
             <button
               onClick={handleRefresh}
-              disabled={isLoadingNamespaces || isLoadingDatasets}
+              disabled={isLoadingNamespaces || isLoadingDatabases}
               className="p-1 text-slate-500 hover:bg-slate-100 rounded transition-colors disabled:opacity-50"
               aria-label="Refresh data"
               data-testid="asset-browser-refresh-btn"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${(isFetchingNamespaces || isFetchingDatasets) && !(isLoadingNamespaces || isLoadingDatasets) ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${(isFetchingNamespaces || isFetchingDatabases) && !(isLoadingNamespaces || isLoadingDatabases) ? 'animate-spin' : ''}`} />
             </button>
           </Tooltip>
         </div>
         <ul className="space-y-1">
-          {databaseNames.map((dbName) => (
+          {databases.map((db) => (
             <DatabaseItem
-              key={dbName}
-              databaseName={dbName}
-              datasets={datasetsByDatabase[dbName]}
-              isExpanded={expandedDatabases.has(dbName)}
-              onToggle={() => toggleDatabase(dbName)}
+              key={db.name}
+              databaseName={db.name}
+              tableCount={db.tableCount}
+              viewCount={db.viewCount}
+              totalCount={db.totalCount}
+              namespaceId={defaultNamespace.id}
+              isExpanded={expandedDatabases.has(db.name)}
+              onToggle={() => toggleDatabase(db.name)}
               expandedDatasets={expandedDatasets}
               onToggleDataset={toggleDataset}
             />
@@ -188,15 +160,26 @@ export function AssetBrowser() {
 
 interface DatabaseItemProps {
   databaseName: string;
-  datasets: OpenLineageDataset[];
+  tableCount: number;
+  viewCount: number;
+  totalCount: number;
+  namespaceId: string;
   isExpanded: boolean;
   onToggle: () => void;
   expandedDatasets: Set<string>;
   onToggleDataset: (datasetId: string) => void;
 }
 
-function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDatasets, onToggleDataset }: DatabaseItemProps) {
+function DatabaseItem({ databaseName, tableCount: _tableCount, viewCount: _viewCount, totalCount, namespaceId, isExpanded, onToggle, expandedDatasets, onToggleDataset }: DatabaseItemProps) {
   const navigate = useNavigate();
+
+  // Phase 2: Fetch this database's tables only when expanded
+  const { data: datasetsData, isLoading: isLoadingDatasets } = useOpenLineageDatasets(
+    namespaceId,
+    { database: databaseName, limit: 500, offset: 0 },
+    { enabled: isExpanded }
+  );
+  const datasets = datasetsData?.datasets || [];
 
   // Toggle expand/collapse (prevent navigation when clicking chevron)
   const handleChevronClick = (e: React.MouseEvent) => {
@@ -231,19 +214,23 @@ function DatabaseItem({ databaseName, datasets, isExpanded, onToggle, expandedDa
             <Database className="w-4 h-4 mr-2 text-blue-500" />
           </Tooltip>
           <span className="text-sm text-slate-700">{databaseName}</span>
-          <span className="ml-2 text-xs text-slate-400">({datasets.length})</span>
+          <span className="ml-2 text-xs text-slate-400">({totalCount})</span>
         </button>
       </div>
       {isExpanded && (
         <ul className="ml-4 mt-1 space-y-1">
-          {datasets.map((dataset) => (
-            <DatasetItem
-              key={dataset.id}
-              dataset={dataset}
-              isExpanded={expandedDatasets.has(dataset.id)}
-              onToggle={() => onToggleDataset(dataset.id)}
-            />
-          ))}
+          {isLoadingDatasets ? (
+            <li className="px-2 py-1"><LoadingSpinner /></li>
+          ) : (
+            datasets.map((dataset) => (
+              <DatasetItem
+                key={dataset.id}
+                dataset={dataset}
+                isExpanded={expandedDatasets.has(dataset.id)}
+                onToggle={() => onToggleDataset(dataset.id)}
+              />
+            ))
+          )}
         </ul>
       )}
     </li>

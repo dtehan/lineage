@@ -34,6 +34,47 @@ vi.mock('../stores/useLineageStore', () => ({
   })),
 }));
 
+// Mock OpenLineage hooks used by AssetBrowser
+vi.mock('../api/hooks/useOpenLineage', () => ({
+  useOpenLineageNamespaces: vi.fn(() => ({
+    data: { namespaces: [{ id: 'ns-1', uri: 'teradata://localhost', specVersion: '1.0', createdAt: '2024-01-01' }] },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: null,
+    isSuccess: true,
+  })),
+  useOpenLineageDatabases: vi.fn(() => ({
+    data: { databases: [{ name: 'sales_db', tableCount: 2, viewCount: 0, totalCount: 2 }], total: 1 },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: null,
+    isSuccess: true,
+  })),
+  useOpenLineageDatasets: vi.fn(() => ({
+    data: {
+      datasets: [
+        { id: 'ds-1', namespace: 'ns-1', name: 'sales_db.orders', sourceType: 'table', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+        { id: 'ds-2', namespace: 'ns-1', name: 'sales_db.customers', sourceType: 'table', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+      ],
+      total: 2,
+    },
+    isLoading: false,
+    isFetching: false,
+    isError: false,
+    error: null,
+    isSuccess: true,
+  })),
+  useOpenLineageDataset: vi.fn(() => ({
+    data: undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+    isSuccess: false,
+  })),
+}));
+
 // Mock the API hooks - using PaginatedResult format
 vi.mock('../api/hooks/useAssets', () => ({
   useDatabases: vi.fn(() => ({
