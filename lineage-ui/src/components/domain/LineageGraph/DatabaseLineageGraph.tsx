@@ -11,7 +11,6 @@ import {
   ConnectionMode,
   type Node,
   type Edge,
-  type NodeProps,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
@@ -39,22 +38,8 @@ import {
 } from './hooks';
 import { LineageMiniMap } from './LineageMiniMap';
 
-interface SectionLabelNodeData {
-  count: number;
-  [key: string]: unknown;
-}
-
-function SectionLabelNode({ data }: NodeProps<Node<SectionLabelNodeData>>) {
-  return (
-    <div className="px-3 py-1.5 text-sm font-medium text-slate-500 bg-slate-50/90 border border-slate-200 rounded-lg whitespace-nowrap select-none pointer-events-none shadow-sm">
-      Tables without lineage connections ({data.count})
-    </div>
-  );
-}
-
 const nodeTypes = {
   tableNode: TableNode,
-  sectionLabelNode: SectionLabelNode,
 };
 
 const edgeTypes = {
@@ -216,7 +201,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
     layoutGraph(converted.nodes, converted.edges, {
       onProgress: (p) => setProgress(p),
     })
-      .then(({ nodes: layoutedNodes, edges: layoutedEdges, isolatedCount, connectedCount, isolatedGridOrigin, isolatedNodeIds }) => {
+      .then(({ nodes: layoutedNodes, edges: layoutedEdges, isolatedCount, connectedCount, isolatedNodeIds }) => {
         if (cancelled || generation !== generationRef.current) return; // Stale result — discard
         setProgress(90); // Layout complete, entering render stage
         setStage('rendering');
@@ -228,25 +213,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
         // Track isolated node IDs for hide filtering
         isolatedNodeIdsRef.current = new Set(isolatedNodeIds);
 
-        // Inject section label node if isolated tables exist
-        let allNodes = layoutedNodes;
-        if (isolatedCount > 0 && isolatedGridOrigin) {
-          const labelNode: Node = {
-            id: '__isolated-section-label__',
-            type: 'sectionLabelNode',
-            position: {
-              x: isolatedGridOrigin.x,
-              y: isolatedGridOrigin.y - 36,
-            },
-            data: { count: isolatedCount },
-            draggable: false,
-            selectable: false,
-            focusable: false,
-          };
-          allNodes = [labelNode, ...layoutedNodes];
-        }
-
-        setNodes(allNodes);
+        setNodes(layoutedNodes);
         setEdges(layoutedEdges);
         setGraph(converted.nodes, converted.edges);
         requestAnimationFrame(() => {
@@ -460,7 +427,7 @@ function DatabaseLineageGraphInner({ databaseName }: DatabaseLineageGraphInnerPr
   const visibleNodes = useMemo(() => {
     if (!hideIsolatedTables || isolatedNodeIdsRef.current.size === 0) return nodes;
     return nodes.filter(
-      (n) => !isolatedNodeIdsRef.current.has(n.id) && n.id !== '__isolated-section-label__'
+      (n) => !isolatedNodeIdsRef.current.has(n.id)
     );
   }, [nodes, hideIsolatedTables]);
 
