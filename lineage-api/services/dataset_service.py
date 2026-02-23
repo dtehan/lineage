@@ -55,7 +55,24 @@ class DatasetService:
             raise DatasetNotFoundError(f"Namespace not found: {namespace_id}")
         return namespace
 
-    def list_datasets(self, namespace_id: str, limit: int = 100, offset: int = 0) -> dict:
+    def list_databases(self, namespace_id: str) -> dict:
+        """
+        List distinct database names with counts for a namespace.
+
+        Args:
+            namespace_id: Namespace identifier
+
+        Returns:
+            dict: Response with databases list and total count
+                {"databases": [...], "total": N}
+        """
+        databases = self.dataset_repo.list_databases(namespace_id)
+        return {
+            "databases": databases,
+            "total": len(databases)
+        }
+
+    def list_datasets(self, namespace_id: str, limit: int = 100, offset: int = 0, database_filter: str = None) -> dict:
         """
         List datasets in a namespace with pagination.
 
@@ -63,12 +80,13 @@ class DatasetService:
             namespace_id: Namespace identifier
             limit: Maximum number of datasets to return
             offset: Number of datasets to skip
+            database_filter: Optional database name to filter results by
 
         Returns:
             dict: Response with datasets list and pagination info
                 {"datasets": [...], "pagination": {...}}
         """
-        datasets, total = self.dataset_repo.list_datasets(namespace_id, limit, offset)
+        datasets, total = self.dataset_repo.list_datasets(namespace_id, limit, offset, database_filter=database_filter)
 
         return {
             "datasets": datasets,

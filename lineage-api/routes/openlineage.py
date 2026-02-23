@@ -51,8 +51,16 @@ def list_datasets(namespace_id):
     """List datasets in a namespace with pagination."""
     limit = int(request.args.get("limit", "100"))
     offset = int(request.args.get("offset", "0"))
+    database = request.args.get("database")
 
-    result = dataset_service.list_datasets(namespace_id, limit, offset)
+    result = dataset_service.list_datasets(namespace_id, limit, offset, database_filter=database)
+    return jsonify(result)
+
+
+@openlineage_bp.route("/namespaces/<namespace_id>/databases", methods=["GET"])
+def list_databases(namespace_id):
+    """List distinct database names present in OL_DATASET for a namespace."""
+    result = dataset_service.list_databases(namespace_id)
     return jsonify(result)
 
 
