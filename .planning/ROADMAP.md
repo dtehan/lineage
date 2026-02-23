@@ -94,10 +94,12 @@ See archive: `.planning/milestones/v5.0-ROADMAP.md`
   2. Teradata system databases (DBC, SysAdmin, SYSLIB, Sys_Calendar, and others) do not appear in the Asset Browser or OL_DATASET after population
   3. User can expand any database in the Asset Browser and see all its tables — with no silent truncation at 1000 items regardless of catalog size
   4. The populate script is safe to re-run without destroying existing catalog data unless an explicit full-refresh flag is provided
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 22-01: TBD
+- [ ] 22-01-PLAN.md — System DB exclusion, safe re-run, pre-flight checks in populate_lineage.py
+- [ ] 22-02-PLAN.md — Backend API: GET /databases endpoint and database filter on datasets endpoint
+- [ ] 22-03-PLAN.md — Frontend: AssetBrowser two-phase lazy loading (databases first, tables on expand)
 
 #### Phase 23: Standalone Table Rendering
 **Goal**: Tables with no lineage relationships render as a valid single-node graph with columns — not an error state — and users can distinguish lineage-connected tables from catalog-only tables in the Asset Browser
