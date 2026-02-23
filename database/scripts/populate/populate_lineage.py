@@ -428,6 +428,57 @@ def parse_datetime(s: str) -> datetime:
     raise ValueError(f"Could not parse datetime: {s}")
 
 
+def run_preflight_checks(cursor) -> bool:
+    """Run pre-flight checks before population and print status summary.
+
+    Checks:
+      1. QVCI status: verifies DBC.ColumnsJQV is accessible (requires QVCI enabled)
+      2. User DB coverage: counts user databases not in SYSTEM_DATABASES
+
+    Returns:
+        True if no hard failures (warnings and skips are acceptable).
+    """
+    print("\n--- Pre-flight checks ---")
+    checks_passed = 0
+    checks_failed = 0
+
+    # Check 1: QVCI availability
+    try:
+        cursor.execute("SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0")
+        print("[OK] QVCI enabled: DBC.ColumnsJQV accessible")
+        checks_passed += 1
+    except Exception as e:
+        err_str = str(e)
+        if "9719" in err_str:
+            print("[WARN] QVCI disabled: view column types may show as UNKNOWN")
+        else:
+            print(f"[WARN] QVCI check error: {err_str}")
+        # QVCI being disabled is a warning, not a hard failure
+        checks_passed += 1
+
+    # Check 2: User DB coverage
+    placeholders = _system_db_placeholders()
+    try:
+        cursor.execute(
+            f"SELECT COUNT(*) FROM DBC.DatabasesV WHERE DatabaseName NOT IN ({placeholders})",
+            _system_db_exclusion_params()
+        )
+        row = cursor.fetchone()
+        user_db_count = row[0] if row else 0
+        print(f"[OK] User DB coverage: {user_db_count} user databases found (excluding {len(SYSTEM_DATABASES)} system databases)")
+        checks_passed += 1
+    except Exception as e:
+        print(f"[SKIP] DBC.DatabasesV not accessible -- skipping user DB coverage check ({e})")
+        # Not accessible is a skip, not a hard failure
+
+    if checks_failed == 0:
+        print(f"Pre-flight: {checks_passed} checks passed")
+    else:
+        print(f"Pre-flight: WARNING - {checks_failed} checks failed")
+
+    return checks_failed == 0
+
+
 def main():
     # Parse arguments
     parser = argparse.ArgumentParser(
@@ -447,8 +498,12 @@ View Lineage:
   View-based lineage extraction is enabled by default. It parses view
   definitions via SQLGlot to derive column mappings. Use --no-views to skip.
 
+Re-run Safety:
+  By default, the script is safe to re-run -- existing data is preserved via
+  NOT EXISTS guards. Use --full-refresh to clear and rebuild from scratch.
+
 Examples:
-  # Default: DBQL extraction + view lineage
+  # Default: DBQL extraction + view lineage (safe to re-run)
   python populate_lineage.py
   python populate_lineage.py --dbql --since "2024-01-01"
   python populate_lineage.py --dbql --full
@@ -463,8 +518,8 @@ Examples:
   python populate_lineage.py --dry-run
   python populate_lineage.py --dbql --dry-run
 
-  # Append mode (don't clear existing lineage)
-  python populate_lineage.py --skip-clear
+  # Clear all OL_* data and repopulate from scratch (destructive)
+  python populate_lineage.py --full-refresh
 
 DBQL Requirements:
   - SELECT access on DBC.DBQLogTbl and DBC.DBQLSQLTbl
@@ -527,9 +582,14 @@ DBQL Requirements:
         help="Skip view-based lineage extraction"
     )
     parser.add_argument(
+        "--full-refresh",
+        action="store_true",
+        help="Clear all OL_* data before repopulating (destructive)"
+    )
+    parser.add_argument(
         "--skip-clear",
         action="store_true",
-        help="Skip clearing existing data (append mode)"
+        help="Deprecated: data is preserved by default. Use --full-refresh to clear."
     )
     parser.add_argument(
         "--lineage-only",
@@ -582,9 +642,20 @@ DBQL Requirements:
         print(f"ERROR: Failed to connect: {e}")
         sys.exit(1)
 
+    # Run pre-flight checks before any INSERT operations
+    run_preflight_checks(cursor)
+    print("Pre-flight complete. Proceeding with population...")
+
+    # Print mode summary
+    if args.full_refresh:
+        print("\nMode: full refresh (clearing existing data first)")
+    else:
+        print("\nMode: incremental (preserving existing data)")
+    print(f"System DB exclusion: {len(SYSTEM_DATABASES)} databases excluded")
+
     # Get namespace
     namespace_uri = get_openlineage_namespace()
-    print(f"\nNamespace: {namespace_uri}")
+    print(f"Namespace: {namespace_uri}")
 
     if args.dry_run:
         print("\n[DRY RUN] Would populate:")
@@ -605,8 +676,9 @@ DBQL Requirements:
         else:
             print(f"  - View lineage extraction: SKIPPED (--no-views)")
     else:
-        # Clear existing data (unless skipped)
-        if not args.skip_clear:
+        # Clear existing data only when --full-refresh is explicitly requested
+        if args.full_refresh:
+            print("\n[FULL REFRESH] Clearing existing data before repopulation...")
             clear_openlineage_data(cursor, lineage_only=args.lineage_only)
 
         # Populate namespace
