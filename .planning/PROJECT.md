@@ -8,6 +8,14 @@ A column-level data lineage application for Teradata databases that visualizes d
 
 Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases.
 
+## Current Milestone: v6.0 Full System Catalog
+
+**Goal:** Make every database, table, view, and column on the Teradata system browsable and renderable — even without lineage data.
+
+**Target features:**
+- Complete metadata population of all system objects into OL_* tables
+- Standalone table rendering for tables with no lineage relationships
+
 ## Current State
 
 **Shipped:** v5.0 Database Lineage Layout (Feb 22, 2026)
@@ -106,7 +114,8 @@ Enable accurate impact analysis for database changes by visualizing complete col
 
 <!-- Current scope. Building toward these. -->
 
-(No active milestone — run `/gsd:new-milestone` to start next)
+- [ ] Complete metadata population — all databases, tables, views, columns registered in OL_* tables
+- [ ] Standalone table rendering — tables with no lineage display as single node with columns
 
 ### Out of Scope
 
@@ -204,4 +213,4 @@ Enable accurate impact analysis for database changes by visualizing complete col
 | Render-time filtering for hide toggle (v5.0) | visibleNodes/visibleEdges useMemo avoids expensive layout re-run on toggle | ✓ Good — Instant toggle response |
 
 ---
-*Last updated: 2026-02-22 after v5.0 milestone completion*
+*Last updated: 2026-02-23 after v6.0 milestone start*

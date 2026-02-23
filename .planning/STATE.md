@@ -2,17 +2,17 @@
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-02-22)
+See: .planning/PROJECT.md (updated 2026-02-23)
 
 **Core value:** Enable accurate impact analysis for database changes by visualizing complete column-level lineage across Teradata databases
-**Current focus:** Planning next milestone
+**Current focus:** v6.0 Full System Catalog
 
 ## Current Position
 
-Phase: None active — v5.0 milestone archived
-Plan: None active
-Status: Between milestones — v5.0 shipped, next milestone not started
-Last activity: 2026-02-22 — v5.0 Database Lineage Layout milestone archived
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-23 — Milestone v6.0 started
 
 Progress:
 
