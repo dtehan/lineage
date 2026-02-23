@@ -222,7 +222,7 @@ class DatasetRepository(BaseRepository):
             # Get datasets with pagination using ROW_NUMBER (Teradata native)
             cur.execute(f"""
                 SELECT dataset_id, dataset_name, namespace_id, namespace_uri,
-                       description, source_type, created_at, updated_at
+                       description, source_type, created_at, updated_at, has_lineage
                 FROM (
                     SELECT
                         d.dataset_id,
@@ -233,6 +233,13 @@ class DatasetRepository(BaseRepository):
                         d.source_type,
                         d.created_at,
                         d.updated_at,
+                        CASE
+                            WHEN EXISTS (
+                                SELECT 1 FROM OL_COLUMN_LINEAGE cl
+                                WHERE TRIM(cl.source_dataset) = TRIM(d."name")
+                                   OR TRIM(cl.target_dataset) = TRIM(d."name")
+                            ) THEN 'Y' ELSE 'N'
+                        END AS has_lineage,
                         ROW_NUMBER() OVER (ORDER BY d."name") as rn
                     FROM OL_DATASET d
                     JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
@@ -250,7 +257,8 @@ class DatasetRepository(BaseRepository):
                     "description": self._strip(row[4]) if row[4] else "",
                     "sourceType": self._strip(row[5]) if row[5] else None,
                     "createdAt": self._isoformat(row[6]),
-                    "updatedAt": self._isoformat(row[7])
+                    "updatedAt": self._isoformat(row[7]),
+                    "hasLineage": (self._strip(row[8]) == 'Y') if row[8] else False
                 }
                 for row in rows
             ]
