@@ -40,6 +40,29 @@ OPENLINEAGE_TRANSFORMATION_MAPPING = {
     "FILTER": ("INDIRECT", "FILTER"),
 }
 
+# Teradata system databases to exclude from user catalog population
+SYSTEM_DATABASES = frozenset({
+    'All', 'Crashdumps', 'DBC', 'dbcmngr', 'Default', 'DemoNow_Monitor',
+    'External_AP', 'EXTUSER', 'GLOBAL_FUNCTIONS', 'LockLogShredder', 'PUBLIC',
+    'SQLJ', 'Sys_Calendar', 'SysAdmin', 'SYSBAR', 'SYSJDBC', 'SYSLIB',
+    'SYSSPATIAL', 'SystemFe', 'SYSUDTLIB', 'SYSUIF',
+    'TD_ANALYTICS_DB', 'TD_SERVER_DB', 'TD_SYSFNLIB', 'TD_SYSGPL', 'TD_SYSXML',
+    'TDaaS_BAR', 'TDaaS_DB', 'TDaaS_Maint', 'TDaaS_Monitor', 'TDaaS_Support',
+    'TDaaS_TDBCMgmt1', 'TDaaS_TDBCMgmt2', 'TDBCMgmt',
+    'TDMaps', 'TDPUSER', 'TDQCD', 'TDStats', 'tdwm',
+    'mldb', 'system', 'tapidb', 'val',
+})
+
+
+def _system_db_exclusion_params() -> list:
+    """Return sorted list of system database names for parameterised queries."""
+    return sorted(SYSTEM_DATABASES)
+
+
+def _system_db_placeholders() -> str:
+    """Return comma-separated ? placeholders for SYSTEM_DATABASES."""
+    return ', '.join('?' * len(SYSTEM_DATABASES))
+
 
 def map_transformation_type(current_type: str) -> tuple:
     """Map current transformation type to OpenLineage (type, subtype) tuple."""
@@ -97,6 +120,7 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
     """Populate OL_DATASET from DBC.TablesV using INSERT...SELECT."""
     print("\n--- Populating OL_DATASET from DBC.TablesV ---")
 
+    placeholders = _system_db_placeholders()
     # Use INSERT...SELECT to keep data in database
     cursor.execute(f"""
         INSERT INTO {DATABASE}.OL_DATASET
@@ -114,13 +138,14 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
             'Y' AS is_active
         FROM DBC.TablesV
         WHERE TableKind IN ('T', 'V', 'O')
+          AND DatabaseName NOT IN ({placeholders})
           AND TableName NOT LIKE 'LIN_%'
           AND TableName NOT LIKE 'OL_%'
           AND NOT EXISTS (
               SELECT 1 FROM {DATABASE}.OL_DATASET od
               WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
           )
-    """, (namespace_id, namespace_id, namespace_id))
+    """, [namespace_id, namespace_id] + _system_db_exclusion_params() + [namespace_id])
 
     count = cursor.rowcount
     print(f"  Created {count} datasets")
@@ -135,6 +160,7 @@ def populate_openlineage_fields(cursor, namespace_id: str):
     """
     print("\n--- Populating OL_DATASET_FIELD from DBC.ColumnsV ---")
 
+    placeholders = _system_db_placeholders()
     # Use INSERT...SELECT with SQL-based type conversion
     cursor.execute(f"""
         INSERT INTO {DATABASE}.OL_DATASET_FIELD
@@ -202,6 +228,7 @@ def populate_openlineage_fields(cursor, namespace_id: str):
           AND TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
           AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
           AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
+          AND c.DatabaseName NOT IN ({placeholders})
           AND EXISTS (
               SELECT 1 FROM DBC.TablesV t
               WHERE t.DatabaseName = c.DatabaseName
@@ -216,7 +243,7 @@ def populate_openlineage_fields(cursor, namespace_id: str):
             PARTITION BY c.DatabaseName, c.TableName, c.ColumnName
             ORDER BY c.ColumnId
         ) = 1
-    """, (namespace_id, namespace_id, namespace_id))
+    """, [namespace_id, namespace_id] + _system_db_exclusion_params() + [namespace_id])
 
     count = cursor.rowcount
     print(f"  Created {count} fields")
