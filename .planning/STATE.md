@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 22 of 23 (Metadata Population Foundation)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-23 — v6.0 roadmap created, Phase 22 ready to plan
+Plan: 2 of TBD in current phase
+Status: In progress
+Last activity: 2026-02-23 — completed 22-02 (databases endpoint and dataset filter)
 
 Progress:
 
@@ -49,6 +49,8 @@ Recent decisions affecting current work:
 - [v6.0 Roadmap]: AssetBrowser lazy-load (BROW-01) placed in Phase 22 alongside population (POP-01/02) — the 1000-row limit silently breaks the browse experience the moment full population runs; deferring it to Phase 23 would make Phase 22 unverifiable
 - [v6.0 Roadmap]: "Has lineage" indicator (BROW-02) placed in Phase 23 alongside rendering fixes — logically follows the standalone rendering work and requires Phase 22's populated catalog to be meaningful
 - [v6.0 Research]: Phase 22 pre-flight required before any scan: verify QVCI status (`SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0`), validate LEFT JOIN IS NULL plan with EXPLAIN, confirm system DB exclusion list covers target system's DBC.DatabasesV output
+- [Phase 22]: Route ordering: /namespaces/<id>/databases placed before /datasets/<path:id> wildcard to prevent Flask routing conflict
+- [Phase 22]: LIKE pattern uses '{database_filter}.%' dot suffix for exact database-name prefix matching, not substring matching
 
 ### Pending Todos
 
@@ -62,5 +64,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: v6.0 roadmap created — Phase 22 and Phase 23 defined
+Stopped at: Completed 22-02-PLAN.md (databases endpoint and dataset filter)
 Resume file: None
