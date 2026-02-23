@@ -1,202 +1,219 @@
 # Project Research Summary
 
-**Project:** Lineage — v5.0 Database Lineage Layout
-**Domain:** Graph layout engineering — mixed connected/disconnected node arrangement in React Flow + ELKjs
-**Researched:** 2026-02-21
+**Project:** Teradata Column-Level Data Lineage — v6.0 System Catalog Population and Standalone Table Rendering
+**Domain:** Teradata metadata catalog + data lineage visualization
+**Researched:** 2026-02-23
 **Confidence:** HIGH
 
 ## Executive Summary
 
-The v5.0 Database Lineage Layout milestone targets a single, well-scoped problem: the database lineage graph stacks all tables into a vertical column because the layout engine does not distinguish connected tables (which have lineage edges) from isolated tables (which have none). When `DatabaseLineageGraph` or `AllDatabasesLineageGraph` renders, the API returns table-type nodes with no column sub-nodes, causing `layoutGraph()` to fall through to `layoutSimpleNodes()` — an ELKjs layered path that lacks `separateConnectedComponents` — or through the custom topological layout path which assigns all zero-in-degree tables to layer 0 and stacks them vertically. Both paths produce the same broken output. The fix requires two coordinated changes inside `layoutEngine.ts`: adding `elk.separateConnectedComponents: 'true'`, `elk.spacing.componentComponent: '80'`, and `elk.aspectRatio: '1.7'` to the `layoutSimpleNodes()` ELK options; and refactoring the main topological layout path in `layoutGraph()` to detect connected components, run per-component Kahn sort and longest-path layering, then place isolated tables in a deterministic alphabetical grid below the connected section.
+The v6.0 milestone targets two tightly coupled gaps in the existing lineage application: full-system metadata population (scanning ALL user databases rather than only `demo_user`) and standalone table rendering (showing a table card with columns when no lineage edges exist, rather than an error state). These are not new subsystems — the architecture already supports both. The existing `populate_lineage.py` already scans all of `DBC.TablesV`; the gap is a missing system-database exclusion filter. The existing `LineageGraph.tsx` already receives a valid `{nodes, edges}` response from the backend for zero-edge tables; the gap is a single over-broad guard that blocks the render path. This milestone is primarily about removing constraints, not building new capabilities.
 
-No new npm packages are needed. All required capabilities exist in the installed versions: ELKjs 0.9.3 has the configuration options needed for `layoutSimpleNodes`, and the existing O(V+E) topological layout needs only structural refactoring for `layoutGraph`. The architecture research confirms all changes are confined to a single file — `lineage-ui/src/utils/graph/layoutEngine.ts` — with no interface changes to callers, no API changes, and no changes to React Flow components or the Web Worker wrapper. Both `DatabaseLineageGraph.tsx` and `AllDatabasesLineageGraph.tsx` benefit automatically because they both call the same `layoutGraph()` entry point.
+The recommended approach is surgical: add a `DatabaseName NOT IN (...)` exclusion clause to the populate script before any full-system scan runs, fix the `lineage_service.py` error throw for no-field tables, change the `hasNoLineageData` guard in `LineageGraph.tsx` from `edges.length === 0` to `nodes.length === 0`, and address the `AssetBrowser` 1000-row limit before triggering the first full population. Only one new library is required (`tqdm` for CLI progress during multi-database scans). All stack components, schema tables, and API endpoints already exist and require only targeted modifications.
 
-The primary risk is not the algorithm logic itself but a cluster of pre-existing bugs that become critical at database-lineage scale: the Kahn sort-per-iteration performance degradation (`topoQueue.sort()` inside the while-loop), `ClusterBackground` reading stale `node.measured` dimensions from React Flow's ResizeObserver, the `separateDatabaseClusters` bounding-box assumption breaking for non-contiguous node groups, and `DatabaseLineageGraph` running layout on the main thread. These must be addressed in Phase 1 before the mixed layout strategy is introduced in Phase 2, or the improvements will ship with latent defects that surface at real Teradata database sizes (200–500 tables).
+The primary risks are operational rather than architectural. Running a full-system DBC scan without the system-database exclusion list will flood `OL_DATASET` with Teradata internal objects that are difficult to clean up. Running `populate_lineage.py` without changing the default `--skip-clear` behavior on a multi-hour catalog population will silently destroy the catalog on any accidental re-run. Both are preventable with pre-flight configuration changes that must be in place before the first full scan runs.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-See `.planning/research/STACK.md` for full rationale and algorithm alternatives analysis.
+See `.planning/research/STACK.md` for full rationale and alternative analysis.
 
-The stack does not change for this milestone. ELKjs 0.9.3 (already installed) supports `separateConnectedComponents`, `spacing.componentComponent`, and `aspectRatio` — all required for the `layoutSimpleNodes()` configuration fix. The custom O(V+E) topological layout in `layoutGraph()` handles the main path and needs structural refactoring, not an algorithm replacement. Zero new packages. Zero `npm install`.
+The existing stack requires no architectural changes for v6.0. The one new dependency is `tqdm>=4.67.3` (not currently in the project venv), which provides operator-visible progress during multi-database catalog scans that may run 5-10 minutes. All other components — `teradatasql`, Flask, `@xyflow/react` 12.10.0, ELKjs, TanStack Query, Zustand — are already installed and require no version changes.
 
-**Core technologies (unchanged — configuration changes only):**
-- **ELKjs 0.9.3** (`layoutSimpleNodes` path): Add 3 options: `separateConnectedComponents: 'true'`, `spacing.componentComponent: '80'`, `aspectRatio: '1.7'`. All supported since ELK 0.7.x. No version bump needed.
-- **Custom topological layout** (`layoutGraph` main path): Extract `detectConnectedComponents()` as a local BFS function; refactor the layer-assignment loop to run per component; add isolated table grid placement as the final step.
-- **React Flow @xyflow/react ^12.0.0**: No changes to components or node/edge formats.
-- **Comlink ^4.4.2 / layout.worker.ts**: No interface changes. Worker wraps `layoutGraph()` — internal improvements are transparent.
+**Core technologies (all currently installed):**
+- `teradatasql` — DBC.DatabasesV / DBC.TablesV / DBC.ColumnsJQV queries — no version change needed
+- `Flask` — existing `/api/v2/openlineage/` blueprint handles the standalone table endpoint without new routes
+- `@xyflow/react` 12.10.0 — renders single `TableNode` with `edges={[]}` out of the box; no upgrade needed
+- `elkjs` 0.9.3 — `layoutSimpleNodes()` handles isolated nodes; `layoutGraph()` already has `placeIsolatedGrid` for zero-edge cases
+- `tqdm>=4.67.3` — NEW: add to `requirements.txt` for catalog scan progress; zero npm additions required
 
-Alternatives explicitly rejected: ELK DisCo (untested in codebase, known hang risk on dense graphs), ELK Box (ignores edges — loses all directional ordering), dagre (EOL), d3-dag (adds duplicate layout dependency), bespoke custom grid implementation (unnecessary when ELK handles it for the simple path).
+**Net new dependencies:** 1 Python library (`tqdm`). Zero frontend dependencies.
 
 ### Expected Features
 
-See `.planning/research/FEATURES.md` for full feature landscape, competitor analysis, and implementation pseudocode.
+See `.planning/research/FEATURES.md` for full feature landscape, competitor analysis, and dependency tree.
 
-No production lineage tool (Snowflake, Databricks, DataHub, Atlan) shows all database tables in a single view — they all use progressive disclosure from a selected anchor. This application's database-level overview is a genuine differentiator. The dbt-docs approach (Dagre, all zero-in-degree nodes cluster at left) produces the same vertical tower problem and is explicitly worse than the two-zone approach. The two-zone layout (hierarchical DAG + isolated grid) is novel and not solved the same way anywhere in the market.
+Reference tools (DataHub, OpenMetadata, Atlan) universally separate catalog population from lineage extraction and render standalone table cards for assets without lineage. The pattern is: assets exist in the catalog regardless of lineage status, and "no lineage" is a valid success state shown with an informational banner, never an error.
 
-**Must have (table stakes) for v5.0:**
-- Hierarchical left-to-right layout for connected tables — every lineage tool does this; missing it makes the database view feel broken compared to the column-level view
-- Compact grid for isolated/disconnected tables — primary user complaint; 50+ tables in a vertical tower requires excessive scrolling
-- No node overlap — fundamental correctness expectation; currently broken for the disconnected portion
-- Disconnected tables visually distinct from connected flow — without distinction, users cannot tell what is lineage and what is inventory
+**Must have (table stakes for this milestone):**
+- System database exclusion in `populate_lineage.py` — blocks all other catalog features; without this, DBC/SysAdmin pollute the browser
+- Backend: `get_table_lineage_graph()` returns `{nodes:[root], edges:[]}` instead of throwing `DatasetNotFoundError` when no fields exist
+- Frontend: single-node graph renders as valid state (not error) — fixing the backend throw automatically fixes the frontend error display
+- Frontend: "No lineage connections" informational banner when `nodes.length > 0 && edges.length === 0`
+- AssetBrowser lazy-load by database — must be in place before full catalog population to avoid the 1000-row silent truncation problem
 
-**Should have (v5.1 after validation):**
-- Visual section label "Tables without lineage connections (N)" — makes the two-zone layout self-explanatory; without it users may think the grid section is a bug
-- "Hide tables without lineage" toggle — one boolean in `useUIStore`; reduces clutter for lineage-focused exploration; DataHub and Atlan offer this
-- Isolated table count in database header — "X tables in lineage flow / Y tables with no lineage" sets user expectations before graph exploration
+**Should have (after validation):**
+- "Has lineage" indicator per table in AssetBrowser — green dot distinguishing catalog-only tables from lineage-connected tables
+- Configurable `CATALOG_EXCLUDE_DATABASES` env var — different Teradata installs have different system database sets
+- `--catalog-only` flag for `populate_lineage.py` — skip `OL_COLUMN_LINEAGE` steps during schema-only refreshes
+- Table count badge per database (T: N, V: N) in AssetBrowser — sets user expectations before tree expansion
 
-**Defer (v2+):**
-- Pagination for the disconnected grid — breaks spatial memory; React Flow's `onlyRenderVisibleElements` is the correct scale mechanism
-- Animating isolated nodes into grid positions — documented jank at 200+ nodes; `disableTransitions` mechanism already exists for this
-- Backend API changes to tag `has_lineage` per node — entirely solvable in the frontend layout step; no API change is needed or justified
+**Defer to v2+:**
+- Virtual scrolling in AssetBrowser for 5000+ table environments (TanStack Virtual)
+- NOPI table (`TableKind = 'O'`) distinct visual badge
+- Auto-populate catalog on server startup (anti-pattern: blocks startup for minutes on large systems)
+- Live DBC queries on every AssetBrowser request (anti-pattern: 30-60 second response times)
 
 ### Architecture Approach
 
-See `.planning/research/ARCHITECTURE.md` for full component boundary analysis, data flow diagrams, and build order pseudocode.
+See `.planning/research/ARCHITECTURE.md` for full component boundary analysis, data flow diagrams, and build order.
 
-All changes are internal to `layoutGraph()` in `src/utils/graph/layoutEngine.ts`. The call chain from `DatabaseLineageGraph.tsx` → `convertOpenLineageGraph()` → `layoutGraph()` → `setNodes()`/`setEdges()` remains identical in every caller. The improvement inserts two new steps after `tableAdj` is built: `detectConnectedComponents()` (BFS on the undirected table graph, returns `string[][]`) and isolated table grid placement. The existing Kahn sort and longest-path layering are refactored to run per component rather than on the full graph. `separateDatabaseClusters()` remains the final post-layout step, but requires a bounding-box fix to handle non-contiguous node groups before mixed layout is introduced.
+All v6.0 changes are modifications to existing components — no new services, no new API blueprint required for the core features. The ARCHITECTURE.md covers three research topics: (1) the in-memory graph engine and progressive loading (v4.0, already complete), (2) connected component layout (v5.0, already complete), and (3) full system catalog integration (v6.0 — this milestone). The catalog integration research confirms the architecture is already correct; the primary work is targeted modifications to four existing files.
 
-**Major components and their changes:**
-
-1. **`detectConnectedComponents()`** (NEW local function in `layoutEngine.ts`) — BFS on `tableAdj` (undirected); returns `string[][]`; runs after `tableAdj` is fully populated, before the topo sort loop; O(V+E)
-2. **Per-component layout loop** (REFACTOR of existing lines 437–497) — extracts Kahn sort and longest-path layering into named helper functions; runs once per connected component (2+ tables); translates each component by a cumulative stacking offset along the secondary axis
-3. **Isolated table grid** (NEW block after component loop) — alphabetical sort for determinism; `cols = Math.max(1, Math.min(4, ceil(sqrt(count))))` auto-sizing; placed at `startY = maxConnectedComponentY + ISOLATED_SECTION_GAP`; non-overlap guaranteed by formula
-4. **`separateDatabaseClusters()`** (FIX for non-contiguous groups) — must compute bounding box per `(database, component)` pair before the mixed layout is introduced; current assumption that all tables in a database are contiguous breaks by design
-5. **`layoutSimpleNodes()`** (3-LINE CONFIG CHANGE) — add `separateConnectedComponents: 'true'`, `spacing.componentComponent: '80'`, `aspectRatio: '1.7'` to the ELK options object; handles the fallback path when `layoutGraph` delegates to ELK
+**Components involved in v6.0 (all existing, modified not new):**
+1. `database/scripts/populate/populate_lineage.py` — add `DatabaseName NOT IN (...)` filter; change default clear behavior; add `--exclude-system` / `--full-refresh` flags
+2. `lineage-api/services/lineage_service.py` — remove `raise DatasetNotFoundError` when fields is empty; return single-node graph instead (mirrors pattern in `get_column_lineage_graph()`)
+3. `lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx` — change `hasNoLineageData` guard from `edges.length === 0` to `nodes.length === 0`; add informational banner; fix `fitView` zoom for single-node graphs
+4. `lineage-ui/src/components/domain/AssetBrowser/AssetBrowser.tsx` — migrate from `{limit: 1000}` flat fetch to lazy-load per database using existing `limit`/`offset` API parameters
 
 ### Critical Pitfalls
 
-See `.planning/research/PITFALLS.md` for all 12 pitfalls with file/line references, warning signs, recovery strategies, and phase mappings.
+See `.planning/research/PITFALLS.md` for all 13 pitfalls with file/line references, detection queries, and phase mappings.
 
-1. **`separateDatabaseClusters` breaks with non-contiguous node groups** — When a database has both connected tables (hierarchical section) and isolated tables (grid section), the bounding-box computation spans both sections, making cluster boxes artificially wide and encroaching on adjacent databases. Fix before introducing mixed layout: compute bounding box per `(database, component)` pair. Phase 1 prerequisite.
+1. **No system database filter before full scan** — running `populate_lineage.py` against all databases without `DatabaseName NOT IN (...)` floods `OL_DATASET` with Teradata internal objects (`DBC`, `SysAdmin`, `SYSLIB`, `Sys_Calendar`, etc.). Prevention: add the 27+ database exclusion list before any full scan runs. This is a hard prerequisite — Phase 1 must not proceed without it.
 
-2. **`ClusterBackground` reads stale `node.measured` dimensions** — `ClusterBackground.tsx` reads `node.measured?.width/height` from React Flow's ResizeObserver-populated store. Cluster boxes render at wrong sizes and flash to correct sizes. With `onlyRenderVisibleElements` active (triggers at 30–50 nodes), off-screen cluster boxes disappear entirely. Fix: pre-set `width` and `height` on all nodes in `layoutedNodes` using existing `calculateTableNodeWidth()`/`calculateTableNodeHeight()`, then compute cluster bounds from those pre-calculated values.
+2. **Correlated NOT EXISTS degrades at full scale** — the existing `NOT EXISTS (SELECT 1 FROM OL_DATASET WHERE dataset_id = ?)` pattern becomes row-by-row at 10,000-50,000 tables, risking spool exhaustion (error 2646). Prevention: replace with `LEFT JOIN ... WHERE existing.dataset_id IS NULL` (hash join). Validate with `EXPLAIN` before running in production.
 
-3. **Main-thread `layoutGraph()` blocks UI for large databases** — `DatabaseLineageGraph.tsx` runs `layoutGraph()` synchronously on the main thread. Adding connected component BFS to a 500-table database raises total synchronous work to ~80ms — visible frame drops. The Web Worker (`useLayoutWorker`, `layout.worker.ts`, Comlink) already exists and wraps the same `layoutGraph()` function. Route database lineage layout through the worker before adding new algorithm steps.
+3. **`hasNoLineageData` guard blocks standalone table render** — the guard at `LineageGraph.tsx` line 679 fires for `edges.length === 0`. The original reason (ELK hang on single-node graphs) no longer applies — the layout engine was replaced with a custom O(V+E) algorithm. Prevention: change the empty-state condition to `nodes.length === 0` only.
 
-4. **Kahn sort-per-iteration degrades non-linearly** — `topoQueue.sort()` inside the while-loop is O(V log V) per iteration, O(V² log V) worst case. Harmless at 50 tables; measurable jank at 400+ tables. Fix: sort only newly discovered zero-in-degree candidates before appending to the queue, not the full queue on every dequeue.
+4. **AssetBrowser `limit: 1000` silently truncates full catalog** — only the first 1000 datasets alphabetically appear after full-system population. No warning shown. Prevention: migrate to lazy-load-by-database before triggering the first full scan.
 
-5. **Grid placement causes edge crossings through the isolated node section** — Hierarchical bezier edges can visually pass through the isolated table grid if the grid shares the same X/Y band. Fix: place the isolated grid strictly outside the primary axis extent — for direction=RIGHT, place isolated tables below the full hierarchical section's `maxY + ISOLATED_SECTION_GAP`.
+5. **Re-running populate without `--full-refresh` protection destroys catalog** — `clear_openlineage_data()` without `lineage_only=True` deletes everything. Accidental re-run after a multi-hour full scan forces a complete re-scan. Prevention: change the default to append mode; require explicit `--full-refresh` flag with confirmation prompt.
+
+---
 
 ## Implications for Roadmap
 
-The milestone naturally splits into two required phases plus one optional polish phase. Phase 1 fixes the foundation; Phase 2 implements the mixed layout. The dependency is hard: Phase 2 on top of the unfixed foundation produces incorrect cluster boxes, layout jank, and invisible cluster boxes during pan — all visible to users.
+Based on combined research, a 2-phase structure is strongly indicated by the dependency chain: catalog population must be complete and validated before standalone table rendering can be properly tested, and the AssetBrowser fix must precede full population to avoid the silent truncation problem.
 
-### Phase 1: Layout Engine Foundation
+### Phase 1: Metadata Population Foundation
 
-**Rationale:** Four pre-existing defects become critical blockers at database-lineage scale. These are not new features — they are bugs that become visible only when the database view handles real Teradata database sizes. Fixing them first ensures any subsequent work is built on a stable base and benchmarks are meaningful.
+**Rationale:** The system-database exclusion filter and AssetBrowser lazy-load are hard prerequisites for all other features. Full catalog population is the foundation that makes standalone table rendering meaningful — without it, there are no catalog-only tables to render. All pitfalls categorized as "Phase 1" in PITFALLS.md are blocking before any scan runs.
 
-**Delivers:** Correct and performant layout engine infrastructure. Layout still uses a single strategy (no connected-component split yet), but works correctly at 200–500 node scale, with correct cluster boxes, no main-thread blocking, and stable performance characteristics.
+**Delivers:** All user databases/tables/views/columns visible in AssetBrowser; system databases excluded; populate script safe to re-run; full catalog queryable via existing API
 
-**Addresses (PITFALLS.md):**
-- Fix `topoQueue.sort()` inside while-loop — move sort to per-layer discovery only (Pitfall 1)
-- Pre-calculate `width`/`height` on all `layoutedNodes`; fix `ClusterBackground` to use pre-calculated bounds (Pitfalls 2 and 4)
-- Fix `separateDatabaseClusters` bounding-box for non-contiguous groups — must be done before Phase 2 (Pitfall 3)
-- Migrate database lineage layout to `useLayoutWorker` — existing worker infrastructure, low risk (Pitfall 5)
-- Fix direction-change cancellation with generation counter ref pattern (Pitfall 9)
-- Fix non-deterministic database cluster colors with name-hash (Pitfall 10)
+**Addresses (from FEATURES.md):**
+- Browse ALL databases in AssetBrowser (P1)
+- Browse ALL tables and views per database (P1)
+- Browse ALL columns per table (P1)
+- System database exclusion from catalog population (P1)
 
-**Avoids downstream:** Without Pitfall 3 fixed, Phase 2's grid section causes cluster boxes to expand across the wrong tables; without Pitfall 2 fixed, off-screen cluster boxes disappear when panning; without the worker migration, Phase 2's BFS analysis pushes main-thread layout time above 16ms.
+**Avoids (from PITFALLS.md):**
+- Pitfall 1: System database filter in place before any full scan
+- Pitfall 2: LEFT JOIN pattern replaces correlated NOT EXISTS; validated with EXPLAIN
+- Pitfall 4: AssetBrowser lazy-load implemented before full population triggers
+- Pitfall 9: NOT IN list optimized or replaced with LIKE prefix filter to avoid plan degradation
+- Pitfall 10: Test isolation — full scan targets separate namespace from `demo_user` test database
+- Pitfall 12: Default changed to append mode; `--full-refresh` flag added with confirmation
 
-### Phase 2: Mixed Layout Strategy (Connected + Disconnected)
+**Must validate before Phase 2:**
+- `SELECT DISTINCT DatabaseName FROM OL_DATASET` — no DBC/SYS* entries
+- Population performance with `EXPLAIN` — no correlated subquery plan
+- AssetBrowser shows all databases when OL_DATASET has >1000 rows
+- QVCI status check (Pitfall 8): `SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0`
+- `SELECT MAX(CHAR_LENGTH(dataset_id)) FROM OL_DATASET` — safe below 256 (Pitfall 5)
 
-**Rationale:** With the foundation correct, introduce the two-zone layout. The connected component detection, per-component layout, isolated grid, and ELK config fix are all implemented together because they address the same root cause from two paths (`layoutGraph` main path + `layoutSimpleNodes` fallback path) and should ship as a unified change.
+### Phase 2: Standalone Table Rendering
 
-**Delivers:** Target v5.0 behavior — connected tables flow left-to-right in topological order within each lineage chain; isolated tables appear in a compact alphabetical grid below the connected section; no node overlap; no edge crossings through the grid; both `DatabaseLineageGraph` and `AllDatabasesLineageGraph` correct automatically.
+**Rationale:** Depends entirely on Phase 1. Without populated `OL_DATASET_FIELD` records across all databases, there is nothing to verify column rendering against. The backend fix (service layer) must lead the build order — fixing the `DatasetNotFoundError` throw automatically resolves the frontend error state for tables that have fields. The frontend guard change is the final unblock.
 
-**Implements:**
-- `detectConnectedComponents()` — BFS on undirected `tableAdj`; local function in `layoutEngine.ts`
-- Per-component layout loop — refactor existing Kahn + longest-path to run on component subgraphs; translate by cumulative stacking offset
-- Isolated table grid — alphabetical sort; auto-sizing column count; placed below all connected components with `ISOLATED_SECTION_GAP`
-- `layoutSimpleNodes` ELK config — add 3 options: `separateConnectedComponents: 'true'`, `spacing.componentComponent: '80'`, `aspectRatio: '1.7'`
-- Column-wrapping for dense same-depth layers exceeding the `maxNodesPerColumn` threshold (Pitfall 11)
+**Delivers:** Tables with no lineage render a valid schema card with columns; "No lineage connections" informational banner; no error states for catalog-only tables; correct viewport zoom on single-node graphs
 
-**Avoids:** Grid positioned in same X/Y band as hierarchical edges (Pitfall 7); ELK component-packing conflicting with `separateDatabaseClusters` (Pitfall 6 — fixed by using custom layout for the main path and ELK only for the simple path, never both simultaneously).
+**Addresses (from FEATURES.md):**
+- Standalone table renders a node with columns, not an error (P1)
+- "No lineage" informational state in graph view (P1)
 
-**Build order within Phase 2:**
-1. `detectConnectedComponents()` — write and unit-test in isolation
-2. Extract `kahnSort()` and `longestPathLayering()` as named helper functions — run existing tests to confirm no regression
-3. Wire `detectConnectedComponents()` into the refactored per-component loop — existing tests must pass (all existing fixtures have fully connected graphs)
-4. Add isolated table grid placement — write new tests: all-isolated database, mix of connected and isolated, isolated tables from multiple databases
-5. Add `layoutSimpleNodes` ELK options — verify with a graph that has disconnected components
+**Avoids (from PITFALLS.md):**
+- Pitfall 3: `hasNoLineageData` guard changed to `nodes.length === 0`
+- Pitfall 6: `DatasetNotFoundError` replaced with single-node response in `lineage_service.py`
+- Pitfall 7: `fitView` zoom capped at `maxZoom: 1.2` for single-node graphs
+- Pitfall 11: Placeholder row "No column metadata available" when `columns.length === 0`
 
-### Phase 3: UX Polish (v5.1 Optional)
+**Build order within this phase:**
+1. Fix `lineage_service.py` — remove throw, return single-node graph (backend only, testable independently)
+2. Verify API contract: `GET /api/v2/openlineage/lineage/table/:datasetId` returns `{nodes: [...], edges: []}` for a no-lineage table
+3. Fix `LineageGraph.tsx` guard — change condition to `nodes.length === 0`, add informational banner
+4. Fix `fitView` zoom for single-node case (`maxZoom: 1.2` or `setViewport({zoom: 1.0})`)
+5. Add "No column metadata" placeholder to `TableNode.tsx` when `columns.length === 0`
 
-**Rationale:** Validation after Phase 2 with real Teradata data will reveal UX gaps. These features are low-complexity (LOW effort each) but require Phase 2 to be stable first so their placement anchors (DAG bounding box, isolated node count) are reliable.
+### Phase 3: UX Enhancements (After Validation)
 
-**Delivers:** Visual clarity and user controls for the two-zone layout.
+**Rationale:** These features add value but none are blocking. They require Phase 1 and Phase 2 to be complete and validated in a real environment. The "has lineage" indicator requires a JOIN against `OL_COLUMN_LINEAGE`, and the table count badge requires the full dataset count to be meaningful.
 
-**Implements:**
-- Section label "Tables without lineage connections (N)" — absolute-positioned div or React Flow Background element; anchored to isolated grid bounding box
-- "Hide tables without lineage" toggle — one boolean in `useUIStore`; filter step before layout entry; toolbar button (existing toggle button pattern in `Toolbar.tsx`)
-- Isolated table count in database header — derivable from connected/disconnected split before layout; displayed alongside database name
+**Delivers:** "Has lineage" indicator per table; configurable database exclusion list; `--catalog-only` populate flag; table count badges per database
+
+**Addresses (from FEATURES.md):**
+- "Has lineage" indicator per table in AssetBrowser (P2)
+- Configurable database include/deny list (P2)
+- `--catalog-only` flag for populate script (P2)
+- Table count badge per database (P2)
 
 ### Phase Ordering Rationale
 
-- Phase 1 before Phase 2 is a hard dependency: `separateDatabaseClusters` produces incorrect bounding boxes with non-contiguous nodes; this breaks every multi-database graph the moment the mixed layout is introduced
-- Worker migration (Phase 1) must precede the new BFS algorithm (Phase 2): the connected component analysis adds ~5ms per 500 tables on top of existing layout work; acceptable in the worker, visible jank on the main thread
-- Phase 3 is gated on Phase 2: section label position and isolated table count are only available after the two-zone layout exists
-- The `layoutSimpleNodes` ELK config change (3 lines) could technically ship in Phase 1, but since it addresses the same symptom as the main path fix, shipping both together in Phase 2 creates an atomic, reviewable release
+- Phase 1 before Phase 2 is a hard dependency: `OL_DATASET_FIELD` must be populated for standalone rendering to show columns. Testing Phase 2 against an empty or partial catalog produces false negatives.
+- AssetBrowser lazy-load is in Phase 1 (not Phase 2) because the 1000-row limit will silently break the browse experience the moment Phase 1 completes. Deferring it to Phase 2 means Phase 1 cannot be properly validated.
+- QVCI check is a Phase 1 pre-flight because view column types are set at population time. Fixing after population requires a full re-scan.
+- `lineage_service.py` backend fix leads Phase 2 because the frontend error state is caused by the backend throw — fixing the backend first allows the frontend guard change to be verified without a simultaneous two-sided change.
 
 ### Research Flags
 
-All phases can proceed with standard implementation patterns. No phase requires additional research via `/gsd:research-phase`.
+Phases needing attention during implementation:
 
-- **Phase 1 (all fixes):** Targeted corrections to well-understood existing code. Direct codebase analysis confirmed exact file and line locations for every fix.
-- **Phase 2 (mixed layout):** Algorithm fully specified in FEATURES.md and ARCHITECTURE.md with pseudocode. ELK option changes verified against official eclipse.dev reference docs.
-- **Phase 3 (UX polish):** Standard React patterns. Established patterns already exist in `ClusterBackground.tsx` (bounding box anchored rendering) and `Toolbar.tsx` (toggle buttons with `useUIStore`).
+- **Phase 1 — Teradata query planning:** The LEFT JOIN IS NULL pattern needs an `EXPLAIN` validation against the actual production Teradata instance before running in production. Spool allocation varies by system. The system-database exclusion list covers 44 databases sourced from DataHub's production connector, but the exact set varies by Teradata version and installed components. Verify against the target system's `DBC.DatabasesV` output before committing the list.
+- **Phase 1 — QVCI status:** Cannot be determined from research alone — requires a live database query. If QVCI is disabled (error 9719 on `DBC.ColumnsJQV`), view column types degrade to "UNKNOWN". Document the result and adjust the UI display to show "—" instead of "UNKNOWN".
+
+Phases with standard patterns (skip additional research):
+
+- **Phase 2 — React Flow single-node render:** Confirmed behavior in React Flow 12.x. `edges={[]}` with a single node is a supported, documented pattern. `fitView` with `maxZoom` is a documented API parameter.
+- **Phase 2 — `lineage_service.py` fix:** The fix is a direct mirror of the pattern already used in `get_column_lineage_graph()`. No novel patterns.
+- **Phase 3 — "Has lineage" indicator:** EXISTS subquery against `OL_COLUMN_LINEAGE` is a standard SQL pattern; the performance caveat (use EXISTS not JOIN) is documented in FEATURES.md.
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Zero new packages. ELK options verified against official eclipse.dev reference docs. Installed version 0.9.3 confirmed via `npm list elkjs`. No version bump needed. |
-| Features | HIGH | Must-have features verified by direct UX analysis of Snowflake, Databricks, DataHub, Atlan, dbt-docs. Competitor analysis confirms two-zone approach is novel and addresses a gap no major tool has solved. |
-| Architecture | HIGH | Based on direct source analysis of `layoutEngine.ts`, `DatabaseLineageGraph.tsx`, `ClusterBackground.tsx`, `layout.worker.ts` in the actual codebase. All integration points confirmed first-hand with specific line references. |
-| Pitfalls | HIGH | All 12 pitfalls sourced from direct codebase analysis (specific file and line references) or official React Flow and ELKjs documentation. Not inferred — specific code patterns identified and confirmed. |
+| Stack | HIGH | Single new dependency (tqdm) confirmed via PyPI. All other components already installed and verified. Zero frontend additions required. |
+| Features | HIGH | Codebase directly examined. The `hasNoLineageData` guard, `DatasetNotFoundError` throw, and `limit: 1000` limit are all confirmed in source at specific line numbers. Reference tool patterns (DataHub, OpenMetadata) verified via official docs. |
+| Architecture | HIGH | Direct source analysis of `layoutEngine.ts`, `lineage_service.py`, `LineageGraph.tsx`, `populate_lineage.py`. Integration points are explicit file/line references. No new subsystems required. |
+| Pitfalls | HIGH | Critical pitfalls sourced from direct codebase inspection with exact line numbers. System database list from DataHub production connector (44 databases). Spool exhaustion risk from official Teradata correlated subquery documentation. |
 
-**Overall confidence:** HIGH
+**Overall confidence: HIGH**
 
 ### Gaps to Address
 
-- **`aspectRatio` interaction with component packing (MEDIUM confidence):** `elk.aspectRatio: '1.7'` is documented as a hint that guides packing shape when `separateConnectedComponents` is active. The exact interaction was not directly tested in this codebase — it is inferred from ELK option documentation. Start with `1.7` (16:9 widescreen ratio) and adjust after visual validation with real data. Values between `1.5` and `2.5` are reasonable alternatives if the packing is too tall or too wide.
+- **Production system database list validation:** The 44-database exclusion list covers most installs. However, Teradata CLOUD editions (`TDaaS_*` databases) and custom installations may have additional system databases. Before running in production, query `DBC.DatabasesV WHERE DBKind = 'D'` and compare against the exclusion list. Add any unrecognized infrastructure databases to the list.
 
-- **Secondary-axis wrapping threshold (MEDIUM confidence):** Pitfall 11 documents that layers with 10+ tables at the same topological depth create excessively tall stacks. The `maxNodesPerColumn` threshold and column count formula (`ceil(sqrt(count))`) are recommended but not yet validated against real Teradata database schemas. Validate in Phase 2 with a database that has many same-depth source tables.
+- **QVCI status on target system:** Research cannot determine this remotely. If QVCI is disabled (error 9719), view column types will be "UNKNOWN" in `OL_DATASET_FIELD`. The standalone table rendering must display "—" not "UNKNOWN" in this case. Plan for this as a likely condition on older or locked-down Teradata systems.
 
-- **Edge crossing severity with real data (MEDIUM confidence):** The `ISOLATED_SECTION_GAP` constant (recommended ≥200px) was chosen conservatively. The actual gap needed depends on the edge density and graph shape of the target Teradata database. Validate visually with a database that has both connected and isolated tables during Phase 2 testing.
+- **Population script runtime at full scale:** The research estimates "minutes to hours" depending on database and table count. Until a test run is attempted, the runtime is unknown. Do not run the first full scan during business hours; budget for uncertainty in scheduling.
+
+- **AssetBrowser lazy-load design decision:** FEATURES.md recommends lazy-load-by-database using existing `limit`/`offset` API. Two valid approaches exist: (1) TanStack infinite scroll (`useInfiniteQuery`), or (2) a new `GET /api/v2/catalog/databases` endpoint returning distinct database names with counts. Option 2 is simpler and matches the existing tree-expand UX. The exact API contract needs to be decided at planning time.
+
+---
 
 ## Sources
 
 ### Primary (HIGH confidence)
-
-- [ELK separateConnectedComponents — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-separateConnectedComponents.html) — option behavior true vs false
-- [ELK spacing.componentComponent — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-spacing-componentComponent.html) — default 20px; only active with separateConnectedComponents
-- [ELK aspectRatio — eclipse.dev](https://eclipse.dev/elk/reference/options/org-eclipse-elk-aspectRatio.html) — Double type; width/height quotient; supported by layered algorithm
-- [ELK Layered Algorithm Reference — eclipse.dev](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html) — all layered options
-- [ELK Options Reference Index — eclipse.dev](https://eclipse.dev/elk/reference/options.html) — full options list
-- [elkjs GitHub — kieler/elkjs](https://github.com/kieler/elkjs) — confirms bundled algorithms: layered, stress, mrtree, radial, force, disco
-- `/lineage-ui/src/utils/graph/layoutEngine.ts` — `layoutSimpleNodes()` current config; `layoutGraph()` main path; `topoQueue.sort()` inside while-loop; `separateDatabaseClusters`
-- `/lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx` — main-thread layout call; `onlyRenderVisibleElements`; cancelled boolean pattern
-- `/lineage-ui/src/components/domain/LineageGraph/AllDatabasesLineageGraph.tsx` — `onlyRenderVisibleElements={nodes.length > 30}`
-- `/lineage-ui/src/components/domain/LineageGraph/ClusterBackground.tsx` — `node.measured` dependency; `calculateClusterBounds`
-- `/lineage-ui/src/components/domain/LineageGraph/hooks/useDatabaseClusters.ts` — color assignment by iteration index
-- `/lineage-ui/src/workers/layout.worker.ts` — existing worker wraps `layoutGraph()`
-- [React Flow Performance Guide — reactflow.dev](https://reactflow.dev/learn/advanced-use/performance) — memoization, re-render strategy
-- [React Flow Layout Issue #991](https://github.com/xyflow/xyflow/issues/991) — layout with dynamic dimensions
-- [Kahn's Algorithm — GeeksforGeeks](https://www.geeksforgeeks.org/dsa/topological-sorting-indegree-based-solution/) — standard O(V+E) implementation without sort inside loop
+- Direct codebase analysis — `populate_lineage.py`, `lineage_service.py`, `LineageGraph.tsx`, `AssetBrowser.tsx`, `layoutEngine.ts`, `TableNode.tsx`, `dataset_repository.py` — confirmed line-level findings
+- [DataHub Teradata Connector — docs.datahub.com](https://docs.datahub.com/docs/generated/ingestion/sources/teradata) — system database deny list (44 databases), DBC view patterns, catalog/lineage separation
+- [React Flow FitViewOptions API — reactflow.dev](https://reactflow.dev/api-reference/types/fit-view-options) — `maxZoom` parameter; single-node rendering confirmed
+- [tqdm PyPI — pypi.org](https://pypi.org/project/tqdm/) — version 4.67.3, Python >=3.7 compatible
+- [Teradata Data Dictionary: List all tables — dataedo.com](https://dataedo.com/kb/query/teradata/list-all-tables-in-all-databases) — system database NOT IN list, DBC.TablesV usage
 
 ### Secondary (MEDIUM confidence)
+- [OpenMetadata Teradata Connector — docs.open-metadata.org](https://docs.open-metadata.org/latest/connectors/database/teradata) — catalog/lineage decoupling pattern
+- [Correlated Subqueries — Teradata Documentation](https://docs.teradata.com/r/2_MC9vCtAJRlKle2Rpb0mA/ODWfNd~BHQoI4RhZ2zP9Xw) — spool risk for correlated NOT EXISTS
+- [Teradata Community: list all databases — teradatapoint.com](https://www.teradatapoint.com/teradata/list-all-databases-and-users-in-teradata.htm) — DBKind filter pattern
+- [OpenMetadata GitHub Issue #16404](https://github.com/open-metadata/OpenMetadata/issues/16404) — standalone node render for tables with many columns; empty edge state is valid
 
-- [Snowflake Data Lineage — docs.snowflake.com](https://docs.snowflake.com/en/user-guide/ui-snowsight-lineage) — neighborhood view, progressive reveal only; no all-tables view
-- [Databricks Unity Catalog Lineage — docs.databricks.com](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-lineage) — 1-depth default; no schema-level overview
-- [DataHub UI Lineage — docs.datahub.com](https://docs.datahub.com/docs/features/feature-guides/ui-lineage) — entity-centric; has-lineage filter available
-- [Atlan View Lineage — docs.atlan.com](https://docs.atlan.com/product/capabilities/lineage/how-tos/view-lineage) — "Has lineage" filter; no disconnected-node layout behavior documented
-- [dbt-docs Graph Visualization — deepwiki.com](https://deepwiki.com/dbt-labs/dbt-docs/3.4-graph-visualization) — dagre layout; zero-in-degree nodes cluster at left; same vertical tower problem
-- [Evaluating Graph Layout Algorithms — Wiley/CGF 2024](https://onlinelibrary.wiley.com/doi/10.1111/cgf.15073) — systematic layout algorithm review
-- [React Flow Large Node Count Discussion #4975](https://github.com/xyflow/xyflow/discussions/4975) — CSS class pattern vs style updates for interaction performance
-- [Cambridge Intelligence: Graph Visualization UX](https://cambridge-intelligence.com/graph-visualization-ux-how-to-avoid-wrecking-your-graph-visualization/) — "snowstorm" anti-pattern for isolated nodes; grouping as mitigation
+### Tertiary (LOW confidence)
+- [DBC.DatabasesV reference — docs.teradata.com](https://docs.teradata.com/r/hNI_rA5LqqKLxP~Y8vJPQg/GqTx8VuBIkfaC4fso9f5cw) — DBKind 'D'/'U' filter (page required JS; content inferred from community sources)
 
 ---
-*Research completed: 2026-02-21*
+*Research completed: 2026-02-23*
 *Ready for roadmap: yes*

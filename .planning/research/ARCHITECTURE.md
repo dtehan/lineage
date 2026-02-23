@@ -1265,3 +1265,396 @@ Build in this sequence (each step is independently testable):
 *Architecture research for: database lineage graph layout improvement (connected components + grid)*
 *Researched: 2026-02-21*
 *Context: Subsequent milestone — fixing database lineage graph layout in existing column-level lineage application*
+
+---
+
+# Architecture Research: Full System Catalog Integration
+
+**Domain:** Full system catalog integration — Teradata metadata population + standalone table rendering
+**Researched:** 2026-02-23
+**Confidence:** HIGH (based on direct codebase analysis; no external sources needed)
+
+## Context
+
+This section answers: how should full system metadata population (scanning ALL Teradata databases/tables/views/columns via DBC views) integrate with the existing `populate_lineage.py` pipeline and OL_* schema? How should standalone table rendering (no lineage edges) integrate with the existing React Flow graph components?
+
+Both features integrate with minimal surface area. The architecture already supports both — the primary work is removing constraints, not adding new subsystems.
+
+---
+
+## System Overview
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        POPULATION PIPELINE                            │
+│                                                                        │
+│  populate_lineage.py                                                   │
+│  ┌───────────────────┐  ┌───────────────────┐  ┌──────────────────┐  │
+│  │  populate_        │  │  populate_        │  │  populate_       │  │
+│  │  openlineage_     │  │  openlineage_     │  │  lineage_from_   │  │
+│  │  datasets()       │  │  fields()         │  │  dbql/views/     │  │
+│  │  (DBC.TablesV)    │  │  (DBC.ColumnsV)   │  │  fixtures()      │  │
+│  └────────┬──────────┘  └────────┬──────────┘  └────────┬─────────┘  │
+│           │                      │                       │            │
+│           └──────────────────────┴───────────────────────┘            │
+│                                  │                                    │
+│                       (no DatabaseName filter today)                  │
+│               ALL accessible databases/tables/views/columns           │
+└───────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                        TERADATA OL_* SCHEMA                           │
+│                                                                        │
+│  OL_NAMESPACE ── OL_DATASET ── OL_DATASET_FIELD                       │
+│                       │                                               │
+│                  OL_COLUMN_LINEAGE (only tables with lineage)         │
+└───────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                        FLASK BACKEND                                  │
+│                                                                        │
+│  LineageService.get_table_lineage_graph()                             │
+│    → fields from OL_DATASET_FIELD (all tables have these)            │
+│    → edges from OL_COLUMN_LINEAGE (may be empty for some tables)     │
+│    → returns { graph: { nodes: [...], edges: [] } } when no lineage  │
+└───────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│                        REACT FRONTEND                                 │
+│                                                                        │
+│  AssetBrowser → navigates to /lineage/:datasetId/_all                 │
+│                                                                        │
+│  LineageGraph.tsx                                                      │
+│    data = useOpenLineageTableLineage(datasetId)                       │
+│    hasNoLineageData = data.graph.edges.length === 0                   │
+│                                                                        │
+│  [CURRENT]  hasNoLineageData → "No Lineage Data Available" message    │
+│  [TARGET]   hasNoLineageData + nodes exist → render single TableNode  │
+└───────────────────────────────────────────────────────────────────────┘
+```
+
+### Component Responsibilities
+
+| Component | Responsibility | File |
+|-----------|----------------|------|
+| `populate_openlineage_datasets()` | INSERT all tables/views from DBC.TablesV into OL_DATASET | `database/scripts/populate/populate_lineage.py` |
+| `populate_openlineage_fields()` | INSERT all columns from DBC.ColumnsV into OL_DATASET_FIELD | `database/scripts/populate/populate_lineage.py` |
+| `DatasetRepository` | Read OL_DATASET, OL_DATASET_FIELD, OL_NAMESPACE; DDL + statistics from DBC views | `lineage-api/repositories/dataset_repository.py` |
+| `LineageService.get_table_lineage_graph()` | Build graph for all fields in a dataset; returns root nodes even when edges=[] | `lineage-api/services/lineage_service.py` |
+| `LineageGraph.tsx` `hasNoLineageData` branch | Currently shows empty state; target: render single TableNode | `lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx` |
+| `TableNode.tsx` | React Flow node component; renders correctly with any column list including empty edges | `lineage-ui/src/components/domain/LineageGraph/TableNode/TableNode.tsx` |
+| `layoutEngine.ts > layoutSimpleNodes()` | ELK fallback for non-column nodes; handles `type: 'table'` with `columns: []` | `lineage-ui/src/utils/graph/layoutEngine.ts` |
+| `AssetBrowser.tsx` | Left-sidebar tree; navigates to `/_all` for table-level view | `lineage-ui/src/components/domain/AssetBrowser/AssetBrowser.tsx` |
+| `GraphEngine` | In-memory BFS on OL_COLUMN_LINEAGE only; tables without lineage are absent from the graph | `lineage-api/graph/engine.py` |
+
+---
+
+## Integration Point 1: Metadata Population Scope
+
+**Current state:** `populate_openlineage_datasets()` and `populate_openlineage_fields()` already scan ALL databases/tables/views/columns via `DBC.TablesV` and `DBC.ColumnsV` with no `DatabaseName` filter. The `NOT LIKE 'LIN_%'` and `NOT LIKE 'OL_%'` exclusions exist only to skip internal lineage schema tables.
+
+**What this means:** Full system catalog population is architecturally already present. The population pipeline does not need a new function. The existing functions, run without `--lineage-only`, populate every accessible table and column.
+
+**Potential gap:** System databases (DBC, SYSLIB, SYSTEMFE, etc.) are accessible via `DBC.TablesV` unless the user account lacks SELECT access. The pipeline will naturally include or exclude them based on Teradata permission grants. If the intent is to exclude system databases, a `DatabaseName NOT IN (...)` filter must be added to both `populate_openlineage_datasets()` and `populate_openlineage_fields()`.
+
+**New vs Modified:** No new functions required. Validate that a full run (without `--lineage-only`) populates OL_DATASET and OL_DATASET_FIELD for all target databases. Optionally add a `--exclude-system` CLI flag to the existing argument parser.
+
+**Suggested scope control:**
+
+```python
+# Optional addition to populate_lineage.py argument parser
+parser.add_argument(
+    "--exclude-system",
+    action="store_true",
+    help="Exclude Teradata system databases (DBC, SYSLIB, SYSTEMFE, etc.)"
+)
+
+SYSTEM_DATABASE_EXCLUSIONS = (
+    'DBC', 'SYSLIB', 'SYSTEMFE', 'TDWM', 'DBCManager',
+    'TDStats', 'SYSUDTLIB', 'LockLogShredder', 'EXTUSER',
+    'Crashdumps', 'SYSJDBC', 'SYSUIF', 'SysAdmin'
+)
+
+# Then in populate_openlineage_datasets() and populate_openlineage_fields():
+# Add to WHERE clause when --exclude-system is set:
+# AND DatabaseName NOT IN ('DBC', 'SYSLIB', ...)
+```
+
+---
+
+## Integration Point 2: Standalone Table Rendering (No Lineage Edges)
+
+**Current behavior in `LineageGraph.tsx`:**
+
+```typescript
+// LineageGraph.tsx lines ~678-706
+const hasNoLineageData = data && data.graph && data.graph.edges?.length === 0;
+if (hasNoLineageData) {
+  return (
+    <div>No Lineage Data Available</div>  // empty state, no graph rendered
+  );
+}
+```
+
+**What this means:** When a user navigates to a table with no lineage, the API correctly returns graph nodes (the table's columns) with zero edges. The frontend shows an empty-state message instead of rendering the table.
+
+**Target behavior:** Render a single `TableNode` card showing all columns — without edges, without the topological layout pipeline. This is already scaffolded:
+
+- `TableNode.tsx` renders correctly with zero edges — it shows the column list.
+- The `hasNoLineageData` guard in `LineageGraph.tsx` is the single blocking branch.
+- `convertOpenLineageGraph()` already converts the field nodes in `data.graph.nodes` to `LineageNode[]` format.
+- `groupColumnsByTable()` in `layoutEngine.ts` already groups column nodes by table.
+- `transformToTableNodes()` already builds `TableNodeData[]` including all columns.
+
+**Integration:** Modify `LineageGraph.tsx` `hasNoLineageData` branch to render a positioned `TableNode` in React Flow instead of the empty-state message. The node can be built directly from the API response, bypassing `layoutGraph()` (which would be unnecessary for a single node with no edges).
+
+**Implementation pattern:**
+
+```typescript
+// In LineageGraph.tsx, replace hasNoLineageData early-return with:
+
+if (hasNoLineageData && data?.graph?.nodes?.length > 0) {
+  // Convert API nodes to legacy format for grouping
+  const { nodes: legacyNodes } = convertOpenLineageGraph(data.graph.nodes, []);
+  const tableGroups = groupColumnsByTable(legacyNodes);
+  // tableGroups will have exactly one entry for the root table
+  // Build TableNodeData from the grouped columns
+  const { nodes: tableNodeData } = transformToTableNodes(tableGroups, []);
+  const singleTableNode: Node = {
+    id: tableNodeData[0]?.id || datasetId,
+    type: 'tableNode',
+    position: { x: 0, y: 0 },  // useSmartViewport centers it
+    data: tableNodeData[0] || { id: datasetId, databaseName: '', tableName: datasetId, columns: [], isExpanded: true, assetType: 'table' },
+  };
+  return (
+    <ReactFlow
+      nodes={[singleTableNode]}
+      edges={[]}
+      nodeTypes={nodeTypes}
+      proOptions={{ hideAttribution: true }}
+    >
+      <Background color="#e2e8f0" gap={16} />
+      <Controls />
+    </ReactFlow>
+  );
+}
+```
+
+**Simpler alternative:** Keep the empty-state message but add a "View Schema" button that opens the `DetailPanel`'s columns tab, which already fetches and displays column metadata via `useOpenLineageDataset`. This avoids any React Flow rendering change and still gives the user column-level information.
+
+**Recommendation:** The full single-node React Flow render provides more value (visual consistency with the lineage graph, column expand/collapse, asset type styling). Use it.
+
+---
+
+## Integration Point 3: API Response When No Lineage Exists
+
+**Current behavior in `LineageService.get_table_lineage_graph()`:**
+
+The service returns a valid graph when fields exist. A table with no lineage will have fields in OL_DATASET_FIELD (after full catalog population) but zero OL_COLUMN_LINEAGE rows:
+
+```json
+{
+  "datasetId": "...",
+  "graph": {
+    "nodes": [
+      { "id": "demo_user.MY_TABLE.COL_A", "type": "field", "name": "COL_A", "dataset": { "name": "demo_user.MY_TABLE", "sourceType": "TABLE", "namespace": "..." } },
+      { "id": "demo_user.MY_TABLE.COL_B", "type": "field", "name": "COL_B", "dataset": { ... } }
+    ],
+    "edges": []
+  }
+}
+```
+
+**What this means:** No backend change is needed. The API correctly returns nodes with empty edges after full catalog population. The `DatasetNotFoundError` is only raised when OL_DATASET_FIELD has no rows for the dataset — which will not occur after full catalog population.
+
+**Verification step:** After running the population script, call `GET /api/v2/openlineage/lineage/table/:datasetId` for a table known to have no lineage. Confirm response contains populated `nodes` with empty `edges`.
+
+---
+
+## Integration Point 4: AssetBrowser Population Source
+
+**Current state:** `AssetBrowser.tsx` calls `useOpenLineageDatasets(namespaceId, { limit: 1000 })`. This fetches from OL_DATASET. After full catalog population, OL_DATASET will include all system databases if they are not filtered out at population time.
+
+**Potential issue:** If system databases are included, the AssetBrowser will show DBC, SYSLIB, etc. alongside user databases. The `limit: 1000` will be hit for large Teradata systems.
+
+**Integration options:**
+1. Filter system databases in `populate_lineage.py` WHERE clause (recommended — keeps OL_* clean).
+2. Add server-side filter to `DatasetRepository.list_datasets()`.
+3. Add client-side filter in `AssetBrowser.tsx` (least preferred — pollutes OL_* data).
+4. Increase `limit` and add virtual scrolling in `AssetBrowser.tsx` for large catalogs.
+
+**For the pagination concern:** The existing `list_datasets` API supports `limit`/`offset`. `AssetBrowser.tsx` currently fetches all 1000 at once. If the system has >1000 user datasets, this hits the cap. The fix is to load datasets lazily per-database (expand database → fetch that database's datasets), rather than fetching everything upfront.
+
+---
+
+## Integration Point 5: GraphEngine Warmup with Full Catalog
+
+**Current state:** `GraphLoader.load()` queries only `OL_COLUMN_LINEAGE` (WHERE is_active = 'Y'). It builds a graph from edges only. Tables with no lineage edges are absent from the in-memory graph.
+
+**What this means:** `graph_engine.traverse_upstream("demo_user.MY_TABLE.COL_A", 5)` returns `[]` for a table with no lineage — correct. The service returns only the root field node with zero edges. GraphEngine is not affected by catalog population.
+
+**No change required** to GraphEngine, GraphLoader, or GraphStore.
+
+---
+
+## New vs Modified Components
+
+### Modified (not new)
+
+| File | Change Type | What Changes |
+|------|-------------|-------------|
+| `database/scripts/populate/populate_lineage.py` | Add CLI option + WHERE clause | Optional `--exclude-system` arg; `DatabaseName NOT IN (...)` filter in `populate_openlineage_datasets()` and `populate_openlineage_fields()` |
+| `lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx` | Conditional branch change | Replace `hasNoLineageData` empty-state return with single-node React Flow render |
+
+### New (if full single-node render is chosen)
+
+| File | Purpose | Notes |
+|------|---------|-------|
+| `lineage-ui/src/components/domain/LineageGraph/StandaloneTableView.tsx` | Renders a single TableNode in ReactFlow with no edges | Optional: extracts conditional rendering logic from LineageGraph.tsx; reuses TableNode directly |
+
+### No Change Required
+
+| Component | Why |
+|-----------|-----|
+| `DatasetRepository` | Already returns fields for any dataset in OL_DATASET_FIELD |
+| `LineageService.get_table_lineage_graph()` | Already builds root nodes even when edges=[] |
+| `GraphEngine` / `GraphLoader` | Loads only OL_COLUMN_LINEAGE edges — correct, no change needed |
+| `openlineage.py` routes | Existing `/lineage/table/:datasetId` endpoint works correctly |
+| `AssetBrowser.tsx` | Already navigates to `/_all` for table-level view |
+| `TableNode.tsx` | Already renders correctly with any column list |
+| `openLineageAdapter.ts` | Already converts field nodes to legacy LineageNode format |
+| `layoutEngine.ts > groupColumnsByTable()` | Reusable as-is for building TableNodeData from API nodes |
+| `layoutEngine.ts > transformToTableNodes()` | Reusable as-is for building column lists |
+
+---
+
+## Build Order
+
+1. **Database population scope validation** — run `populate_lineage.py` (without `--lineage-only`) and verify OL_DATASET row count matches expected table/view count across all target databases. Verify OL_DATASET_FIELD row count. Decide on system database exclusion strategy. This is a prerequisite because the frontend changes depend on OL_* being populated.
+
+2. **Backend API validation** — call `GET /api/v2/openlineage/lineage/table/:datasetId` for a table known to have no lineage. Confirm response contains populated `nodes` with empty `edges` array. This validates the contract the frontend relies on.
+
+3. **Frontend standalone render** — modify `LineageGraph.tsx` `hasNoLineageData` branch. Test with the table from step 2. Verify TableNode renders with correct column list and asset type styling.
+
+4. **AssetBrowser scope decision** — if system databases are included in OL_*, decide on filter strategy. Implement either in `populate_lineage.py` (preferred), `DatasetRepository.list_datasets()`, or `AssetBrowser.tsx`. Verify the browser shows expected databases.
+
+5. **Pagination (if needed)** — if total OL_DATASET row count exceeds 1000, implement lazy per-database loading in `AssetBrowser.tsx` using the existing `limit`/`offset` API parameters.
+
+---
+
+## Data Flow
+
+### Metadata Population Flow
+
+```
+DBC.TablesV (all accessible tables/views)
+    ↓ INSERT...SELECT with NOT EXISTS guard
+OL_DATASET (one row per table/view)
+    ↓
+DBC.ColumnsV (all accessible columns)
+    ↓ INSERT...SELECT with NOT EXISTS guard
+OL_DATASET_FIELD (one row per column)
+    ↓
+OL_COLUMN_LINEAGE (only tables with discovered lineage — populated separately)
+```
+
+### Standalone Table Render Flow (proposed)
+
+```
+User clicks table in AssetBrowser
+    ↓ navigate("/lineage/:datasetId/_all")
+LineagePage.tsx → <LineageGraph datasetId fieldName="_all" />
+    ↓
+useOpenLineageTableLineage(datasetId)
+    ↓ GET /api/v2/openlineage/lineage/table/:datasetId
+LineageService.get_table_lineage_graph()
+    ↓ fields exist in OL_DATASET_FIELD, OL_COLUMN_LINEAGE has 0 rows
+Returns: { graph: { nodes: [field nodes with column metadata], edges: [] } }
+    ↓
+LineageGraph.tsx: hasNoLineageData = true, nodes.length > 0
+    ↓ [CURRENT] renders "No Lineage Data Available" empty state
+    ↓ [PROPOSED] converts nodes → TableNodeData → single React Flow node at { x: 0, y: 0 }
+ReactFlow renders TableNode with column list, type badges, no edges
+useSmartViewport centers the single node in the viewport
+```
+
+### Existing Lineage Flow (unchanged)
+
+```
+User clicks column in AssetBrowser or table with lineage
+    ↓
+useProgressiveLineage / useOpenLineageTableLineage
+    ↓
+GraphEngine.traverse_* (BFS on OL_COLUMN_LINEAGE edges)
+LineageService._add_lineage_results() builds nodes + edges
+convertOpenLineageGraph() → layoutGraph() (topological)
+ReactFlow renders multi-table graph with LineageEdge connectors
+```
+
+---
+
+## Scaling Considerations
+
+| Concern | At current scale | At full system catalog |
+|---------|-----------------|----------------------|
+| OL_DATASET row count | Hundreds (demo_user only) | Potentially tens of thousands |
+| OL_DATASET_FIELD row count | Thousands | Potentially millions |
+| AssetBrowser load time | Instant (limit: 1000) | Hits 1000 limit; needs lazy-load per database |
+| `populate_lineage.py` runtime | Minutes | Hours for large Teradata systems |
+| `populate_openlineage_fields()` NOT EXISTS guard | Fast at current scale | Slow with millions of rows; consider running `--lineage-only` for subsequent ETL cycles |
+| GraphEngine warmup | Unchanged — loads OL_COLUMN_LINEAGE only | Unchanged |
+
+**First bottleneck:** AssetBrowser `limit: 1000` is hit with full system catalog. Fix: lazy-load datasets per database expand (already supported by the API's `limit`/`offset` params).
+
+**Second bottleneck:** `populate_openlineage_fields()` NOT EXISTS subquery (`SELECT 1 FROM OL_DATASET_FIELD WHERE field_id = ?`) scans OL_DATASET_FIELD for every candidate row. At millions of rows, this is slow. Fix: run full population once at setup, then use `--lineage-only` for incremental ETL cycles (only refreshes OL_COLUMN_LINEAGE, not datasets/fields).
+
+---
+
+## Anti-Patterns
+
+### Anti-Pattern 1: Adding a New Population Script
+
+**What people do:** Create `populate_all_metadata.py` as a separate script alongside `populate_lineage.py`.
+
+**Why it's wrong:** `populate_openlineage_datasets()` and `populate_openlineage_fields()` already scan all databases. A second script duplicates logic, diverges argument handling, and creates two maintenance surfaces.
+
+**Do this instead:** Use `populate_lineage.py` without `--lineage-only`. Add scope-control flags to the existing argument parser.
+
+### Anti-Pattern 2: Fetching Dataset Fields Again in Frontend for Standalone Render
+
+**What people do:** In `LineageGraph.tsx`, on `hasNoLineageData`, make a second API call to `GET /api/v2/openlineage/datasets/:datasetId` to get field metadata.
+
+**Why it's wrong:** The table lineage API response already includes all field nodes in `graph.nodes` with `field_name`, `field_type`, and `nullable`. A second request duplicates the fetch, adds latency, and creates two loading states.
+
+**Do this instead:** Extract column data directly from `data.graph.nodes`. All necessary metadata is already in the response.
+
+### Anti-Pattern 3: Running Layout Engine on a Single Isolated Node
+
+**What people do:** Pass the single `TableNode` through `layoutGraph()` for the standalone render case.
+
+**Why it's wrong:** `layoutGraph()` with one node and zero edges enters the `isolated` grid path, calling `placeIsolatedGrid()` unnecessarily. The node can be placed at `{ x: 0, y: 0 }` synchronously.
+
+**Do this instead:** Bypass `layoutGraph()` for the standalone render case. Build the React Flow node directly with a fixed position and pass it to `setNodes()`. `useSmartViewport` will center it.
+
+### Anti-Pattern 4: Filtering System Databases Only Client-Side
+
+**What people do:** Add a hardcoded exclusion list to `AssetBrowser.tsx` to hide system database rows.
+
+**Why it's wrong:** System objects still exist in OL_DATASET and OL_DATASET_FIELD, bloating the database. Search results from `unified_search` will still return system table matches even if AssetBrowser hides them.
+
+**Do this instead:** Filter system databases in `populate_lineage.py` WHERE clauses. This removes them from OL_* entirely, keeping all API surfaces clean.
+
+---
+
+## Sources
+
+- Direct codebase analysis — `populate_lineage.py`, `lineage_service.py`, `LineageGraph.tsx`, `TableNode.tsx`, `layoutEngine.ts`, `openLineageAdapter.ts`, `AssetBrowser.tsx`, `dataset_repository.py` — HIGH confidence
+- Teradata DBC.TablesV / DBC.ColumnsV schema: verified in existing populate functions — HIGH confidence
+- React Flow node rendering patterns: verified in `TableNode.tsx` and `layoutEngine.ts` — HIGH confidence
+
+---
+*Architecture research for: Full System Catalog Integration — Teradata Lineage App (v6.0 milestone)*
+*Researched: 2026-02-23*

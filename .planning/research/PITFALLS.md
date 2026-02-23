@@ -1,419 +1,368 @@
-# Pitfalls Research
+# Domain Pitfalls
 
-**Domain:** Adding mixed layout strategies to existing ELKjs + React Flow database lineage graph
-**Researched:** 2026-02-21
-**Confidence:** HIGH
+**Domain:** Adding full system metadata scanning + standalone table rendering to existing Teradata column-level lineage app
+**Researched:** 2026-02-23
+**Confidence:** HIGH (verified against codebase, official Teradata docs, React Flow docs)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Kahn Sort-Every-Iteration Is O(n log n) per Layer, Not O(V+E)
-
-**What goes wrong:**
-The existing `layoutGraph()` in `layoutEngine.ts` calls `topoQueue.sort()` inside the BFS while-loop — once per dequeue. Standard Kahn's algorithm is O(V+E) with a plain queue. Sorting on each iteration degrades it to O(V log V + E) in the best case, O(V² log V) in the worst case for dense graphs. For 50-table lineage this is invisible. For a database-lineage view with 400+ table nodes the sort-per-iteration is called 400+ times, and each sort operates on the full remaining queue. At 400 nodes and average fan-out of 5 this is measurable jank (10-50ms extra) in the layout-worker thread. The comment "deterministic tie-breaking" justifies the sort, but the sort only needs to happen once per layer, not once per dequeue.
-
-**Why it happens:**
-The developer correctly wanted deterministic output but applied sorting too frequently. The canonical Kahn's algorithm uses a FIFO queue — sorting is not required for correctness, only for output stability. Determinism can be achieved by sorting once at the start (all zero-in-degree nodes sorted) and sorting each layer's candidates once before pushing them, rather than sorting the entire queue repeatedly.
-
-**How to avoid:**
-Replace the inner `topoQueue.sort()` call with a sort applied only when a new batch of zero-in-degree nodes is discovered — i.e., sort the newly-added candidates before appending to the queue, not the entire queue on every iteration. In the `topoSortDatabases` function the same pattern exists and should be corrected simultaneously. Benchmark with `layoutEngine.bench.ts` at 400 nodes before and after to validate the fix.
-
-**Warning signs:**
-- `layoutEngine.bench.ts` shows non-linear scaling beyond 200 nodes — 400 nodes takes more than 2x the time of 200 nodes
-- Layout worker thread spends > 50% of its time in sort operations (visible via Chrome DevTools Performance flame chart)
-- The `elkTime` metric in `LayoutMetrics` grows super-linearly with node count
-
-**Phase to address:**
-Phase 1 (layout engine refactoring) — fix before adding mixed layout strategies, otherwise any benchmark comparisons are tainted by the sorting overhead.
+Mistakes that cause rewrites, data corruption, or outright failures.
 
 ---
 
-### Pitfall 2: ClusterBackground Bounding Box Uses Stale `measured` Dimensions After Layout
+### Pitfall 1: No System Database Filter — OL_* Tables Flood with Internal Teradata Objects
 
 **What goes wrong:**
-`ClusterBackground.tsx` reads `node.measured?.width` and `node.measured?.height` from the React Flow store's `nodeLookup` to compute cluster bounding boxes. After a layout runs and `setNodes` is called with new positions, React Flow renders nodes with their new positions but the `measured` dimensions are only populated after the ResizeObserver fires — which happens on the next browser paint, not synchronously. If `ClusterBackground` reads `nodeLookup` immediately after `setNodes`, it may see `node.measured` as `undefined` or reflecting the pre-layout dimensions, causing cluster boxes to render at incorrect sizes before snapping to the correct size on the next paint. On large graphs (400+ nodes), the ResizeObserver firings are staggered — some nodes report measured dimensions before others, making cluster boxes visibly resize during the render sequence.
+The existing `populate_openlineage_datasets()` query scans `DBC.TablesV` with only two exclusions: `TableName NOT LIKE 'LIN_%'` and `TableName NOT LIKE 'OL_%'`. It applies no filter on `DatabaseName`. A full-system scan of a production Teradata instance includes dozens of system databases (`DBC`, `SYSLIB`, `SysAdmin`, `SYSBAR`, `SYSJDBC`, `Sys_Calendar`, `TDWM`, `TDStats`, `TD_SYSFNLIB`, `TD_SYSGPL`, `TD_SYSXML`, `TDMaps`, `TDPUSER`, `AllTempTables`, `dbcmngr`, `Default`, `EXTUSER`, `External_AP`, `LockLogShredder`, `PUBLIC`, `SQLJ`, `SYSSPATIAL`, `SystemFe`, `SYSUDTLIB`, `SYSUIF`, `TD_SERVER_DB`, `TDQCD`, `Crashdumps`). These contribute thousands of internal tables that have no lineage relevance, pollute the `OL_DATASET` and `OL_DATASET_FIELD` tables with noise, slow every downstream query, and appear in the AssetBrowser alongside user tables.
 
 **Why it happens:**
-React Flow's architecture separates position (set externally via `setNodes`) from dimensions (measured internally by ResizeObserver). There is no synchronous way to get measured dimensions after a layout call — the only correct time to read `measured` is after the component has rendered AND the ResizeObserver has fired. The `useMemo` in `ClusterBackground` subscribes to `nodeInternals` changes, which fire on every ResizeObserver update, so cluster boxes resize incrementally as nodes measure themselves.
+The current script was written for a controlled single-database scope (`demo_user`). Extending to all databases without a system-database exclusion list was never needed before.
 
-**How to avoid:**
-1. Pre-calculate node dimensions in the layout engine using the same formulas as the node components (`calculateTableNodeWidth`, `calculateTableNodeHeight`) and attach them as `width`/`height` on the node object passed to `setNodes`. React Flow uses these as initial dimensions before measurement completes, making the cluster bounding box correct from the first render.
-2. Add `width` and `height` to every node in `layoutedNodes` before calling `setNodes` — the existing `calculateTableNodeWidth` and `calculateTableNodeHeight` functions already exist for this purpose.
-3. Gate cluster box rendering with a `isLayoutComplete` flag that transitions to `true` only after the double-`requestAnimationFrame` in `DatabaseLineageGraph.tsx` fires (`stage === 'complete'`).
+**Consequences:**
+- `OL_DATASET` grows from hundreds to potentially tens of thousands of rows including internal Teradata objects.
+- AssetBrowser's `limit: 1000` fetch retrieves system tables before user tables, making real objects hard to find.
+- Search results include DBC internal tables (e.g., `DBC.Roles`, `SysAdmin.EventLog`) that users never interact with.
+- In-memory graph engine warmup (`graph_engine.initialize`) loads `OL_COLUMN_LINEAGE`, but all downstream dataset metadata queries now join a much larger `OL_DATASET` table — every lookup slows proportionally.
 
-**Warning signs:**
-- Cluster boxes visibly resize/reposition during graph load — start small then expand to correct size
-- `ClusterBackground` re-renders many times in React Profiler during a single graph load
-- Cluster boxes appear to "catch up" to node positions with a visible delay on large graphs
+**Prevention:**
+Add a `DatabaseName NOT IN (...)` clause to both `populate_openlineage_datasets()` and `populate_openlineage_fields()` before extending to full-system scope. The canonical exclusion list (verified against Teradata community documentation) is:
 
-**Phase to address:**
-Phase 1 (layout foundation) — the width/height pre-calculation fix prevents the problem permanently and makes cluster boxes correct from the first render.
+```sql
+AND DatabaseName NOT IN (
+    'All', 'Crashdumps', 'DBC', 'dbcmngr', 'Default',
+    'External_AP', 'EXTUSER', 'LockLogShredder', 'PUBLIC',
+    'SQLJ', 'Sys_Calendar', 'SysAdmin', 'SYSBAR', 'SYSJDBC',
+    'SYSLIB', 'SYSSPATIAL', 'SystemFe', 'SYSUDTLIB', 'SYSUIF',
+    'TD_SERVER_DB', 'TD_SYSFNLIB', 'TD_SYSGPL', 'TD_SYSXML',
+    'TDMaps', 'TDPUSER', 'TDQCD', 'TDStats', 'tdwm'
+)
+```
+
+Make this list configurable (env var or config file) because the exact set varies by Teradata version and installed components. Also exclude `AllTempTables` and `QRYLOG` if present.
+
+**Detection:**
+After running the scan, query `SELECT DatabaseName, COUNT(*) FROM OL_DATASET GROUP BY DatabaseName ORDER BY COUNT(*) DESC`. Any entry with `DBC` or `SYS*` as the database name indicates the filter is missing.
+
+**Phase to address:** Phase 1 (metadata population) — must be in place before the first full-system scan runs.
 
 ---
 
-### Pitfall 3: Mixed Layout Strategy Breaks the `separateDatabaseClusters` Bounding-Box Assumption
+### Pitfall 2: Correlated NOT EXISTS Subquery Degrades Catastrophically at Full-System Scale
 
 **What goes wrong:**
-`separateDatabaseClusters` assumes all nodes within a database are contiguous along the primary axis after ELK/topological layout — it shifts entire database groups along X (or Y) to prevent overlap. When a mixed layout strategy is introduced (e.g., isolated tables without lineage use a grid layout, connected tables use hierarchical layout), nodes from the same database can end up in non-contiguous X ranges. Applying `separateDatabaseClusters` to a mixed layout produces incorrect shifts: the function computes `lo` and `hi` from the min/max positions of all database nodes, then applies a uniform offset. But if database A has two table-groups — one at x=0 and one at x=800 (because one is isolated, one is connected) — the shift moves both groups together, ignoring the gap between them. The bounding box becomes artificially large, making the cluster box for database A engulf the adjacent database B's territory.
+Both `populate_openlineage_datasets()` and `populate_openlineage_fields()` use a correlated `NOT EXISTS` subquery to skip rows that already exist in `OL_DATASET` / `OL_DATASET_FIELD`:
+
+```sql
+AND NOT EXISTS (
+    SELECT 1 FROM {DATABASE}.OL_DATASET od
+    WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
+)
+```
+
+For a fresh population of a small scope (hundreds of tables), this works acceptably. At full-system scale (10,000–50,000 tables across all databases), the correlated subquery executes once per candidate row from `DBC.TablesV`. Teradata evaluates this as a row-by-row filter requiring repeated index lookups into `OL_DATASET`. Combined with the `? || '/' || TRIM(...)` string concatenation (which prevents index use on `dataset_id`), this can take hours on large systems and may exhaust spool space.
 
 **Why it happens:**
-`separateDatabaseClusters` was designed for single-component lineage where all tables in a database form a contiguous block. Multi-component graphs break this assumption by design.
+The existing approach was designed for idempotent incremental runs on a small object set. Correlated subqueries in `NOT EXISTS` clauses are quadratic in practice when the outer table is large and the inner table is not indexed on the derived key expression.
 
-**How to avoid:**
-Before introducing mixed layout strategies, refactor `separateDatabaseClusters` to compute the bounding box correctly for non-contiguous node groups. Two approaches:
-1. Group nodes by (database, connected-component) pairs, separate each pair independently, then compute the per-database bounding box from the post-separation positions.
-2. Run `separateDatabaseClusters` only after the mixed layout positions are finalized — i.e., as the absolute last step, reading actual node positions rather than pre-computed extents.
+**Consequences:**
+- Population script times out or runs for hours on large Teradata systems.
+- Spool space exhaustion (error 2646) mid-run, leaving `OL_DATASET` and `OL_DATASET_FIELD` in a partially populated state.
+- Subsequent API requests fail because some datasets exist without their fields.
 
-Always verify the bounding box output against `ClusterBackground`'s rendering by running the visual regression test after any `separateDatabaseClusters` change.
+**Prevention:**
+Replace the correlated `NOT EXISTS` pattern with a hash-join approach for the initial full-population pass. For a first-time (empty table) run, drop the `NOT EXISTS` guard entirely — just insert everything. For incremental re-runs, use a `LEFT JOIN ... WHERE od.dataset_id IS NULL` pattern which Teradata can execute as a hash join rather than a row-by-row correlated lookup:
 
-**Warning signs:**
-- Cluster boxes for databases with isolated tables are wider than expected
-- Isolated table nodes appear inside the cluster box of a different database
-- `separateDatabaseClusters` produces a non-zero shift for a database that should not move (e.g., the first in topological order)
+```sql
+INSERT INTO {DATABASE}.OL_DATASET (...)
+SELECT ...
+FROM DBC.TablesV src
+LEFT JOIN {DATABASE}.OL_DATASET existing
+    ON existing.dataset_id = ? || '/' || TRIM(src.DatabaseName) || '.' || TRIM(src.TableName)
+WHERE existing.dataset_id IS NULL
+  AND src.TableKind IN ('T', 'V', 'O')
+  -- system DB exclusions here
+```
 
-**Phase to address:**
-Phase 1 (layout foundation) — `separateDatabaseClusters` must be refactored before mixed layout is introduced. Do not add connected-component analysis until the separation step handles non-contiguous node groups correctly.
+Add a `--full-refresh` mode that truncates `OL_DATASET` and `OL_DATASET_FIELD` before inserting (safe for metadata-only tables since lineage is stored separately in `OL_COLUMN_LINEAGE`).
+
+**Detection:**
+Monitor the Teradata query workload during population (`DBC.DBQLogTbl`). If the metadata INSERT statements are consuming more than 10 minutes of CPU time, the correlated subquery is the likely cause.
+
+**Phase to address:** Phase 1 (metadata population) — test against full-system query plan with `EXPLAIN` before running in production.
 
 ---
 
-### Pitfall 4: `onlyRenderVisibleElements` Hides Nodes Before ClusterBackground Can Measure Them
+### Pitfall 3: `hasNoLineageData` Guard Shows Empty State Instead of Standalone Table Node
 
 **What goes wrong:**
-Both `DatabaseLineageGraph.tsx` and `AllDatabasesLineageGraph.tsx` use `onlyRenderVisibleElements={nodes.length > 50}` (or `> 30`). When this flag is active, React Flow only mounts DOM nodes for visible elements. `ClusterBackground` computes bounding boxes by reading `nodeLookup` from the React Flow store — but `nodeLookup` only contains entries for nodes that have been measured by ResizeObserver, which requires the node to be mounted in the DOM. For a database cluster where all member tables are currently off-screen (panned away), `onlyRenderVisibleElements` means those nodes are never mounted, `nodeLookup` has no `measured` dimensions for them, and `calculateClusterBounds` returns `null` — the cluster box disappears entirely as the user pans across the graph.
+`LineageGraph.tsx` (line 679) checks `data.graph.edges?.length === 0` and renders a "No Lineage Data Available" empty-state message instead of the graph. This fires for ANY table with zero lineage edges — including tables that exist in `OL_DATASET`/`OL_DATASET_FIELD` but have not yet had lineage extracted. After full metadata population, thousands of tables will have zero lineage edges. If a user navigates to one of these tables via the AssetBrowser, they see:
+
+> "No lineage relationships have been discovered for table {datasetId}."
+
+But they also see nothing about the table's schema — no column list, no data types. The feature request is to render a standalone table node card with columns listed, not the empty-state message. The current code explicitly blocks the graph render path when `edges.length === 0`.
 
 **Why it happens:**
-`onlyRenderVisibleElements` is a correct performance optimization, but `ClusterBackground` was written assuming all nodes are always mounted. The two features are fundamentally incompatible in their current form.
+The empty-state guard was added to prevent the ELK layout from hanging on a single-node zero-edge graph (see the comment at line 279: "certain ELK configurations can cause ELK to hang indefinitely"). This is correct for the old ELK path, but the layout engine was subsequently replaced with a custom topological layout (`layoutEngine.ts`) that already handles zero-edge graphs safely — the ELK hang no longer applies. The guard is now over-broad: it blocks all zero-edge graphs from rendering, including legitimate standalone tables.
 
-**How to avoid:**
-Pre-calculate cluster bounds from layout positions (not from `node.measured`) and pass them to `ClusterBackground` directly as props. Use the `width`/`height` set on node objects at layout time (from `calculateTableNodeWidth`/`calculateTableNodeHeight`) rather than the ResizeObserver-measured values from `nodeLookup`. The `viewport transform + position` math in `ClusterBackground` will still work correctly for off-screen clusters because the layout positions are accurate — only the dimension source changes.
+**Consequences:**
+After full metadata population, every newly catalogued table without lineage becomes unreachable in graph view. Users cannot see column schemas for tables that exist but have no lineage yet.
 
-**Warning signs:**
-- Cluster boxes disappear when panning to areas of the graph with no visible nodes
-- `ClusterBackground` renders 0 clusters after panning even though the graph has multiple databases
-- Setting `onlyRenderVisibleElements={false}` makes cluster boxes reappear
+**Prevention:**
+The fix requires two changes:
 
-**Phase to address:**
-Phase 1 (layout foundation) — fix the dimension source before enabling large-graph optimizations. This must be resolved before testing with 200+ node database graphs, as `onlyRenderVisibleElements` will activate automatically.
+1. In `LineageGraph.tsx`: Replace the `hasNoLineageData` binary guard with a conditional that distinguishes "table exists, zero edges" from "table not found". When `data.graph.nodes.length > 0 && data.graph.edges.length === 0`, proceed to the graph render path (the custom layout handles this correctly). When `data` is null or `data.graph.nodes.length === 0`, show the empty state.
+
+2. In `layoutEngine.ts`: Verify that `layoutGraph()` with one table node and zero edges produces a valid positioned node at a reasonable canvas coordinate. The current `placeIsolatedGrid` path in `layoutGraph()` already handles isolated tables — trace through the code path: when `connected` is empty and `isolated` has one entry, `placeIsolatedGrid` is called and places the node at `(0, startSecondary)`. This is correct — no change needed.
+
+**Detection:**
+Navigate to any table that has columns registered in `OL_DATASET_FIELD` but no entries in `OL_COLUMN_LINEAGE`. The graph view should show the table node with columns; instead it shows "No Lineage Data Available."
+
+**Phase to address:** Phase 2 (standalone table rendering) — this is the primary rendering change. Do not attempt before Phase 1 metadata population is complete, since you need populated `OL_DATASET_FIELD` records to verify column rendering works.
 
 ---
 
-### Pitfall 5: Connected Component Analysis Is O(V+E) but the Main-Thread Layout Blocks During It
+### Pitfall 4: AssetBrowser Fetches `limit: 1000` Datasets — Breaks at Full-System Scale
 
 **What goes wrong:**
-The current `layoutGraph` function runs on the main thread in `DatabaseLineageGraph.tsx` (not in the worker). Adding connected component analysis (union-find or BFS-based) to determine which tables are isolated vs. connected increases the sequential work in `layoutGraph`. For a database with 500 tables and 2000 edges, connected component analysis adds ~5ms. Harmless alone. But combined with the existing topological sort, layering, and separation steps, the total synchronous work grows from ~8ms to ~15ms — still safe. The problem is that database lineage graphs can have more nodes than column/table lineage: a database could have 1000 tables with sparse lineage. At 1000 nodes, all steps compound: sort (O(V log V)), layering (O(V+E)), connected components (O(V+E)), grid placement for isolated nodes (O(isolated_count)) = ~80ms of synchronous blocking. The main thread freezes the UI for 80ms during layout, causing perceptible jank.
+`AssetBrowser.tsx` line 80 fetches datasets with `{ limit: 1000, offset: 0 }`. On the current single-database deployment, the namespace contains hundreds of tables — well within the 1000-row limit. After full-system metadata population (all databases), a production Teradata system can have 10,000–100,000 user tables. The first page fetch returns only 1000, but the component groups them all client-side with `useMemo(() => groupByDatabase(...))`. The remaining 9,000+ tables are silently omitted. Users see only the first 1000 alphabetically — which means entire databases may be missing from the browser without any indication.
 
 **Why it happens:**
-`DatabaseLineageGraph.tsx` calls `layoutGraph` directly on the main thread (unlike the column/table lineage views which use `useLayoutWorker`). The comment in the code says "topological layout is O(V+E), completes in ms" — which was true before adding connected component analysis on large database graphs.
+The `list_datasets()` repository method supports pagination (`limit`, `offset`) but `AssetBrowser.tsx` uses a single page with a hardcoded limit of 1000, treating it as a full fetch. This was sufficient when only lineage-referenced objects were catalogued.
 
-**How to avoid:**
-Route database lineage layout through `useLayoutWorker` (the existing Comlink worker) instead of calling `layoutGraph` directly. The worker is already set up and accepts the same function signature. This eliminates the main-thread blocking entirely. Before doing this, verify that `layoutGraph` does not use any browser-only APIs that would fail in a Worker context (`performance.now()` is available in workers; `import.meta.env` is Vite-specific but also available in workers built by Vite).
+**Consequences:**
+- Databases that sort alphabetically after the first 1000 tables are entirely invisible.
+- No error or truncation warning is shown to the user.
+- Users search for tables that "should be there" and find nothing.
 
-**Warning signs:**
-- Chrome DevTools shows > 16ms Long Tasks in the main thread during database lineage load
-- Frame drops occur when switching to a database with 200+ tables
-- `useProfiler('DatabaseLineageGraph')` shows render duration > 50ms on first mount
+**Prevention:**
+Two options, in order of preference:
+1. **Virtual scrolling / infinite scroll**: Use TanStack Query's `useInfiniteQuery` (already used in `AllDatabasesLineageGraph.tsx` — see `useDatabases`) to fetch pages lazily as the user scrolls. Group by database as each page arrives.
+2. **Server-side database grouping**: Add a `GET /api/v2/openlineage/namespaces/{namespaceId}/databases` endpoint that returns distinct database names with counts, without fetching all tables. The browser expands a database lazily, fetching only its tables on demand.
 
-**Phase to address:**
-Phase 1 (layout foundation) — move database lineage layout to the worker before adding connected component analysis. The worker migration is low-risk and eliminates an entire class of future performance problems.
+Option 2 is simpler to implement and matches the existing tree-expand UX pattern already used in `AssetBrowser`.
 
----
+**Detection:**
+Run `SELECT COUNT(*) FROM OL_DATASET` after full population. If count > 1000 and the AssetBrowser shows exactly 1000 items in its listing, the limit is the problem.
 
-### Pitfall 6: ELK `separateConnectedComponents` Option Interacts Badly with Custom Post-Layout Steps
-
-**What goes wrong:**
-If ELK is used for any layout pass (e.g., for isolated component grid arrangement via `elk.algorithm: 'disco'`), the `elk.separateConnectedComponents: true` option tells ELK to process each connected component independently then pack them. The packing algorithm positions components relative to the ELK graph's `(0,0)` origin. The custom `separateDatabaseClusters` post-processing step then tries to shift groups along the primary axis — but ELK's component packing has already handled separation. Applying `separateDatabaseClusters` on top of ELK-packed components double-shifts nodes: ELK places component A at x=0 and component B at x=500; `separateDatabaseClusters` then sees them as "overlapping" (because the bounding box check uses the node positions without accounting for ELK's packing gaps) and shifts component B further right to x=700. The resulting layout has unnecessary whitespace.
-
-**Why it happens:**
-The two separation systems do not know about each other. `separateDatabaseClusters` was written for the custom topological layout path which has no component-packing. If ELK is reintroduced for any part of the pipeline, the post-processing steps must be conditionally disabled or redesigned.
-
-**How to avoid:**
-Establish a clear rule: either use ELK's component-packing OR the custom `separateDatabaseClusters` — never both for the same layout pass. Document this as an invariant in `layoutEngine.ts`. If ELK's disco algorithm is used for grid-packing isolated components, disable `separateDatabaseClusters` for those nodes and only apply it to the hierarchical component group.
-
-**Warning signs:**
-- Isolated table nodes (no lineage) appear far to the right of the main hierarchical graph with a large empty gap between them
-- The gap between database clusters grows disproportionately when some tables have no lineage
-- Adding `elk.separateConnectedComponents: false` to ELK options reduces whitespace noticeably
-
-**Phase to address:**
-Phase 2 (mixed layout strategy) — this pitfall only manifests when both ELK component-handling and the custom separation step are active simultaneously. Establish the invariant in Phase 1 documentation before Phase 2 implementation begins.
-
----
-
-### Pitfall 7: Grid Layout for Isolated Nodes Creates Inter-Database Edge Crossings
-
-**What goes wrong:**
-A mixed layout places connected tables in a hierarchical left-to-right layout and isolated tables (no edges) in a grid below or to the side. When a database has 50 tables in the hierarchical region and 30 isolated tables in the grid region, edges from the hierarchical region that pass near the grid region visually cross through the grid cells. React Flow renders all edges using the same coordinate space — edges from database A's hierarchical section can visually intersect with database B's isolated-node grid if the two regions overlap on the Y axis. Users misread these visual crossings as lineage relationships.
-
-**Why it happens:**
-Grid layout for isolated nodes does not account for edge routing from the hierarchical region. The custom topological layout does not use ELK's edge routing (it produces no edge bend-points). React Flow renders edges as straight bezier curves between source and target handles. Straight bezier curves from deep-hierarchy nodes to other deep-hierarchy nodes will pass through any grid region that occupies the same vertical band.
-
-**How to avoid:**
-1. Place isolated nodes outside the primary layout axis entirely: if the main layout is left-to-right (direction=RIGHT), place isolated nodes below the entire hierarchical section (increment Y by the hierarchical section's max height + padding). This ensures no hierarchical edges cross through the isolated region.
-2. Use a minimum Y-separation constant equal to the cluster box padding (currently 60px) plus the tallest node height in the hierarchical section.
-3. Do not use a grid that shares the same X range as any hierarchical layer.
-
-**Warning signs:**
-- Visual inspection of the database lineage graph shows edges passing through isolated node grid cells
-- Users report confusion about whether isolated nodes are "connected" to the lineage
-- Zooming out reveals edge paths that appear to terminate inside the grid region
-
-**Phase to address:**
-Phase 2 (mixed layout strategy) — grid placement algorithm must account for edge routing before implementation. Verify visually with a test database that has both connected and isolated tables.
+**Phase to address:** Phase 1 (metadata population) — the limit issue surfaces immediately after full-system scan. Address the AssetBrowser fetch strategy before triggering the full population.
 
 ---
 
 ## Moderate Pitfalls
 
-### Pitfall 8: `applySmartViewport` with 150ms Timeout Is Too Short for Large Database Graphs
-
-**What goes wrong:**
-Both `DatabaseLineageGraph.tsx` and `AllDatabasesLineageGraph.tsx` use `setTimeout(..., 150)` to delay `applySmartViewport` after layout completes — the comment says "to ensure React Flow has measured node dimensions." For column/table lineage with 20-50 nodes, 150ms is sufficient. For a database-lineage view with 400 nodes, React Flow's ResizeObserver fires for each node individually. On a slow machine or when the browser is under CPU load, not all 400 nodes will have reported their measured dimensions within 150ms. `applySmartViewport` calls `fitView` on nodes with zero or pre-measurement dimensions, producing a viewport that does not contain all nodes. The user sees nodes outside the viewport on initial load.
-
-**How to avoid:**
-Replace the fixed timeout with a measurement-completion gate. Two options:
-1. Use `reactFlowInstance.getNodes()` filtered to `node.measured !== undefined` — if the count matches the total node count, measurement is complete.
-2. Pre-set `width` and `height` on nodes at layout time (the pre-calculation fix from Pitfall 2), which makes `fitView` correct from the first render without waiting for ResizeObserver.
-
-The pre-calculation approach (option 2) is preferred because it eliminates the timing dependency entirely.
-
-**Warning signs:**
-- `fitView` on initial load shows only part of the graph for large databases (200+ tables)
-- Increasing the timeout to 500ms makes the problem disappear
-- The issue is more frequent on slower machines or when the browser tab is in the background during load
-
-**Phase to address:**
-Phase 1 (layout foundation) — the pre-calculation fix resolves this as a side-effect. If the timeout cannot be eliminated immediately, increase it to `Math.max(150, nodes.length * 0.5)` as a temporary workaround.
+Mistakes that cause incorrect behavior or performance degradation, but not total failure.
 
 ---
 
-### Pitfall 9: Layout Cancellation Race Condition When User Changes Direction Mid-Layout
+### Pitfall 5: `OL_DATASET_FIELD` `field_id` Composite Key Is VARCHAR(512) — Borderline for Deep Paths
 
 **What goes wrong:**
-`DatabaseLineageGraph.tsx` uses a `cancelled` boolean ref inside the layout effect to cancel stale results. When the user changes direction (e.g., RIGHT to DOWN) rapidly, the following sequence occurs: (1) layout for RIGHT starts, (2) user changes direction, (3) layout for DOWN starts, (4) layout for RIGHT completes and checks `cancelled` — but `cancelled` is `false` because the cleanup function resets it per-effect. The RIGHT layout resolves and calls `setNodes`/`setEdges` with RIGHT-direction positions, overwriting the in-progress DOWN layout computation. The graph briefly shows RIGHT-direction positions before DOWN layout completes and overwrites again. On slow machines, this creates a visible position-flash.
+`field_id` is constructed as `namespace_id/database.table/column` which calculates to a maximum of approximately 305 characters (16 + 1 + 30 + 1 + 128 + 1 + 128). This fits within VARCHAR(512). However, Teradata allows database names up to 30 characters, table names up to 128 characters, and column names up to 128 characters — the calculation above uses the maximums. In practice, multi-level naming conventions (e.g., `project_database_region_v2.very_long_view_name_with_context.column_identifier_with_full_description`) can push close to the theoretical maximum. The VARCHAR(512) limit is safe today. However, `dataset_id` in `OL_DATASET` is VARCHAR(256) — and `dataset_id` is used as a foreign key reference in `OL_DATASET_FIELD`. A dataset name of `very_long_database_name_30ch.very_long_table_name_128ch` generates a `dataset_id` of `namespace_id(16)/database(30).table(128)` = 176 characters, safely within 256. Tested: the schema is safe at Teradata's documented maximums. This pitfall is LOW risk but worth verifying in the actual environment.
+
+**Prevention:**
+After full population, run:
+```sql
+SELECT MAX(CHAR_LENGTH(dataset_id)) FROM OL_DATASET;
+SELECT MAX(CHAR_LENGTH(field_id)) FROM OL_DATASET_FIELD;
+```
+Confirm both are well below their VARCHAR limits. If approaching the limit, extend to VARCHAR(512) and VARCHAR(1024) respectively before scaling further.
+
+**Phase to address:** Phase 1 (metadata population) — validate post-population with the query above.
+
+---
+
+### Pitfall 6: `get_table_lineage_graph()` Raises `DatasetNotFoundError` When Table Has No Fields
+
+**What goes wrong:**
+`lineage_service.py` line 171 raises `DatasetNotFoundError` when `get_dataset_fields()` returns an empty list:
+
+```python
+fields = self.dataset_repo.get_dataset_fields(dataset_id)
+if not fields:
+    raise DatasetNotFoundError(f"No fields found for dataset: {dataset_id}")
+```
+
+A table catalogued in `OL_DATASET` but not yet in `OL_DATASET_FIELD` (e.g., if the fields population step was interrupted) triggers this error. The frontend receives a 404 and shows "Failed to load lineage: Dataset not found" — indistinguishable from the table not existing at all. After full metadata population with a potentially slow `populate_openlineage_fields()` run, partial population states are more likely.
+
+**Prevention:**
+Change the guard to a warning rather than an error: if a dataset exists but has no fields, return a graph with a single node (the table) and zero edges rather than raising. The frontend's standalone node rendering (Phase 2) handles this case. Add a `has_fields` flag to the response to let the UI distinguish "table with fields" from "table with no field metadata yet."
+
+**Phase to address:** Phase 2 (standalone table rendering) — this surfaces when the standalone render feature is built. Fix the service layer before the UI change, not after.
+
+---
+
+### Pitfall 7: `fitView()` on Single Standalone Node Zooms Excessively
+
+**What goes wrong:**
+`LineageGraph.tsx` calls `applySmartViewport(nodes)` after layout completes. When there is a single table node (standalone, no edges), `fitView` with `padding: 0.2` zooms the viewport to fill the entire canvas with that one node. A table node at full zoom becomes unreadably large — the card expands to fill the viewport because `fitView` maximizes zoom to fit the node bounds. React Flow's `fitView` does not apply a maximum zoom by default; it computes the zoom needed to fill the container with the given nodes.
+
+**Prevention:**
+When rendering a standalone node (detected as `nodes.length === 1 && edges.length === 0`), use `reactFlowInstance.setViewport({ x: 50, y: 50, zoom: 1.0 })` instead of `fitView`. This positions the node at a comfortable reading zoom rather than filling the viewport. Alternatively, pass `maxZoom: 1.2` to `fitViewOptions` to cap the zoom level regardless of node count.
+
+**Detection:**
+Navigate to a standalone table with many columns. The node card should appear at approximately the same size as table nodes in a lineage graph — not full-screen.
+
+**Phase to address:** Phase 2 (standalone table rendering).
+
+---
+
+### Pitfall 8: `populate_openlineage_fields()` Uses `DBC.ColumnsV` — Returns NULL Types for Views
+
+**What goes wrong:**
+The existing `populate_openlineage_fields()` function already contains this note: "ColumnsV may return NULL for view column types." The function fetches from `DBC.ColumnsV` and falls back to `COALESCE(TRIM(c.ColumnType), 'UNKNOWN')` for null types. At full-system scale, views are a significant portion of the catalog. If `QVCI` is not enabled on the system, all view column types come back as `'UNKNOWN'` — which is stored in `OL_DATASET_FIELD.field_type`. The standalone table node rendering displays `field_type` as the data type label for each column. A table card showing "UNKNOWN" for every column type is significantly less useful than showing "VARCHAR(100)" or "INTEGER".
 
 **Why it happens:**
-The `cancelled` ref is reset in the cleanup function (`return () => { cancelled = true; reset(); }`). But if two effects fire in rapid succession, the first effect's cleanup may not run before the second effect starts — React batches cleanup/setup in a specific order but the async layout promise from the first effect can still resolve after the second effect's promise starts. The `cancelled` ref from the first effect is a closure over a different boolean than the second effect's `cancelled` variable.
+The CLAUDE.md documents this requirement: the script previously used `DBC.ColumnsJQV` (QVCI-required) for complete view type information, then was reverted to `DBC.ColumnsV` as a fallback. The full-system scan will encounter many views, amplifying the NULL-type problem.
 
-**How to avoid:**
-Use a single abort signal or generation counter at the module level (or in a ref outside the effect): `const layoutGeneration = useRef(0)`. At the start of each layout effect, increment the generation. At the end of the async layout, check if the current generation matches the expected generation before calling `setNodes`. This correctly handles multiple in-flight layout computations.
+**Prevention:**
+Verify QVCI status before running the full-system scan:
+```sql
+SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0;
+```
+If this query succeeds, switch `populate_openlineage_fields()` back to `DBC.ColumnsJQV`. If it raises error 9719 (QVCI disabled), accept `'UNKNOWN'` for view column types and surface a warning in the population script output. Display "—" in the standalone node UI instead of "UNKNOWN" when `field_type` is null or the string "UNKNOWN".
 
-**Warning signs:**
-- Rapidly clicking direction change buttons causes the graph to visually flash between two layout directions before settling
-- React Profiler shows two `setNodes` calls within 100ms of each other when direction is changed quickly
-- `ProgressBanner` shows stale progress percentages after direction change
-
-**Phase to address:**
-Phase 1 (layout foundation) — fix the cancellation pattern before adding mixed layout strategies, which will have longer computation times and make the race condition more pronounced.
+**Phase to address:** Phase 1 (metadata population) — check QVCI status as a pre-flight step before running the full scan.
 
 ---
 
-### Pitfall 10: Database Color Assignment Is Non-Deterministic Across Re-Renders
+### Pitfall 9: `NOT IN` System Database List With 27+ Constants Degrades Teradata Query Plan
 
 **What goes wrong:**
-`useDatabaseClustersFromNodes` assigns colors to databases using `FALLBACK_COLORS[index % FALLBACK_COLORS.length]` where `index` is incremented as the `Map.forEach` iteration order. JavaScript `Map` iteration order is insertion order. If the API returns databases in a different order on each request (due to Teradata query result ordering), database A gets the blue color on one render and the green color on the next. The user sees cluster colors change between page loads, which is disorienting and breaks visual memory (users learn "sales_db is blue").
+Teradata's optimizer can struggle with `NOT IN` clauses containing large literal lists, particularly when combined with `DBC` view scans. A `NOT IN (27 literals)` clause may not be applied as a filter push-down — instead Teradata materializes the full `DBC.TablesV` result set into spool before applying the exclusion. `DBC.TablesV` on a large system returns millions of rows (one per column per table). The spool exhaustion risk from Pitfall 2 compounds with a large `NOT IN` list.
 
-**How to avoid:**
-Hash the database name to a stable color index. A simple implementation: `const hash = databaseName.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0); return FALLBACK_COLORS[hash % FALLBACK_COLORS.length]`. This makes the color deterministic for any given database name regardless of iteration order. The existing `DATABASE_COLORS` hardcoded map is correct for known databases — only the fallback path needs the hash.
+**Prevention:**
+Create a helper table or volatile table of excluded database names, then use `NOT EXISTS` or `LEFT JOIN ... IS NULL` against that table — this allows Teradata to use a hash join rather than a linear scan. Alternatively, use a `LIKE` pattern filter first (`DatabaseName NOT LIKE 'SYS%' AND DatabaseName NOT LIKE 'TD_%'`) to eliminate the largest categories, with a specific `NOT IN` for the remaining exceptions. This is a secondary optimization; Pitfall 2's LEFT JOIN approach already mitigates the primary spool risk.
 
-**Warning signs:**
-- Cluster box colors change between page loads for the same database
-- Two databases with similar names get the same color (hash collision — inspect and adjust the hash function)
-- `useDatabaseClusters.test.ts` tests that check specific colors fail non-deterministically
-
-**Phase to address:**
-Phase 1 (layout foundation) — this is a pre-existing bug that becomes more visible when database lineage is a primary view. Fix before UX testing begins.
+**Phase to address:** Phase 1 (metadata population) — validate with `EXPLAIN` before running.
 
 ---
 
-### Pitfall 11: Secondary-Axis Stacking Creates Excessively Tall Layers for Databases with Many Tables
+### Pitfall 10: Existing Tests Break When OL_DATASET Contains Full-System Objects
 
 **What goes wrong:**
-The topological layout stacks all tables within the same layer along the secondary axis (Y for direction=RIGHT). A database that contains 30 tables all at the same topological depth (e.g., all are source tables with no upstream) produces a single layer that is 30 * (node_height + node_spacing) pixels tall — approximately 30 * (200 + 40) = 7,200px. The adjacent database has 3 tables, stacked to 720px. The cluster box for the 30-table database dwarfs the 3-table database, making the layout look unbalanced. Users cannot see all tables without excessive scrolling in one direction.
+The 73 database tests (`database/tests/run_tests.py`) and 20 backend API tests (`lineage-api/tests/run_api_tests.py`) currently operate against a controlled dataset. Many tests assert specific counts (e.g., "expect N datasets in namespace") or check that search returns specific results. After full metadata population:
+- Count assertions fail because `OL_DATASET` now contains thousands of rows instead of tens.
+- Search tests return unexpected results because system tables (if not filtered) appear.
+- The `AssetBrowser` test (line 104: `{ limit: 1000, offset: 0 }`) becomes a test of truncation behavior rather than correct behavior.
 
-**Why it happens:**
-The secondary-axis stacking is linear with no wrapping or column limit. This is sufficient for column/table lineage where layers typically have 1-5 nodes. Database lineage layers can have 10-50 nodes.
+**Prevention:**
+Run full-system population against a separate test namespace or schema, not the same `demo_user` database used by the test suite. Add a `--namespace` flag to `populate_lineage.py` to target a specific Teradata database. The existing test infrastructure uses `demo_user` — keep test data isolated there and use a separate database for the full catalog.
 
-**How to avoid:**
-For layers exceeding a configurable threshold (e.g., 10 nodes), introduce column-wrapping within the layer: arrange tables in a sub-grid of N columns × ceil(count/N) rows, where N is determined by `Math.ceil(Math.sqrt(tableCount))`. Each sub-grid column advances the secondary cursor by the widest node in that column. The primary cursor advances by the widest sub-grid plus layer spacing. This produces more balanced layouts without requiring ELK.
-
-**Warning signs:**
-- A single database dominates the vertical (or horizontal) extent of the graph by 10x or more
-- `fitView` produces a tiny zoom level to fit the entire graph (graph is too tall/wide)
-- Users scroll in one direction to see all tables in a single layer but find nothing else in that direction
-
-**Phase to address:**
-Phase 2 (mixed layout strategy) — the column-wrapping logic is part of the "grid for dense layers" feature. Design the wrapping threshold and column count formula before implementation.
+**Phase to address:** Phase 1 (metadata population) — design the isolation boundary before running the first full scan.
 
 ---
 
-### Pitfall 12: React Flow Edge Re-Renders When Highlighting Changes All Edge Objects
+## Minor Pitfalls
+
+---
+
+### Pitfall 11: `TableNode` Renders an Empty Column List When `OL_DATASET_FIELD` Has No Rows for the Table
 
 **What goes wrong:**
-`useLineageHighlight` updates the `style` property of every edge in the graph whenever a node is selected — highlighted edges get a different color/width, non-highlighted edges get dimmed styles. This is done by mapping over all edges and creating new objects with updated styles. React Flow re-renders every edge component because they receive new object references for `style`. On a database lineage graph with 1000 edges, this is 1000 edge re-renders per click. The existing edge type `lineageEdge` uses a custom `LineageEdge.tsx` component — if it is not wrapped in `React.memo` with a correct comparison function, all 1000 edges re-render even though only a small subset changed their highlight state.
+`TableNode.tsx` renders a list of `ColumnRow` components from the `columns` prop. When a table exists in `OL_DATASET` but has zero rows in `OL_DATASET_FIELD` (partial population, or table with no columns in `DBC.ColumnsV`), the node renders with only the header and no column rows — visually indistinguishable from a collapsed table node. The user cannot tell whether the table has no columns, the columns have not been catalogued yet, or the node is collapsed.
 
-**Why it happens:**
-Spread-cloning edges (`edges.map(e => ({ ...e, style: newStyle }))`) always creates new object references. React Flow compares nodes/edges by reference equality. `React.memo` on the edge component helps only if the props it receives do not change — but since `style` changes on every edge, `React.memo` does not prevent re-renders.
+**Prevention:**
+When `columns.length === 0` in the standalone node rendering path, show a single placeholder row: "No column metadata available" in italics. This distinguishes "no columns" from "collapsed" and avoids the ambiguity.
 
-**How to avoid:**
-Move highlight state out of edge `style` objects and into CSS classes via the `className` prop. Set `className="highlighted"` or `className="dimmed"` on edges instead of changing `style`. With CSS classes, the `className` string is the same primitive reference for all non-changed edges, preventing re-renders. Add `.highlighted` and `.dimmed` CSS rules to the React Flow stylesheet.
-
-**Warning signs:**
-- React Profiler shows all 1000 edges re-rendering on each node click
-- Node click response time degrades linearly with edge count (> 16ms at 500 edges)
-- `LineageEdge` appears in the React Profiler "Flamegraph" as the top-cost component during interactions
-
-**Phase to address:**
-Phase 2 or 3 — this is an existing issue that becomes critical at database-lineage scale. Fix before UX testing with large databases.
+**Phase to address:** Phase 2 (standalone table rendering).
 
 ---
 
-## Technical Debt Patterns
+### Pitfall 12: Re-running `populate_lineage.py` Without `--skip-clear` Deletes the Entire Catalog
 
-Shortcuts that seem reasonable during implementation but create long-term problems.
+**What goes wrong:**
+`clear_openlineage_data()` without `lineage_only=True` deletes `OL_COLUMN_LINEAGE`, `OL_DATASET_FIELD`, and `OL_DATASET`. Running the standard populate command (`python populate_lineage.py`) clears the full catalog before repopulating. After full-system population (potentially hours of runtime), an accidental re-run without `--skip-clear` destroys the entire catalog and forces a full re-scan. This is especially dangerous because the default mode already includes `--skip-clear=False`.
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Sort inside Kahn's while-loop for determinism | Simpler code, stable output | O(V log V) per iteration — non-linear scaling past 200 nodes | Never in production; sort once per layer discovery instead |
-| Call `layoutGraph` on main thread in DatabaseLineageGraph | Avoids worker wiring complexity | Blocks UI during layout for 400+ table databases | Dev-only while validating algorithm correctness; must move to worker before production |
-| Read `node.measured` for cluster bounding boxes | Uses authoritative post-render dimensions | Cluster boxes wrong/invisible when `onlyRenderVisibleElements` is active | Never for database lineage; always pre-calculate from layout dimensions |
-| Fixed 150ms timeout before `applySmartViewport` | Simple, works for small graphs | Unreliable for 400+ nodes — `fitView` runs before measurement completes | Only when node count is guaranteed < 50 |
-| Linear secondary-axis stacking (no wrapping) | Simple algorithm | Excessively tall/wide single layers for databases with many same-depth tables | Only when max layer size is guaranteed < 10 nodes |
-| Color by insertion order in `Map.forEach` | Easy to implement | Non-deterministic colors across page loads; user mental model breaks | Never; use name-hash for stable color assignment |
+**Prevention:**
+For full-system catalog, default the behavior to `--skip-clear` (i.e., always append unless explicitly told to clear). Add a `--full-refresh` flag that explicitly clears and re-populates. Warn prominently when `--full-refresh` is used with a "This will delete N datasets and N fields. Confirm? [y/N]" prompt.
+
+**Phase to address:** Phase 1 (metadata population) — change defaults before running any full-system scan.
 
 ---
 
-## Integration Gotchas
+### Pitfall 13: Graph Engine Warmup Loads All Lineage Edges — Unaffected by Metadata Scale, But Duration May Confuse
 
-Common mistakes when connecting the mixed layout strategy to the existing system.
+**What goes wrong:**
+The in-memory graph engine (`graph_engine.initialize`) loads `OL_COLUMN_LINEAGE` into a NetworkX DiGraph on startup. Full metadata population does NOT affect this — `OL_COLUMN_LINEAGE` is populated separately by DBQL extraction and view lineage, not by the catalog scan. However, after full-system metadata scan, the `OL_DATASET` and `OL_DATASET_FIELD` tables are much larger. The database-lineage BFS path in `lineage_service.py` queries `OL_DATASET` for all tables in a database (`search_pattern = f"{database_name}.%"`). With full-system metadata, this query retrieves many more rows per database, increasing the metadata enrichment time for the database-lineage API.
+
+**Prevention:**
+Index `OL_DATASET.name` on the pattern `database_name.%` (a prefix scan). The existing `idx_ol_dataset_name` index on `name` should support this. Verify with `EXPLAIN` that the existing index is used after full population.
+
+**Phase to address:** Phase 1 (metadata population) — verify with `EXPLAIN` post-population.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase Topic | Likely Pitfall | Mitigation |
+|-------------|---------------|------------|
+| Full DBC scan (all databases) | No system DB filter includes Teradata internal objects | Add `DatabaseName NOT IN (...)` exclusion list before first run |
+| Full DBC scan (all databases) | Correlated NOT EXISTS degrades at 10K+ rows | Switch to LEFT JOIN IS NULL pattern; test with EXPLAIN |
+| Full DBC scan (all databases) | Script default clears catalog on re-run | Change default to --skip-clear; add --full-refresh with confirmation |
+| Full DBC scan (all databases) | ColumnsV returns NULL types for views if QVCI disabled | Verify QVCI status pre-flight; display "—" instead of "UNKNOWN" |
+| AssetBrowser after full scan | limit:1000 silently truncates full catalog | Switch to lazy load by database or increase limit with pagination |
+| Standalone table rendering | `hasNoLineageData` guard blocks standalone table render | Allow graph render when nodes>0 && edges==0; guard only nodes==0 |
+| Standalone table rendering | `fitView` on single node zooms excessively | Use fixed viewport zoom (1.0) for single-node graphs |
+| Standalone table rendering | Service raises DatasetNotFoundError for no-field tables | Return single-node graph instead of error when dataset exists but has no fields |
+| Test suite after full scan | Test count assertions break with full catalog | Run full population against isolated namespace/database separate from test data |
+
+---
+
+## Integration Pitfalls
+
+Mistakes specific to connecting these two features to the existing system.
 
 | Integration | Common Mistake | Correct Approach |
 |-------------|----------------|------------------|
-| Mixed layout + `separateDatabaseClusters` | Running separation after ELK component-packing adds double-shift | Disable `separateDatabaseClusters` for nodes that ELK has already packed; use one system per layout pass |
-| Connected component analysis + topological sort | Running connected component detection on the full graph then topo-sorting each component separately — losing inter-component edges | Run topo-sort on the full graph first (inter-component edges are preserved); then use component membership only for secondary-axis placement decisions |
-| Grid layout for isolated nodes + hierarchical edges | Placing isolated-node grids in the same X/Y range as hierarchical edges | Place isolated grids outside the primary axis extent (below or to the right of the full hierarchical section) |
-| `onlyRenderVisibleElements` + ClusterBackground | Cluster boxes disappear for off-screen databases | Pre-calculate bounds from layout positions, not from `node.measured` |
-| Database lineage layout + Web Worker | Main-thread layout blocks on 400+ tables | Route all database lineage layout through `useLayoutWorker` — the worker already handles the same `layoutGraph` function |
-| `separateDatabaseClusters` + non-contiguous database groups | Bounding box encompasses gap between isolated and connected tables from same database | Compute extents per (database, component) pair, not per database |
-| Direction change + in-flight layout | Cancelled layout resolves and overwrites new layout positions | Use generation counter pattern instead of simple boolean `cancelled` ref |
-
----
-
-## Performance Traps
-
-Patterns that work at small scale (20-50 tables) but fail at database-lineage scale (200-500 tables).
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| Sort inside Kahn's while-loop | Layout time scales non-linearly; 400 nodes takes 4x longer than expected | Sort only newly discovered zero-indegree candidates; not the full queue | > 100 nodes in a single layout pass |
-| Main-thread `layoutGraph` for database views | > 16ms Long Tasks in DevTools; frame drops during layout | Move to `useLayoutWorker` (worker already exists) | > 200 table nodes |
-| Linear secondary-axis stacking | Single layer fills entire viewport height; user must scroll 5000px | Column-wrap layers exceeding N nodes | > 10 nodes in a single layer |
-| Read `node.measured` for cluster bounds | Cluster boxes resize incrementally during render; wrong size with `onlyRenderVisibleElements` | Pre-set `width`/`height` on layouted nodes; compute bounds from those | Any time `onlyRenderVisibleElements` is active (30+ nodes) |
-| Update all edge objects on highlight change | 1000 edge re-renders per click; interaction latency > 100ms | Use `className` instead of `style` for highlight state | > 200 edges visible |
-| Fixed 150ms `applySmartViewport` timeout | `fitView` shows partial graph on initial load for large databases | Pre-calculate node dimensions; or use measurement-complete gate | > 200 nodes on a slow device |
-| Rebuilding cluster bounds every render in `useDatabaseClustersFromNodes` | `useMemo` recomputes on every `setNodes` call during load | Memoize on stable layout output, not on live React Flow node state | > 30 nodes with `showDatabaseClusters` enabled |
-
----
-
-## UX Pitfalls
-
-Common user experience mistakes specific to database lineage graph views.
-
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| No wrapping for large same-depth layers | Users must scroll vertically 5000+ pixels to see all source tables | Column-wrap layers > 10 nodes; configure via `maxNodesPerColumn` option |
-| Isolated nodes mixed into hierarchical layout | Users mistake proximity for lineage; visual noise obscures actual relationships | Separate isolated nodes into a distinct visual region with a label ("No lineage data") |
-| Database color changes between page loads | Users lose visual memory ("sales_db was blue"); must re-learn layout every visit | Hash database name to stable color index |
-| Cluster boxes disappear during pan on large graphs | Users lose database context when panning; do not know which table belongs to which database | Fix cluster bounds computation to use pre-calculated layout dimensions |
-| No indication that only N of M tables are shown (pagination) | Users believe graph is complete when it is partial | Show "Showing 50 of 320 tables — Load More" consistently; do not run layout until load decision is made |
+| Full scan + existing lineage tests | Running full scan in same `demo_user` database breaks test expectations | Use a separate Teradata database for the full catalog; keep `demo_user` as the test namespace |
+| Full scan + AssetBrowser | AssetBrowser limit:1000 fetches only first page alphabetically | Migrate to lazy-load-by-database before triggering full population |
+| Standalone render + `hasNoLineageData` guard | Guard blocks graph render for any zero-edge result | Change condition from `edges.length === 0` to `nodes.length === 0` for empty state |
+| Standalone render + `get_table_lineage_graph` | Service raises 404 when table has no fields in OL_DATASET_FIELD | Return single-node graph instead of raising; let frontend decide how to display |
+| Full scan + `clear_openlineage_data` | Re-running populate without skip-clear destroys multi-hour catalog | Default to append mode; require explicit `--full-refresh` flag |
+| Full scan + QVCI disabled | DBC.ColumnsV returns NULL for view column types | Detect QVCI status at script start; display "—" in UI for unknown types |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Layout worker migration:** Database lineage layout calls `layoutGraph` via `useLayoutWorker` — verify DevTools shows no Long Tasks > 16ms during layout of 400+ node databases
-- [ ] **Cluster bounds pre-calculation:** All nodes in `layoutedNodes` have `width` and `height` set — verify `ClusterBackground` cluster boxes are correct from first render without resize flash
-- [ ] **Kahn sort fix:** `topoQueue.sort()` is not inside the while-loop — verify `layoutEngine.bench.ts` shows linear scaling from 100 to 400 nodes
-- [ ] **Cluster separation with non-contiguous groups:** Test a database that has both isolated tables and connected tables — verify cluster box width matches only the connected table extent, not the full combined extent
-- [ ] **`onlyRenderVisibleElements` compatibility:** Pan to a database cluster where all member tables are off-screen — verify cluster box remains visible and correct
-- [ ] **Direction change cancellation:** Rapidly change direction three times — verify only the final direction's layout is applied (no position flash from intermediate layouts)
-- [ ] **Isolated node grid placement:** Add a database with 20 isolated tables and 5 connected tables — verify isolated nodes appear below (or to the right of) the hierarchical section with no edge crossings through the grid
-- [ ] **Color stability:** Reload the database lineage page five times — verify the same database always gets the same cluster color
-- [ ] **Edge highlight performance:** Select a node with 100+ connected edges — verify the interaction response is < 100ms and React Profiler shows no full edge-list re-render
-
----
-
-## Recovery Strategies
-
-When pitfalls occur despite prevention, how to recover.
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Kahn sort-per-iteration degrading performance | LOW | Remove `sort()` from inside while-loop; sort only new candidates before push; validate with bench |
-| ClusterBackground resize flash | LOW | Pre-set `width`/`height` on layouted nodes before `setNodes`; one change in `layoutGraph` return value |
-| Mixed layout breaks `separateDatabaseClusters` | MEDIUM | Refactor to compute bounding box per (database, component) pair; add regression test with non-contiguous database |
-| `onlyRenderVisibleElements` hides cluster bounds | MEDIUM | Switch `ClusterBackground` to use pre-calculated layout dimensions instead of `nodeLookup`; remove dependency on React Flow store for bounds |
-| Main-thread layout jank on large databases | LOW | Wrap existing `layoutGraph(...)` call in `await workerApi.layout(...)` in `DatabaseLineageGraph.tsx`; worker already handles same API |
-| Grid and hierarchical nodes overlap with edge crossings | HIGH | Redesign grid placement to be strictly outside primary-axis extent; requires re-testing all layout configurations |
-| Non-deterministic database colors | LOW | Replace `index` counter with name-hash in `getColorForDatabase`; add test for color stability across reorders |
-| Direction change race condition causing position flash | LOW | Replace `cancelled` boolean with generation counter ref; one change in layout effect |
-| Edge highlight re-render storm | MEDIUM | Move highlight state from `style` to `className` on edges; add CSS rules for `.highlighted`/`.dimmed`; validate with React Profiler |
-
----
-
-## Pitfall-to-Phase Mapping
-
-How roadmap phases should address these pitfalls.
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| Kahn sort-per-iteration performance | Phase 1 (layout engine refactor) | `layoutEngine.bench.ts` shows linear scaling 100→400 nodes |
-| Cluster bounds from stale `measured` dimensions | Phase 1 (layout foundation) | Cluster boxes correct from first render; no resize flash on load |
-| `separateDatabaseClusters` breaks with non-contiguous groups | Phase 1 (before mixed layout) | Test database with isolated + connected tables; cluster box width correct |
-| `onlyRenderVisibleElements` hides cluster bounds | Phase 1 (layout foundation) | Pan to off-screen database; cluster box remains visible |
-| Main-thread layout blocks on 400+ nodes | Phase 1 (worker migration) | No Long Tasks > 16ms in DevTools during database lineage load |
-| ELK component-packing conflicts with custom separation | Phase 2 (mixed layout design) | Document invariant: ELK packing XOR `separateDatabaseClusters`, never both |
-| Grid placement causes edge crossings | Phase 2 (mixed layout implementation) | Visual inspection of database with isolated + connected tables; no edges cross grid cells |
-| Secondary-axis stacking creates excessively tall layers | Phase 2 (layout improvement) | No layer exceeds `maxNodesPerColumn` in secondary direction; configured via option |
-| `applySmartViewport` timeout unreliable for large graphs | Phase 1 (foundation) | `fitView` shows all nodes on initial load for 400-node database graph |
-| Direction change race condition | Phase 1 (layout foundation) | Rapid direction changes settle to correct final direction without position flash |
-| Non-deterministic database colors | Phase 1 (pre-existing bug fix) | Same database always gets same color across five reloads |
-| Edge highlight re-render storm | Phase 2 or 3 (performance) | Node click interaction < 100ms with 500+ edges; validated with React Profiler |
+- [ ] **System DB filter in place:** After full scan, query `SELECT DISTINCT DatabaseName FROM OL_DATASET` — verify no `DBC`, `SYS*`, or `TD_*` databases appear.
+- [ ] **Population performance validated:** Run population against full DBC with `EXPLAIN` first; confirm no correlated subquery plans; confirm no spool exhaustion on test run.
+- [ ] **Standalone table renders columns:** Navigate to a table with fields but no lineage — verify a single node card appears with all columns listed, not the "No Lineage Data Available" message.
+- [ ] **Standalone node viewport:** Standalone table should display at zoom 1.0 (approximately the same scale as a node in a multi-table graph), not zoomed to fill the screen.
+- [ ] **AssetBrowser completeness:** After full scan with 5,000+ datasets, the AssetBrowser should display all databases (not just the first 1000 alphabetically). Confirm by checking for databases that sort late alphabetically.
+- [ ] **No `DatasetNotFoundError` for populated tables:** Request the lineage API for a table that exists in `OL_DATASET` but has zero `OL_DATASET_FIELD` entries — confirm a 200 response with a single-node graph, not a 404.
+- [ ] **Re-run safety:** Run `populate_lineage.py` twice. Confirm the second run does not delete and re-populate from scratch unless `--full-refresh` is explicitly passed.
+- [ ] **Test isolation:** Run `database/tests/run_tests.py` after full catalog population — confirm all previously passing tests still pass (no count assertion failures from larger dataset).
 
 ---
 
 ## Sources
 
-**ELKjs Layout Algorithm and Configuration:**
-- [ELK Layout Options Reference](https://eclipse.dev/elk/reference/options.html) — `elk.separateConnectedComponents`, `elk.spacing.componentComponent`, `elk.algorithm: disco`
-- [ELK Layered Algorithm Reference](https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html) — Sugiyama algorithm phases
-- [ELK Separate Connected Components Option](https://eclipse.dev/elk/reference/options/org-eclipse-elk-separateConnectedComponents.html)
-- [React Flow Layouting Overview](https://reactflow.dev/learn/layouting/layouting) — ELKjs complexity warning; async requirement; dagre subflow limitations
+**Teradata System Database Exclusion:**
+- [Teradata Data Dictionary: List all tables in all databases](https://dataedo.com/kb/query/teradata/list-all-tables-in-all-databases) — provides canonical list of system databases to exclude from `DBC.TablesV` queries (verified 2025)
+- [System User DBC - Teradata Vantage Analytics Database](https://docs.teradata.com/r/Enterprise_IntelliFlex_VMware/Database-Administration/Databases-and-Users-in-Teradata-All-DBAs/The-System-Users/System-User-DBC) — official docs on DBC system user scope
 
-**React Flow Performance and Node Positioning:**
-- [React Flow Performance Guide](https://reactflow.dev/learn/advanced-use/performance) — unnecessary re-renders, memoization strategy, hidden property pattern
-- [React Flow initialize→measure→layout→render Discussion #2973](https://github.com/xyflow/xyflow/discussions/2973) — ResizeObserver timing issue, opacity:0 workaround, dimension uncertainty
-- [React Flow Layout Issue #991](https://github.com/xyflow/xyflow/issues/991) — layout with dynamic width/height values
-- [React Flow Large Node Count Discussion #4975](https://github.com/xyflow/xyflow/discussions/4975) — 80+ nodes with event handlers; CSS class pattern vs style updates
-- [React Flow `getNodesBounds` utility](https://reactflow.dev/api-reference/utils/get-nodes-bounds) — official API for bounding box calculation
+**Teradata Performance (Spool/Subqueries):**
+- [Teradata Spool Space 101: Understanding, Managing, and Troubleshooting](https://www.dwhpro.com/teradata-spool-space-no-more-spool-space/) — correlated subquery spool risks
+- [Correlated Subqueries - Teradata Documentation](https://docs.teradata.com/r/2_MC9vCtAJRlKle2Rpb0mA/ODWfNd~BHQoI4RhZ2zP9Xw) — official Teradata correlated subquery behavior and optimization
+- [Monte Carlo Teradata Integration Docs](https://docs.getmontecarlo.com/docs/teradata) — metadata scanning patterns for production Teradata systems; spool allocation recommendation for metadata collection accounts
 
-**Graph Layout Theory:**
-- [Topological Sorting - Wikipedia](https://en.wikipedia.org/wiki/Topological_sorting) — O(V+E) standard complexity for Kahn's algorithm
-- [Kahn's Algorithm - GeeksforGeeks](https://www.geeksforgeeks.org/dsa/topological-sorting-indegree-based-solution/) — standard O(V+E) implementation without sort inside loop
-- [Connected Components Grid Layout](https://cambridge-intelligence.com/layouts/) — grid-based isolated component packing
+**React Flow:**
+- [React Flow Performance Guide](https://reactflow.dev/learn/advanced-use/performance) — fitView behavior, node sizing, avoiding unnecessary re-renders
+- [React Flow FitViewOptions API](https://reactflow.dev/api-reference/types/fit-view-options) — `maxZoom` parameter for preventing over-zoom on single nodes
+- [React Flow Common Errors](https://reactflow.dev/learn/troubleshooting/common-errors) — container dimension requirements
 
 **Project-Specific Sources (Codebase):**
-- `lineage-ui/src/utils/graph/layoutEngine.ts` — `topoQueue.sort()` inside while-loop (Pitfall 1); `separateDatabaseClusters` bounding-box assumption (Pitfall 3); `topoSortDatabases` same sort-per-iteration issue
-- `lineage-ui/src/components/domain/LineageGraph/ClusterBackground.tsx` — `calculateClusterBounds` reads `node.measured` from `nodeLookup` (Pitfall 2, Pitfall 4); `padding = 60` constant matches `CLUSTER_BOX_PADDING` in layoutEngine
-- `lineage-ui/src/components/domain/LineageGraph/DatabaseLineageGraph.tsx` — calls `layoutGraph` on main thread (Pitfall 5); 150ms `applySmartViewport` timeout (Pitfall 8); `cancelled` boolean ref pattern (Pitfall 9)
-- `lineage-ui/src/components/domain/LineageGraph/AllDatabasesLineageGraph.tsx` — `onlyRenderVisibleElements={nodes.length > 30}` (Pitfall 4)
-- `lineage-ui/src/components/domain/LineageGraph/hooks/useDatabaseClusters.ts` — color assignment by iteration index (Pitfall 10)
-- `lineage-ui/src/components/domain/LineageGraph/hooks/useLayoutWorker.ts` — existing worker infrastructure available for database lineage layout migration
-- `lineage-ui/src/utils/graph/disableTransitions.ts` — `TRANSITION_THRESHOLD = 200`; existing mechanism for large-graph animation suppression
+- `database/scripts/populate/populate_lineage.py` — existing NOT EXISTS pattern (Pitfall 2); missing DatabaseName filter (Pitfall 1); clear_openlineage_data default (Pitfall 12)
+- `database/scripts/setup/setup_lineage_schema.py` — VARCHAR sizes for dataset_id (256), field_id (512) — verified safe at Teradata max identifier lengths (Pitfall 5)
+- `lineage-ui/src/components/domain/LineageGraph/LineageGraph.tsx` lines 679-706 — `hasNoLineageData` guard (Pitfall 3); ELK hang comment at line 279 (historical context for why guard was added)
+- `lineage-ui/src/components/domain/AssetBrowser/AssetBrowser.tsx` line 80 — hardcoded `limit: 1000` (Pitfall 4)
+- `lineage-api/services/lineage_service.py` lines 171-172 — `DatasetNotFoundError` for no-fields tables (Pitfall 6)
+- `CLAUDE.md` — QVCI requirement documentation; `DBC.ColumnsJQV` vs `DBC.ColumnsV` context (Pitfall 8)
 
 ---
-*Pitfalls research for: Adding mixed layout strategies (hierarchical + grid) to existing ELKjs + React Flow database lineage graph*
-*Researched: 2026-02-21*
-*Milestone: Database lineage graph layout improvement*
+*Pitfalls research for: Adding full system metadata scanning + standalone table rendering to existing Teradata column-level lineage app*
+*Researched: 2026-02-23*
+*Milestone: Complete metadata population and standalone table rendering*
