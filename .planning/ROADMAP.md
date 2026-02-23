@@ -7,6 +7,7 @@
 - ✅ **v3.0 Wildcard Expansion & Graph Enhancements** — Phases 7-13 (shipped 2026-02-19)
 - ✅ **v4.0 First-Time Load Performance** — Phases 14-18 (shipped 2026-02-21)
 - ✅ **v5.0 Database Lineage Layout** — Phases 19-21 (shipped 2026-02-22)
+- 🚧 **v6.0 Full System Catalog** — Phases 22-23 (in progress)
 
 ## Phases
 
@@ -80,6 +81,38 @@ See archive: `.planning/milestones/v5.0-ROADMAP.md`
 
 </details>
 
+### 🚧 v6.0 Full System Catalog (In Progress)
+
+**Milestone Goal:** Make every database, table, view, and column on the Teradata system browsable and renderable — even without lineage data.
+
+#### Phase 22: Metadata Population Foundation
+**Goal**: Every user database, table, view, and column is registered in OL_* tables and browsable in the Asset Browser — with system databases excluded and the browser capable of displaying the full catalog without truncation
+**Depends on**: Phase 21 (v5.0 complete)
+**Requirements**: POP-01, POP-02, BROW-01
+**Success Criteria** (what must be TRUE):
+  1. User can run the populate script and all user databases, tables, views, and columns appear in OL_* tables
+  2. Teradata system databases (DBC, SysAdmin, SYSLIB, Sys_Calendar, and others) do not appear in the Asset Browser or OL_DATASET after population
+  3. User can expand any database in the Asset Browser and see all its tables — with no silent truncation at 1000 items regardless of catalog size
+  4. The populate script is safe to re-run without destroying existing catalog data unless an explicit full-refresh flag is provided
+**Plans**: TBD
+
+Plans:
+- [ ] 22-01: TBD
+
+#### Phase 23: Standalone Table Rendering
+**Goal**: Tables with no lineage relationships render as a valid single-node graph with columns — not an error state — and users can distinguish lineage-connected tables from catalog-only tables in the Asset Browser
+**Depends on**: Phase 22 (populated OL_DATASET_FIELD required for column verification)
+**Requirements**: REND-01, REND-02, REND-03, BROW-02
+**Success Criteria** (what must be TRUE):
+  1. User can navigate to any table with no lineage data and see a single node card with its columns rendered in the graph view
+  2. User sees a "No lineage connections" informational banner (not an error) when viewing a table with zero lineage edges
+  3. The backend returns a valid `{nodes, edges}` response for tables with no lineage — never a 404 or error response
+  4. User can see a "has lineage" indicator per table in the Asset Browser, distinguishing tables with lineage connections from catalog-only tables
+**Plans**: TBD
+
+Plans:
+- [ ] 23-01: TBD
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -105,3 +138,5 @@ See archive: `.planning/milestones/v5.0-ROADMAP.md`
 | 19. Layout Engine Foundation | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 20. Mixed Layout Strategy | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 21. UX Polish | v5.0 | 1/1 | Complete | 2026-02-22 |
+| 22. Metadata Population Foundation | v6.0 | 0/TBD | Not started | - |
+| 23. Standalone Table Rendering | v6.0 | 0/TBD | Not started | - |

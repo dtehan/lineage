@@ -55,19 +55,19 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| POP-01 | — | Pending |
-| POP-02 | — | Pending |
-| REND-01 | — | Pending |
-| REND-02 | — | Pending |
-| REND-03 | — | Pending |
-| BROW-01 | — | Pending |
-| BROW-02 | — | Pending |
+| POP-01 | Phase 22 | Pending |
+| POP-02 | Phase 22 | Pending |
+| REND-01 | Phase 23 | Pending |
+| REND-02 | Phase 23 | Pending |
+| REND-03 | Phase 23 | Pending |
+| BROW-01 | Phase 22 | Pending |
+| BROW-02 | Phase 23 | Pending |
 
 **Coverage:**
 - v6.0 requirements: 7 total
-- Mapped to phases: 0
-- Unmapped: 7 ⚠️
+- Mapped to phases: 7
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-02-23*
-*Last updated: 2026-02-23 after initial definition*
+*Last updated: 2026-02-23 after roadmap creation*
