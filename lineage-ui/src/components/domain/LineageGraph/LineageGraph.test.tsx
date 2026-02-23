@@ -637,6 +637,129 @@ describe('LineageGraph Component', () => {
     });
   });
 
+  // TC-GRAPH-013: No lineage connections — inline banner + canvas still renders
+  describe('TC-GRAPH-013: No Lineage Connections Banner', () => {
+    it('renders no-lineage-banner when API returns edges: [] with nodes', async () => {
+      const noLineageWithFieldsData = {
+        datasetId: 'test.some_table',
+        graph: {
+          nodes: [
+            { id: 'test.some_table.col_a', type: 'field' as const, name: 'col_a', dataset: 'test.some_table' },
+            { id: 'test.some_table.col_b', type: 'field' as const, name: 'col_b', dataset: 'test.some_table' },
+          ],
+          edges: [],
+        },
+      };
+
+      vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue({
+        ...defaultQueryResult,
+        data: noLineageWithFieldsData,
+        isLoading: false,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>);
+
+      render(<LineageGraph datasetId="test.some_table" fieldName="_all" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('no-lineage-banner')).toBeInTheDocument();
+      });
+    });
+
+    it('no-lineage-banner contains "No lineage connections" text', async () => {
+      const noLineageData = {
+        datasetId: 'test.some_table',
+        graph: {
+          nodes: [
+            { id: 'test.some_table.col_a', type: 'field' as const, name: 'col_a', dataset: 'test.some_table' },
+          ],
+          edges: [],
+        },
+      };
+
+      vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue({
+        ...defaultQueryResult,
+        data: noLineageData,
+        isLoading: false,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>);
+
+      render(<LineageGraph datasetId="test.some_table" fieldName="_all" />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/No lineage connections/)).toBeInTheDocument();
+      });
+    });
+
+    it('ReactFlow canvas still renders when edges: [] (not replaced by full-screen empty state)', async () => {
+      const noLineageData = {
+        datasetId: 'test.some_table',
+        graph: {
+          nodes: [
+            { id: 'test.some_table.col_a', type: 'field' as const, name: 'col_a', dataset: 'test.some_table' },
+          ],
+          edges: [],
+        },
+      };
+
+      vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue({
+        ...defaultQueryResult,
+        data: noLineageData,
+        isLoading: false,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>);
+
+      render(<LineageGraph datasetId="test.some_table" fieldName="_all" />);
+
+      await waitFor(() => {
+        // Banner is present
+        expect(screen.getByTestId('no-lineage-banner')).toBeInTheDocument();
+        // ReactFlow canvas is also present (not replaced)
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
+      });
+    });
+
+    it('no-lineage-banner has role="status" for accessibility (not an error)', async () => {
+      const noLineageData = {
+        datasetId: 'test.some_table',
+        graph: {
+          nodes: [],
+          edges: [],
+        },
+      };
+
+      vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue({
+        ...defaultQueryResult,
+        data: noLineageData,
+        isLoading: false,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>);
+
+      render(<LineageGraph datasetId="test.some_table" fieldName="_all" />);
+
+      await waitFor(() => {
+        const banner = screen.getByTestId('no-lineage-banner');
+        expect(banner).toHaveAttribute('role', 'status');
+      });
+    });
+
+    it('no-lineage-banner is NOT shown when edges are present', async () => {
+      vi.mocked(useOpenLineageModule.useOpenLineageTableLineage).mockReturnValue({
+        ...defaultQueryResult,
+        data: mockLineageData,
+        isLoading: false,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageTableLineage>);
+
+      render(<LineageGraph datasetId="test-dataset-id" fieldName="_all" />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('react-flow')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId('no-lineage-banner')).not.toBeInTheDocument();
+    });
+  });
+
   // Per-stage timing display tests
   describe('Per-stage Timing Display', () => {
     it('ProgressBanner shows stage durations during full-depth fetch', async () => {

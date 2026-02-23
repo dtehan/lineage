@@ -27,7 +27,7 @@ import { DetailPanel, ColumnDetail, EdgeDetail } from './DetailPanel';
 import { Legend } from './Legend';
 import { LoadingProgress } from '../../common/LoadingProgress';
 import { useLoadingProgress, formatMs } from '../../../hooks/useLoadingProgress';
-import { Map, ChevronUp, ChevronDown } from 'lucide-react';
+import { Map, ChevronUp, ChevronDown, Info } from 'lucide-react';
 import { ClusterBackground, useDatabaseClustersFromNodes } from './ClusterBackground';
 import { LineageTableView } from './LineageTableView';
 import { LargeGraphWarning, LARGE_GRAPH_THRESHOLD } from './LargeGraphWarning';
@@ -675,35 +675,9 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
     );
   }
 
-  // Handle empty lineage data - check edges since root node is always included
+  // Handle empty lineage data - check edges since root node is always included.
+  // Used to render the inline informational banner alongside the canvas (not replace it).
   const hasNoLineageData = data && data.graph && data.graph.edges?.length === 0;
-  if (hasNoLineageData) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-slate-500">
-        <svg
-          className="w-16 h-16 mb-4 text-slate-300"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={1.5}
-            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-          />
-        </svg>
-        <h3 className="text-lg font-medium text-slate-700 mb-2">No Lineage Data Available</h3>
-        <p className="text-sm text-slate-500 text-center max-w-md">
-          No lineage relationships have been discovered for <span className="font-mono text-slate-600">table {datasetId}</span>.
-        </p>
-        <p className="text-sm text-slate-400 mt-2 text-center max-w-md">
-          This table's columns may not have any upstream or downstream dependencies, or lineage data hasn't been extracted yet.
-        </p>
-      </div>
-    );
-  }
 
   // Get selected details for panel
   // If table selection, get all columns from the table; otherwise just the selected column
@@ -762,6 +736,19 @@ function LineageGraphInner({ datasetId, fieldName }: LineageGraphInnerProps) {
         visible={!isTableView && isFetchingFullDepth}
         stageDurations={stageDurations}
       />
+
+      {/* No lineage connections informational banner — shown inline alongside canvas, not replacing it */}
+      {hasNoLineageData && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="no-lineage-banner"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-50 border-b border-blue-100 text-blue-700 text-sm"
+        >
+          <Info size={16} className="shrink-0" />
+          <span>No lineage connections found for this table. Showing columns only.</span>
+        </div>
+      )}
 
       {/* Post-render timing summary — subtle per-stage timing after graph fully loads */}
       {stage === 'complete' && Object.keys(stageDurations).length > 0 && (
