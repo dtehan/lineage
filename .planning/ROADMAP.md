@@ -7,7 +7,7 @@
 - ✅ **v3.0 Wildcard Expansion & Graph Enhancements** — Phases 7-13 (shipped 2026-02-19)
 - ✅ **v4.0 First-Time Load Performance** — Phases 14-18 (shipped 2026-02-21)
 - ✅ **v5.0 Database Lineage Layout** — Phases 19-21 (shipped 2026-02-22)
-- 🚧 **v6.0 Full System Catalog** — Phases 22-23 (in progress)
+- ✅ **v6.0 Full System Catalog** — Phases 22-23 (shipped 2026-02-23)
 
 ## Phases
 
@@ -81,7 +81,7 @@ See archive: `.planning/milestones/v5.0-ROADMAP.md`
 
 </details>
 
-### 🚧 v6.0 Full System Catalog (In Progress)
+### ✅ v6.0 Full System Catalog — SHIPPED 2026-02-23
 
 **Milestone Goal:** Make every database, table, view, and column on the Teradata system browsable and renderable — even without lineage data.
 
@@ -101,7 +101,7 @@ Plans:
 - [x] 22-02-PLAN.md — Backend API: GET /databases endpoint and database filter on datasets endpoint
 - [x] 22-03-PLAN.md — Frontend: AssetBrowser two-phase lazy loading (databases first, tables on expand)
 
-#### Phase 23: Standalone Table Rendering
+#### Phase 23: Standalone Table Rendering — completed 2026-02-23
 **Goal**: Tables with no lineage relationships render as a valid single-node graph with columns — not an error state — and users can distinguish lineage-connected tables from catalog-only tables in the Asset Browser
 **Depends on**: Phase 22 (populated OL_DATASET_FIELD required for column verification)
 **Requirements**: REND-01, REND-02, REND-03, BROW-02
@@ -113,8 +113,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 23-01-PLAN.md — Backend valid graph response + frontend inline informational banner for standalone tables
-- [ ] 23-02-PLAN.md — has_lineage indicator per table in Asset Browser (backend SQL + frontend badge)
+- [x] 23-01-PLAN.md — Backend valid graph response + frontend inline informational banner for standalone tables
+- [x] 23-02-PLAN.md — has_lineage indicator per table in Asset Browser (backend SQL + frontend badge)
 
 ## Progress
 
@@ -142,4 +142,4 @@ Plans:
 | 20. Mixed Layout Strategy | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 21. UX Polish | v5.0 | 1/1 | Complete | 2026-02-22 |
 | 22. Metadata Population Foundation | v6.0 | 3/3 | Complete | 2026-02-23 |
-| 23. Standalone Table Rendering | v6.0 | 0/2 | Not started | - |
+| 23. Standalone Table Rendering | v6.0 | 2/2 | Complete | 2026-02-23 |
