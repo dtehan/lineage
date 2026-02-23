@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 22 of 23 (Metadata Population Foundation)
-Plan: 1 of TBD in current phase
+Plan: 3 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-23 — completed 22-01 (SYSTEM_DATABASES exclusion, --full-refresh flag, pre-flight checks)
+Last activity: 2026-02-23 — completed 22-03 (AssetBrowser two-phase lazy loading: databases on mount, tables on expand)
 
 Progress:
 
@@ -54,6 +54,9 @@ Recent decisions affecting current work:
 - [Phase 22]: 43 Teradata system databases excluded from user catalog via SYSTEM_DATABASES frozenset with parameterised NOT IN clauses
 - [Phase 22]: Default populate_lineage.py run is safe (incremental via NOT EXISTS guards); --full-refresh required for destructive repopulation
 - [Phase 22]: QVCI check failure is a warning not a hard failure; pre-flight proceeds regardless to allow population of table columns
+- [Phase 22]: Tables fetched per-database with limit:500 on expand (not limit:1000 globally) — each database loads independently, eliminating silent truncation
+- [Phase 22]: Server-provided totalCount shown per-database before expand — accurate count without fetching datasets
+- [Phase 22]: Removed 13 speculative pagination tests that tested unimplemented pagination UI (pagination-info/prev/next testids never existed in component)
 
 ### Pending Todos
 
@@ -67,5 +70,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 22-01-PLAN.md (SYSTEM_DATABASES exclusion, --full-refresh flag, pre-flight checks)
+Stopped at: Completed 22-03-PLAN.md (AssetBrowser two-phase lazy loading: databases on mount, tables on expand)
 Resume file: None
