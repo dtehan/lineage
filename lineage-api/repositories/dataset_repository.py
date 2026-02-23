@@ -81,6 +81,31 @@ class DatasetRepository(BaseRepository):
                 for row in rows
             ]
 
+    def list_databases(self, namespace_id: str):
+        """List distinct database names with table/view counts from OL_DATASET."""
+        with self.connection.cursor() as cur:
+            cur.execute("""
+                SELECT
+                    TRIM(STRTOK(d."name", '.', 1)) AS database_name,
+                    SUM(CASE WHEN d.source_type = 'TABLE' THEN 1 ELSE 0 END) AS table_count,
+                    SUM(CASE WHEN d.source_type = 'VIEW' THEN 1 ELSE 0 END) AS view_count,
+                    COUNT(*) AS total_count
+                FROM OL_DATASET d
+                WHERE d.namespace_id = ?
+                GROUP BY 1
+                ORDER BY 1
+            """, [namespace_id])
+            rows = cur.fetchall()
+            return [
+                {
+                    "name": self._strip(row[0]) if row[0] else "",
+                    "tableCount": int(row[1]) if row[1] else 0,
+                    "viewCount": int(row[2]) if row[2] else 0,
+                    "totalCount": int(row[3]) if row[3] else 0,
+                }
+                for row in rows
+            ]
+
     def get_dataset(self, dataset_id: str):
         """
         Get a specific dataset with its fields.
@@ -154,7 +179,7 @@ class DatasetRepository(BaseRepository):
 
         return dataset
 
-    def list_datasets(self, namespace_id: str, limit: int = 100, offset: int = 0):
+    def list_datasets(self, namespace_id: str, limit: int = 100, offset: int = 0, database_filter: str = None):
         """
         List datasets in a namespace with pagination.
 
@@ -162,6 +187,8 @@ class DatasetRepository(BaseRepository):
             namespace_id: Namespace identifier
             limit: Maximum number of datasets to return
             offset: Number of datasets to skip
+            database_filter: Optional database name to filter by (matches datasets
+                             whose name starts with "{database_filter}.")
 
         Returns:
             tuple: (datasets list, total count)
@@ -169,17 +196,31 @@ class DatasetRepository(BaseRepository):
                          description, sourceType, createdAt, updatedAt
                 total: Total number of datasets in namespace
         """
+        extra_where = ""
+        extra_params = []
+        if database_filter:
+            extra_where = ' AND d."name" LIKE ?'
+            extra_params = [f"{database_filter}.%"]
+
         with self.connection.cursor() as cur:
             # Get total count
-            cur.execute("""
-                SELECT COUNT(*)
-                FROM OL_DATASET
-                WHERE namespace_id = ?
-            """, [namespace_id])
+            if database_filter:
+                cur.execute("""
+                    SELECT COUNT(*)
+                    FROM OL_DATASET d
+                    WHERE d.namespace_id = ?
+                      AND d."name" LIKE ?
+                """, [namespace_id, f"{database_filter}.%"])
+            else:
+                cur.execute("""
+                    SELECT COUNT(*)
+                    FROM OL_DATASET
+                    WHERE namespace_id = ?
+                """, [namespace_id])
             total = cur.fetchone()[0] or 0
 
             # Get datasets with pagination using ROW_NUMBER (Teradata native)
-            cur.execute("""
+            cur.execute(f"""
                 SELECT dataset_id, dataset_name, namespace_id, namespace_uri,
                        description, source_type, created_at, updated_at
                 FROM (
@@ -195,10 +236,10 @@ class DatasetRepository(BaseRepository):
                         ROW_NUMBER() OVER (ORDER BY d."name") as rn
                     FROM OL_DATASET d
                     JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
-                    WHERE d.namespace_id = ?
+                    WHERE d.namespace_id = ?{extra_where}
                 ) t
                 WHERE rn > ? AND rn <= ?
-            """, [namespace_id, offset, offset + limit])
+            """, [namespace_id] + extra_params + [offset, offset + limit])
 
             rows = cur.fetchall()
             datasets = [
