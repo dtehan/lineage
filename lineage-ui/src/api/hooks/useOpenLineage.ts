@@ -7,6 +7,7 @@ import type {
   DatabaseLineageResponse,
   NamespacesResponse,
   DatasetsResponse,
+  DatabasesResponse,
   DatasetSearchResponse,
   DatasetStatisticsResponse,
   DatasetDDLResponse,
@@ -20,6 +21,7 @@ export const openLineageKeys = {
   all: ['openlineage'] as const,
   namespaces: () => [...openLineageKeys.all, 'namespaces'] as const,
   namespace: (id: string) => [...openLineageKeys.namespaces(), id] as const,
+  databases: (namespaceId: string) => [...openLineageKeys.all, 'databases', namespaceId] as const,
   datasets: (namespaceId: string) => [...openLineageKeys.all, 'datasets', namespaceId] as const,
   datasetsPaginated: (namespaceId: string, params: OpenLineagePaginationParams) =>
     [...openLineageKeys.datasets(namespaceId), params] as const,
@@ -51,6 +53,20 @@ export function useOpenLineageNamespace(
   return useQuery({
     queryKey: openLineageKeys.namespace(namespaceId),
     queryFn: () => openLineageApi.getNamespace(namespaceId),
+    enabled: !!namespaceId,
+    ...options,
+  });
+}
+
+// Database hooks
+
+export function useOpenLineageDatabases(
+  namespaceId: string,
+  options?: Omit<UseQueryOptions<DatabasesResponse, Error>, 'queryKey' | 'queryFn'>
+) {
+  return useQuery({
+    queryKey: openLineageKeys.databases(namespaceId),
+    queryFn: () => openLineageApi.getDatabases(namespaceId),
     enabled: !!namespaceId,
     ...options,
   });

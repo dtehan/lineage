@@ -6,6 +6,7 @@ import type {
   DatabaseLineageResponse,
   NamespacesResponse,
   DatasetsResponse,
+  DatabasesResponse,
   DatasetSearchResponse,
   DatasetStatisticsResponse,
   DatasetDDLResponse,
@@ -49,6 +50,18 @@ export const openLineageApi = {
   async getNamespace(namespaceId: string, options?: { refresh?: boolean }): Promise<OpenLineageNamespace> {
     const response = await apiClientV2.get<OpenLineageNamespace>(
       `/api/v2/openlineage/namespaces/${encodeURIComponent(namespaceId)}`,
+      { params: options?.refresh ? { refresh: 'true' } : undefined }
+    );
+    return response.data;
+  },
+
+  // Databases (summary list with counts)
+  async getDatabases(
+    namespaceId: string,
+    options?: { refresh?: boolean }
+  ): Promise<DatabasesResponse> {
+    const response = await apiClientV2.get<DatabasesResponse>(
+      `/api/v2/openlineage/namespaces/${encodeURIComponent(namespaceId)}/databases`,
       { params: options?.refresh ? { refresh: 'true' } : undefined }
     );
     return response.data;

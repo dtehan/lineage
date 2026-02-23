@@ -91,6 +91,18 @@ export interface NamespacesResponse {
   namespaces: OpenLineageNamespace[];
 }
 
+export interface DatabaseSummary {
+  name: string;
+  tableCount: number;
+  viewCount: number;
+  totalCount: number;
+}
+
+export interface DatabasesResponse {
+  databases: DatabaseSummary[];
+  total: number;
+}
+
 export interface DatasetsResponse {
   datasets: OpenLineageDataset[];
   total: number;
@@ -190,6 +202,7 @@ export interface GraphReloadResponse {
 export interface OpenLineagePaginationParams {
   limit?: number;
   offset?: number;
+  database?: string;
 }
 
 // Impact Analysis types (aligned with /api/v2/openlineage/impact endpoint)
