@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 22 of 23 (Metadata Population Foundation)
-Plan: 2 of TBD in current phase
+Plan: 1 of TBD in current phase
 Status: In progress
-Last activity: 2026-02-23 — completed 22-02 (databases endpoint and dataset filter)
+Last activity: 2026-02-23 — completed 22-01 (SYSTEM_DATABASES exclusion, --full-refresh flag, pre-flight checks)
 
 Progress:
 
@@ -51,6 +51,9 @@ Recent decisions affecting current work:
 - [v6.0 Research]: Phase 22 pre-flight required before any scan: verify QVCI status (`SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0`), validate LEFT JOIN IS NULL plan with EXPLAIN, confirm system DB exclusion list covers target system's DBC.DatabasesV output
 - [Phase 22]: Route ordering: /namespaces/<id>/databases placed before /datasets/<path:id> wildcard to prevent Flask routing conflict
 - [Phase 22]: LIKE pattern uses '{database_filter}.%' dot suffix for exact database-name prefix matching, not substring matching
+- [Phase 22]: 43 Teradata system databases excluded from user catalog via SYSTEM_DATABASES frozenset with parameterised NOT IN clauses
+- [Phase 22]: Default populate_lineage.py run is safe (incremental via NOT EXISTS guards); --full-refresh required for destructive repopulation
+- [Phase 22]: QVCI check failure is a warning not a hard failure; pre-flight proceeds regardless to allow population of table columns
 
 ### Pending Todos
 
@@ -64,5 +67,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Completed 22-02-PLAN.md (databases endpoint and dataset filter)
+Stopped at: Completed 22-01-PLAN.md (SYSTEM_DATABASES exclusion, --full-refresh flag, pre-flight checks)
 Resume file: None
