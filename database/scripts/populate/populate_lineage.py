@@ -139,8 +139,6 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
         FROM DBC.TablesV
         WHERE TableKind IN ('T', 'V', 'O')
           AND DatabaseName NOT IN ({placeholders})
-          AND TableName NOT LIKE 'LIN_%'
-          AND TableName NOT LIKE 'OL_%'
           AND NOT EXISTS (
               SELECT 1 FROM {DATABASE}.OL_DATASET od
               WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
@@ -223,9 +221,7 @@ def populate_openlineage_fields(cursor, namespace_id: str):
             c.Nullable AS nullable,
             CURRENT_TIMESTAMP(0) AS created_at
         FROM DBC.ColumnsV c
-        WHERE c.TableName NOT LIKE 'LIN_%'
-          AND c.TableName NOT LIKE 'OL_%'
-          AND TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
+        WHERE TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
           AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
           AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
           AND c.DatabaseName NOT IN ({placeholders})
