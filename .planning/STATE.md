@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 ## Current Position
 
 Phase: 23 of 23 (Standalone Table Rendering)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-02-23 — Phase 22 complete (3/3 plans), verified passed (12/12 must-haves)
+Plan: 2 of TBD in current phase
+Status: In progress
+Last activity: 2026-02-23 — Phase 23 plan 02 complete: has-lineage indicator in Asset Browser
 
 Progress:
 
@@ -27,7 +27,7 @@ v6.0: █████░░░░░ 50% (1/2 phases)
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 45 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 5, v6.0: 3)
+- Total plans completed: 46 (v1.0: 12, v2.0: 8, v3.0: 7, v4.0: 9, draggable-minimap: 1, v5.0: 5, v6.0: 4)
 
 **By Milestone:**
 
@@ -39,7 +39,7 @@ v6.0: █████░░░░░ 50% (1/2 phases)
 | v4.0 First-Time Load | 5 | 9 | Shipped 2026-02-21 |
 | Draggable Minimap Viewport | 1 | 1 | Complete 2026-02-22 |
 | v5.0 Database Lineage Layout | 3 | 5 | Shipped 2026-02-22 |
-| v6.0 Full System Catalog | 2 | 3 | In progress |
+| v6.0 Full System Catalog | 2 | 4 | In progress |
 
 ## Accumulated Context
 
@@ -57,6 +57,9 @@ Recent decisions affecting current work:
 - [Phase 22]: Tables fetched per-database with limit:500 on expand (not limit:1000 globally) — each database loads independently, eliminating silent truncation
 - [Phase 22]: Server-provided totalCount shown per-database before expand — accurate count without fetching datasets
 - [Phase 22]: Removed 13 speculative pagination tests that tested unimplemented pagination UI (pagination-info/prev/next testids never existed in component)
+- [Phase 23-02]: has_lineage uses CASE WHEN EXISTS (SELECT 1 FROM OL_COLUMN_LINEAGE cl WHERE TRIM(cl.source_dataset) = TRIM(d.name) OR TRIM(cl.target_dataset) = TRIM(d.name)) — TRIM for Teradata CHAR padding
+- [Phase 23-02]: hasLineage is optional (?) in TypeScript type — endpoints not returning it default to undefined; strict === true prevents indicator showing for undefined
+- [Phase 23-02]: Indicator positioned after table name inside DatasetItem button, wrapped in Tooltip with 'Has lineage connections'
 
 ### Pending Todos
 
@@ -70,5 +73,5 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-23
-Stopped at: Phase 22 complete — all 3 plans executed, verification passed. Phase 23 ready to plan.
+Stopped at: Phase 23 plan 02 complete — has-lineage indicator added to Asset Browser (2 tasks, 4 files, all tests pass).
 Resume file: None
