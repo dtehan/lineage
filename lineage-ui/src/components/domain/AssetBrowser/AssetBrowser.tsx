@@ -291,6 +291,15 @@ function DatasetItem({ dataset, isExpanded, onToggle }: DatasetItemProps) {
         >
           <AssetTypeIcon sourceType={dataset.sourceType} />
           <span className="text-sm text-slate-700">{tableName}</span>
+          {dataset.hasLineage === true && (
+            <Tooltip content="Has lineage connections" position="right">
+              <span
+                className="ml-1.5 w-2 h-2 rounded-full bg-blue-500 shrink-0 inline-block"
+                data-testid="has-lineage-indicator"
+                aria-label="Has lineage connections"
+              />
+            </Tooltip>
+          )}
         </button>
       </div>
       {isExpanded && (

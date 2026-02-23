@@ -37,6 +37,13 @@ const mockSingleDbDatasets = [
   { id: 'ds-2', namespace: 'ns-1', name: 'sales_db.customers', sourceType: 'table', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
 ];
 
+// Datasets with hasLineage variations for indicator tests
+const mockDatasetsWithLineageIndicators = [
+  { id: 'ds-1', namespace: 'ns-1', name: 'sales_db.orders', sourceType: 'table', hasLineage: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: 'ds-2', namespace: 'ns-1', name: 'sales_db.customers', sourceType: 'table', hasLineage: false, createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+  { id: 'ds-3', namespace: 'ns-1', name: 'sales_db.catalog_only', sourceType: 'table', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
+];
+
 // Single database with mixed asset types
 const mockDatasetsWithViews = [
   { id: 'ds-1', namespace: 'ns-1', name: 'sales_db.orders', sourceType: 'table', createdAt: '2024-01-01', updatedAt: '2024-01-01' },
@@ -353,6 +360,108 @@ describe('AssetBrowser Component', () => {
       await waitFor(() => {
         expect(screen.getByTestId('materialized-view-icon')).toBeInTheDocument();
       });
+    });
+  });
+
+  // TC-COMP-033: Has Lineage Indicator
+  describe('TC-COMP-033: Has Lineage Indicator', () => {
+    it('shows blue dot indicator for datasets with hasLineage=true', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+        data: { datasets: mockDatasetsWithLineageIndicators, total: mockDatasetsWithLineageIndicators.length },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+      render(<AssetBrowser />);
+
+      const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+      await user.click(expandDbButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('orders')).toBeInTheDocument();
+      });
+
+      // Only the dataset with hasLineage=true should have the indicator
+      const indicators = screen.getAllByTestId('has-lineage-indicator');
+      expect(indicators).toHaveLength(1);
+    });
+
+    it('does not show indicator for datasets with hasLineage=false', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+        data: { datasets: [{ id: 'ds-2', namespace: 'ns-1', name: 'sales_db.customers', sourceType: 'table', hasLineage: false, createdAt: '2024-01-01', updatedAt: '2024-01-01' }], total: 1 },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+      render(<AssetBrowser />);
+
+      const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+      await user.click(expandDbButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('customers')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId('has-lineage-indicator')).not.toBeInTheDocument();
+    });
+
+    it('does not show indicator for datasets with no hasLineage field (undefined)', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+        data: { datasets: [{ id: 'ds-3', namespace: 'ns-1', name: 'sales_db.catalog_only', sourceType: 'table', createdAt: '2024-01-01', updatedAt: '2024-01-01' }], total: 1 },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+      render(<AssetBrowser />);
+
+      const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+      await user.click(expandDbButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('catalog_only')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByTestId('has-lineage-indicator')).not.toBeInTheDocument();
+    });
+
+    it('indicator has correct aria-label for accessibility', async () => {
+      const user = userEvent.setup();
+
+      vi.mocked(useOpenLineageModule.useOpenLineageDatasets).mockReturnValue({
+        data: { datasets: [{ id: 'ds-1', namespace: 'ns-1', name: 'sales_db.orders', sourceType: 'table', hasLineage: true, createdAt: '2024-01-01', updatedAt: '2024-01-01' }], total: 1 },
+        isLoading: false,
+        isFetching: false,
+        isError: false,
+        error: null,
+        isSuccess: true,
+      } as ReturnType<typeof useOpenLineageModule.useOpenLineageDatasets>);
+
+      render(<AssetBrowser />);
+
+      const expandDbButton = screen.getByRole('button', { name: /expand database/i });
+      await user.click(expandDbButton);
+
+      await waitFor(() => {
+        expect(screen.getByText('orders')).toBeInTheDocument();
+      });
+
+      const indicator = screen.getByTestId('has-lineage-indicator');
+      expect(indicator).toHaveAttribute('aria-label', 'Has lineage connections');
     });
   });
 });

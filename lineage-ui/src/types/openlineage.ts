@@ -15,6 +15,7 @@ export interface OpenLineageDataset {
   name: string;
   description?: string;
   sourceType?: string;
+  hasLineage?: boolean;  // Whether this dataset has lineage connections in OL_COLUMN_LINEAGE
   fields?: OpenLineageField[];
   createdAt: string;
   updatedAt: string;
