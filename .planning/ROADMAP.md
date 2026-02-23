@@ -110,10 +110,11 @@ Plans:
   2. User sees a "No lineage connections" informational banner (not an error) when viewing a table with zero lineage edges
   3. The backend returns a valid `{nodes, edges}` response for tables with no lineage — never a 404 or error response
   4. User can see a "has lineage" indicator per table in the Asset Browser, distinguishing tables with lineage connections from catalog-only tables
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 23-01: TBD
+- [ ] 23-01-PLAN.md — Backend valid graph response + frontend inline informational banner for standalone tables
+- [ ] 23-02-PLAN.md — has_lineage indicator per table in Asset Browser (backend SQL + frontend badge)
 
 ## Progress
 
@@ -141,4 +142,4 @@ Plans:
 | 20. Mixed Layout Strategy | v5.0 | 2/2 | Complete | 2026-02-22 |
 | 21. UX Polish | v5.0 | 1/1 | Complete | 2026-02-22 |
 | 22. Metadata Population Foundation | v6.0 | 3/3 | Complete | 2026-02-23 |
-| 23. Standalone Table Rendering | v6.0 | 0/TBD | Not started | - |
+| 23. Standalone Table Rendering | v6.0 | 0/2 | Not started | - |
