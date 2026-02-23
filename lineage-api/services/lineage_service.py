@@ -169,7 +169,15 @@ class LineageService:
         # Get all fields for this dataset
         fields = self.dataset_repo.get_dataset_fields(dataset_id)
         if not fields:
-            raise DatasetNotFoundError(f"No fields found for dataset: {dataset_id}")
+            # Dataset exists in catalog but has no fields populated — valid state, not an error.
+            # Return a valid empty graph so the frontend can render the informational banner.
+            return {
+                "datasetId": dataset_id,
+                "graph": {
+                    "nodes": [],
+                    "edges": []
+                }
+            }
 
         nodes = {}
         edges = []
