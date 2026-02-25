@@ -42,7 +42,7 @@ OPENLINEAGE_TRANSFORMATION_MAPPING = {
 
 # Teradata system databases to exclude from user catalog population
 SYSTEM_DATABASES = frozenset({
-    'All', 'Crashdumps', 'DBC', 'dbcmngr', 'Default', 'DemoNow_Monitor',
+    'All', 'Crashdumps', 'dbcmngr', 'Default', 'DemoNow_Monitor',
     'External_AP', 'EXTUSER', 'GLOBAL_FUNCTIONS', 'LockLogShredder', 'PUBLIC',
     'SQLJ', 'Sys_Calendar', 'SysAdmin', 'SYSBAR', 'SYSJDBC', 'SYSLIB',
     'SYSSPATIAL', 'SystemFe', 'SYSUDTLIB', 'SYSUIF',
@@ -151,12 +151,15 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
 
 
 def populate_openlineage_fields(cursor, namespace_id: str):
-    """Populate OL_DATASET_FIELD from DBC.ColumnsV using INSERT...SELECT.
+    """Populate OL_DATASET_FIELD from DBC.ColumnsJQV using INSERT...SELECT.
 
-    Note: ColumnsV may return NULL for view column types. This is acceptable for
-    now as we focus on table columns. View column types can be enhanced later.
+    Uses DBC.ColumnsJQV instead of DBC.ColumnsV because ColumnsJQV provides
+    complete column type information for both tables AND views. DBC.ColumnsV
+    returns NULL for view column types because view column types are derived
+    at runtime from the underlying SQL. ColumnsJQV requires QVCI to be enabled
+    (Teradata 16.0+). If QVCI is disabled, the pre-flight check will warn.
     """
-    print("\n--- Populating OL_DATASET_FIELD from DBC.ColumnsV ---")
+    print("\n--- Populating OL_DATASET_FIELD from DBC.ColumnsJQV ---")
 
     placeholders = _system_db_placeholders()
     # Use INSERT...SELECT with SQL-based type conversion
@@ -220,7 +223,7 @@ def populate_openlineage_fields(cursor, namespace_id: str):
             c.ColumnId AS ordinal_position,
             c.Nullable AS nullable,
             CURRENT_TIMESTAMP(0) AS created_at
-        FROM DBC.ColumnsV c
+        FROM DBC.ColumnsJQV c
         WHERE TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
           AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
           AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
@@ -658,7 +661,7 @@ DBQL Requirements:
         print(f"  - 1 namespace")
         if not args.lineage_only:
             print(f"  - ~N datasets from DBC.TablesV")
-            print(f"  - ~N fields from DBC.ColumnsV")
+            print(f"  - ~N fields from DBC.ColumnsJQV")
         if use_dbql:
             print(f"  - Column lineage from DBQL tables")
         else:
