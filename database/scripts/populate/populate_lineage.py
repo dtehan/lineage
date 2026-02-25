@@ -40,29 +40,6 @@ OPENLINEAGE_TRANSFORMATION_MAPPING = {
     "FILTER": ("INDIRECT", "FILTER"),
 }
 
-# Teradata system databases to exclude from user catalog population
-SYSTEM_DATABASES = frozenset({
-    'All', 'Crashdumps', 'dbcmngr', 'Default', 'DemoNow_Monitor',
-    'External_AP', 'EXTUSER', 'GLOBAL_FUNCTIONS', 'LockLogShredder', 'PUBLIC',
-    'SQLJ', 'Sys_Calendar', 'SysAdmin', 'SYSBAR', 'SYSJDBC', 'SYSLIB',
-    'SYSSPATIAL', 'SystemFe', 'SYSUDTLIB', 'SYSUIF',
-    'TD_ANALYTICS_DB', 'TD_SERVER_DB', 'TD_SYSFNLIB', 'TD_SYSGPL', 'TD_SYSXML',
-    'TDaaS_BAR', 'TDaaS_DB', 'TDaaS_Maint', 'TDaaS_Monitor', 'TDaaS_Support',
-    'TDaaS_TDBCMgmt1', 'TDaaS_TDBCMgmt2', 'TDBCMgmt',
-    'TDMaps', 'TDPUSER', 'TDQCD', 'TDStats', 'tdwm',
-    'mldb', 'system', 'tapidb', 'val',
-})
-
-
-def _system_db_exclusion_params() -> list:
-    """Return sorted list of system database names for parameterised queries."""
-    return sorted(SYSTEM_DATABASES)
-
-
-def _system_db_placeholders() -> str:
-    """Return comma-separated ? placeholders for SYSTEM_DATABASES."""
-    return ', '.join('?' * len(SYSTEM_DATABASES))
-
 
 def map_transformation_type(current_type: str) -> tuple:
     """Map current transformation type to OpenLineage (type, subtype) tuple."""
@@ -120,7 +97,6 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
     """Populate OL_DATASET from DBC.TablesV using INSERT...SELECT."""
     print("\n--- Populating OL_DATASET from DBC.TablesV ---")
 
-    placeholders = _system_db_placeholders()
     # Use INSERT...SELECT to keep data in database
     cursor.execute(f"""
         INSERT INTO {DATABASE}.OL_DATASET
@@ -138,12 +114,11 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
             'Y' AS is_active
         FROM DBC.TablesV
         WHERE TableKind IN ('T', 'V', 'O')
-          AND DatabaseName NOT IN ({placeholders})
           AND NOT EXISTS (
               SELECT 1 FROM {DATABASE}.OL_DATASET od
               WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
           )
-    """, [namespace_id, namespace_id] + _system_db_exclusion_params() + [namespace_id])
+    """, [namespace_id, namespace_id, namespace_id])
 
     count = cursor.rowcount
     print(f"  Created {count} datasets")
@@ -200,8 +175,7 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
                 ELSE COALESCE(TRIM(c.ColumnType), 'UNKNOWN')
             END"""
 
-    placeholders = _system_db_placeholders()
-    params = [namespace_id, namespace_id] + _system_db_exclusion_params() + [namespace_id]
+    params = [namespace_id, namespace_id, namespace_id]
 
     def _insert_fields(source_view, table_kinds):
         """Insert fields from a DBC columns view for specific table kinds."""
@@ -222,7 +196,6 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
             WHERE TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
               AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
               AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
-              AND c.DatabaseName NOT IN ({placeholders})
               AND EXISTS (
                   SELECT 1 FROM DBC.TablesV t
                   WHERE t.DatabaseName = c.DatabaseName
@@ -443,7 +416,7 @@ def run_preflight_checks(cursor) -> tuple:
 
     Checks:
       1. QVCI status: verifies DBC.ColumnsJQV is accessible (requires QVCI enabled)
-      2. User DB coverage: counts user databases not in SYSTEM_DATABASES
+      2. DB coverage: counts total databases visible in DBC.DatabasesV
 
     Returns:
         Tuple of (all_checks_passed, qvci_available).
@@ -468,19 +441,15 @@ def run_preflight_checks(cursor) -> tuple:
         # QVCI being disabled is a warning, not a hard failure
         checks_passed += 1
 
-    # Check 2: User DB coverage
-    placeholders = _system_db_placeholders()
+    # Check 2: DB coverage
     try:
-        cursor.execute(
-            f"SELECT COUNT(*) FROM DBC.DatabasesV WHERE DatabaseName NOT IN ({placeholders})",
-            _system_db_exclusion_params()
-        )
+        cursor.execute("SELECT COUNT(*) FROM DBC.DatabasesV")
         row = cursor.fetchone()
-        user_db_count = row[0] if row else 0
-        print(f"[OK] User DB coverage: {user_db_count} user databases found (excluding {len(SYSTEM_DATABASES)} system databases)")
+        db_count = row[0] if row else 0
+        print(f"[OK] DB coverage: {db_count} databases found")
         checks_passed += 1
     except Exception as e:
-        print(f"[SKIP] DBC.DatabasesV not accessible -- skipping user DB coverage check ({e})")
+        print(f"[SKIP] DBC.DatabasesV not accessible -- skipping DB coverage check ({e})")
         # Not accessible is a skip, not a hard failure
 
     if checks_failed == 0:
@@ -663,7 +632,7 @@ DBQL Requirements:
         print("\nMode: full refresh (clearing existing data first)")
     else:
         print("\nMode: incremental (preserving existing data)")
-    print(f"System DB exclusion: {len(SYSTEM_DATABASES)} databases excluded")
+    print("System DB exclusion: none (all databases included)")
 
     # Get namespace
     namespace_uri = get_openlineage_namespace()

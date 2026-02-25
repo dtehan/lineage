@@ -316,15 +316,8 @@ class ViewLineageExtractor:
         import sqlglot
         from sqlglot import exp
 
-        # Normalize REPLACE VIEW -> CREATE VIEW
-        # Teradata stores view definitions as "REPLACE VIEW ..." in RequestText
-        normalized_sql = re.sub(
-            r'^\s*REPLACE\s+VIEW',
-            'CREATE VIEW',
-            view_sql,
-            count=1,
-            flags=re.IGNORECASE
-        )
+        # Normalize Teradata-specific SQL constructs that sqlglot cannot parse
+        normalized_sql = self._normalize_teradata_sql(view_sql)
 
         # Parse with Teradata dialect, fallback to generic
         parsed = None
@@ -512,6 +505,31 @@ class ViewLineageExtractor:
         """Check if an expression contains any function calls."""
         from sqlglot import exp
         return any(True for _ in expr.find_all(exp.Func))
+
+    @staticmethod
+    def _normalize_teradata_sql(view_sql: str) -> str:
+        """Normalize Teradata-specific SQL constructs for sqlglot parsing.
+
+        Handles constructs that sqlglot's Teradata dialect cannot parse:
+        - REPLACE VIEW -> CREATE VIEW
+        - LOCKING clauses (named table, ROW, TABLE variants)
+        - (TITLE 'xxx') column attributes
+        - (NAMED "xxx") column attributes
+        """
+        s = re.sub(
+            r'^\s*REPLACE\s+VIEW', 'CREATE VIEW',
+            view_sql, count=1, flags=re.IGNORECASE
+        )
+        # Strip LOCKING clauses: LOCKING {ROW|TABLE|db.tbl} FOR {ACCESS|READ|...}
+        s = re.sub(r'LOCKING\s+\S+\s+FOR\s+\w+\s*', '', s, flags=re.IGNORECASE)
+        # Strip (TITLE 'xxx') with optional NAMED
+        s = re.sub(
+            r"\(\s*TITLE\s+'[^']*'\s*(?:,\s*NAMED\s+\"[^\"]*\"\s*)?\)",
+            '', s, flags=re.IGNORECASE
+        )
+        # Strip standalone (NAMED "xxx")
+        s = re.sub(r'\(\s*NAMED\s+"[^"]*"\s*\)', '', s, flags=re.IGNORECASE)
+        return s
 
     def _expand_star_lineage(
         self,
