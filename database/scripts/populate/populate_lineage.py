@@ -42,7 +42,7 @@ OPENLINEAGE_TRANSFORMATION_MAPPING = {
 
 # Teradata system databases to exclude from user catalog population
 SYSTEM_DATABASES = frozenset({
-    'All', 'Crashdumps', 'DBC', 'dbcmngr', 'Default', 'DemoNow_Monitor',
+    'All', 'Crashdumps', 'dbcmngr', 'Default', 'DemoNow_Monitor',
     'External_AP', 'EXTUSER', 'GLOBAL_FUNCTIONS', 'LockLogShredder', 'PUBLIC',
     'SQLJ', 'Sys_Calendar', 'SysAdmin', 'SYSBAR', 'SYSJDBC', 'SYSLIB',
     'SYSSPATIAL', 'SystemFe', 'SYSUDTLIB', 'SYSUIF',
