@@ -150,29 +150,16 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
     return count
 
 
-def populate_openlineage_fields(cursor, namespace_id: str):
-    """Populate OL_DATASET_FIELD from DBC.ColumnsJQV using INSERT...SELECT.
+def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool = False):
+    """Populate OL_DATASET_FIELD from DBC views using INSERT...SELECT.
 
-    Uses DBC.ColumnsJQV instead of DBC.ColumnsV because ColumnsJQV provides
-    complete column type information for both tables AND views. DBC.ColumnsV
-    returns NULL for view column types because view column types are derived
-    at runtime from the underlying SQL. ColumnsJQV requires QVCI to be enabled
-    (Teradata 16.0+). If QVCI is disabled, the pre-flight check will warn.
+    Tables: Uses DBC.ColumnsV (always has complete column type information).
+    Views: Uses DBC.ColumnsJQV if QVCI is enabled (provides view column types),
+           otherwise uses DBC.ColumnsV (column types will be UNKNOWN for views
+           since DBC.ColumnsV returns NULL for view column types).
     """
-    print("\n--- Populating OL_DATASET_FIELD from DBC.ColumnsJQV ---")
-
-    placeholders = _system_db_placeholders()
-    # Use INSERT...SELECT with SQL-based type conversion
-    cursor.execute(f"""
-        INSERT INTO {DATABASE}.OL_DATASET_FIELD
-        (field_id, dataset_id, field_name, field_type, field_description,
-         ordinal_position, nullable, created_at)
-        SELECT
-            ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName) AS field_id,
-            ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) AS dataset_id,
-            TRIM(c.ColumnName) AS field_name,
-            CASE
-                -- Simple type mappings
+    # SQL CASE for mapping Teradata column type codes to readable names
+    type_mapping = """CASE
                 WHEN TRIM(c.ColumnType) = 'I' THEN 'INTEGER'
                 WHEN TRIM(c.ColumnType) = 'I1' THEN 'BYTEINT'
                 WHEN TRIM(c.ColumnType) = 'I2' THEN 'SMALLINT'
@@ -186,7 +173,6 @@ def populate_openlineage_fields(cursor, namespace_id: str):
                 WHEN TRIM(c.ColumnType) = 'N' THEN 'NUMBER'
                 WHEN TRIM(c.ColumnType) = 'AN' THEN 'ARRAY'
                 WHEN TRIM(c.ColumnType) = 'JN' THEN 'JSON'
-                -- Interval types
                 WHEN TRIM(c.ColumnType) = 'DY' THEN 'INTERVAL DAY'
                 WHEN TRIM(c.ColumnType) = 'DH' THEN 'INTERVAL DAY TO HOUR'
                 WHEN TRIM(c.ColumnType) = 'DM' THEN 'INTERVAL DAY TO MINUTE'
@@ -200,53 +186,78 @@ def populate_openlineage_fields(cursor, namespace_id: str):
                 WHEN TRIM(c.ColumnType) = 'MO' THEN 'INTERVAL MONTH'
                 WHEN TRIM(c.ColumnType) = 'YR' THEN 'INTERVAL YEAR'
                 WHEN TRIM(c.ColumnType) = 'YM' THEN 'INTERVAL YEAR TO MONTH'
-                -- Period types
                 WHEN TRIM(c.ColumnType) = 'PD' THEN 'PERIOD(DATE)'
                 WHEN TRIM(c.ColumnType) = 'PT' THEN 'PERIOD(TIME)'
                 WHEN TRIM(c.ColumnType) = 'PS' THEN 'PERIOD(TIMESTAMP)'
                 WHEN TRIM(c.ColumnType) = 'PM' THEN 'PERIOD(TIMESTAMP WITH TIME ZONE)'
-                -- Decimal with precision
                 WHEN TRIM(c.ColumnType) = 'D' THEN 'DECIMAL(' || COALESCE(c.DecimalTotalDigits, 0) || ',' || COALESCE(c.DecimalFractionalDigits, 0) || ')'
-                -- Timestamp/Time with precision
                 WHEN TRIM(c.ColumnType) IN ('TS', 'AT') THEN
                     CASE WHEN TRIM(c.ColumnType) = 'TS' THEN 'TIMESTAMP' ELSE 'TIME' END || '(' || COALESCE(c.DecimalFractionalDigits, 0) || ')'
-                -- Fixed-length character/byte
                 WHEN TRIM(c.ColumnType) IN ('CF', 'BF') THEN
                     CASE WHEN TRIM(c.ColumnType) = 'CF' THEN 'CHAR' ELSE 'BYTE' END || '(' || COALESCE(c.ColumnLength, 0) || ')'
-                -- Variable-length character/byte
                 WHEN TRIM(c.ColumnType) IN ('CV', 'BV') THEN
                     CASE WHEN TRIM(c.ColumnType) = 'CV' THEN 'VARCHAR' ELSE 'VARBYTE' END || '(' || COALESCE(c.ColumnLength, 0) || ')'
-                -- Unknown/NULL types
                 ELSE COALESCE(TRIM(c.ColumnType), 'UNKNOWN')
-            END AS field_type,
-            NULL AS field_description,
-            c.ColumnId AS ordinal_position,
-            c.Nullable AS nullable,
-            CURRENT_TIMESTAMP(0) AS created_at
-        FROM DBC.ColumnsJQV c
-        WHERE TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
-          AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
-          AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
-          AND c.DatabaseName NOT IN ({placeholders})
-          AND EXISTS (
-              SELECT 1 FROM DBC.TablesV t
-              WHERE t.DatabaseName = c.DatabaseName
-                AND t.TableName = c.TableName
-                AND t.TableKind IN ('T', 'V', 'O')
-          )
-          AND NOT EXISTS (
-              SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
-              WHERE odf.field_id = ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName)
-          )
-        QUALIFY ROW_NUMBER() OVER (
-            PARTITION BY c.DatabaseName, c.TableName, c.ColumnName
-            ORDER BY c.ColumnId
-        ) = 1
-    """, [namespace_id, namespace_id] + _system_db_exclusion_params() + [namespace_id])
+            END"""
 
-    count = cursor.rowcount
-    print(f"  Created {count} fields")
-    return count
+    placeholders = _system_db_placeholders()
+    params = [namespace_id, namespace_id] + _system_db_exclusion_params() + [namespace_id]
+
+    def _insert_fields(source_view, table_kinds):
+        """Insert fields from a DBC columns view for specific table kinds."""
+        cursor.execute(f"""
+            INSERT INTO {DATABASE}.OL_DATASET_FIELD
+            (field_id, dataset_id, field_name, field_type, field_description,
+             ordinal_position, nullable, created_at)
+            SELECT
+                ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName) AS field_id,
+                ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) AS dataset_id,
+                TRIM(c.ColumnName) AS field_name,
+                {type_mapping} AS field_type,
+                NULL AS field_description,
+                c.ColumnId AS ordinal_position,
+                c.Nullable AS nullable,
+                CURRENT_TIMESTAMP(0) AS created_at
+            FROM {source_view} c
+            WHERE TRANSLATE_CHK(c.DatabaseName USING UNICODE_TO_LATIN) = 0
+              AND TRANSLATE_CHK(c.TableName USING UNICODE_TO_LATIN) = 0
+              AND TRANSLATE_CHK(c.ColumnName USING UNICODE_TO_LATIN) = 0
+              AND c.DatabaseName NOT IN ({placeholders})
+              AND EXISTS (
+                  SELECT 1 FROM DBC.TablesV t
+                  WHERE t.DatabaseName = c.DatabaseName
+                    AND t.TableName = c.TableName
+                    AND t.TableKind IN {table_kinds}
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
+                  WHERE odf.field_id = ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName)
+              )
+            QUALIFY ROW_NUMBER() OVER (
+                PARTITION BY c.DatabaseName, c.TableName, c.ColumnName
+                ORDER BY c.ColumnId
+            ) = 1
+        """, params)
+        return cursor.rowcount
+
+    # Table fields: always from DBC.ColumnsV (has complete type info for tables)
+    print("\n--- Populating table fields from DBC.ColumnsV ---")
+    table_count = _insert_fields('DBC.ColumnsV', "('T', 'O')")
+    print(f"  Created {table_count} table fields")
+
+    # View fields: DBC.ColumnsJQV if QVCI enabled, else DBC.ColumnsV (UNKNOWN types)
+    if qvci_available:
+        print("--- Populating view fields from DBC.ColumnsJQV ---")
+        view_count = _insert_fields('DBC.ColumnsJQV', "('V')")
+        print(f"  Created {view_count} view fields")
+    else:
+        print("--- Populating view fields from DBC.ColumnsV (QVCI not enabled) ---")
+        view_count = _insert_fields('DBC.ColumnsV', "('V')")
+        print(f"  Created {view_count} view fields (types will be UNKNOWN)")
+
+    total = table_count + view_count
+    print(f"  Total: {total} fields created")
+    return total
 
 
 def populate_lineage_from_fixtures(cursor, namespace_id: str, namespace_uri: str):
@@ -427,7 +438,7 @@ def parse_datetime(s: str) -> datetime:
     raise ValueError(f"Could not parse datetime: {s}")
 
 
-def run_preflight_checks(cursor) -> bool:
+def run_preflight_checks(cursor) -> tuple:
     """Run pre-flight checks before population and print status summary.
 
     Checks:
@@ -435,21 +446,23 @@ def run_preflight_checks(cursor) -> bool:
       2. User DB coverage: counts user databases not in SYSTEM_DATABASES
 
     Returns:
-        True if no hard failures (warnings and skips are acceptable).
+        Tuple of (all_checks_passed, qvci_available).
     """
     print("\n--- Pre-flight checks ---")
     checks_passed = 0
     checks_failed = 0
+    qvci_available = False
 
     # Check 1: QVCI availability
     try:
         cursor.execute("SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0")
-        print("[OK] QVCI enabled: DBC.ColumnsJQV accessible")
+        print("[OK] QVCI enabled: DBC.ColumnsJQV accessible (view column types available)")
         checks_passed += 1
+        qvci_available = True
     except Exception as e:
         err_str = str(e)
         if "9719" in err_str:
-            print("[WARN] QVCI disabled: view column types may show as UNKNOWN")
+            print("[WARN] QVCI disabled: view column types will show as UNKNOWN")
         else:
             print(f"[WARN] QVCI check error: {err_str}")
         # QVCI being disabled is a warning, not a hard failure
@@ -475,7 +488,7 @@ def run_preflight_checks(cursor) -> bool:
     else:
         print(f"Pre-flight: WARNING - {checks_failed} checks failed")
 
-    return checks_failed == 0
+    return checks_failed == 0, qvci_available
 
 
 def main():
@@ -642,7 +655,7 @@ DBQL Requirements:
         sys.exit(1)
 
     # Run pre-flight checks before any INSERT operations
-    run_preflight_checks(cursor)
+    _, qvci_available = run_preflight_checks(cursor)
     print("Pre-flight complete. Proceeding with population...")
 
     # Print mode summary
@@ -661,7 +674,7 @@ DBQL Requirements:
         print(f"  - 1 namespace")
         if not args.lineage_only:
             print(f"  - ~N datasets from DBC.TablesV")
-            print(f"  - ~N fields from DBC.ColumnsJQV")
+            print(f"  - ~N fields from DBC.ColumnsV" + (" + DBC.ColumnsJQV for views" if qvci_available else " (view types UNKNOWN)"))
         if use_dbql:
             print(f"  - Column lineage from DBQL tables")
         else:
@@ -686,7 +699,7 @@ DBQL Requirements:
         # Populate datasets and fields (unless lineage-only mode)
         if not args.lineage_only:
             populate_openlineage_datasets(cursor, namespace_id)
-            populate_openlineage_fields(cursor, namespace_id)
+            populate_openlineage_fields(cursor, namespace_id, qvci_available=qvci_available)
 
         # Populate lineage based on mode
         if use_dbql:

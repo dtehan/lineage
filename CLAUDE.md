@@ -147,13 +147,13 @@ Aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-m
 - `OL_COLUMN_LINEAGE` - Column-level lineage with OpenLineage transformation types
 - `OL_SCHEMA_VERSION` - Schema version tracking
 
-The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. It uses `DBC.ColumnsJQV` instead of `DBC.ColumnsV` because ColumnsJQV provides complete column type information for both tables AND views (ColumnsV returns NULL for view column types).
+The `populate_lineage.py` script populates these tables by extracting metadata directly from DBC views. It uses `DBC.ColumnsV` for table column types (always available) and `DBC.ColumnsJQV` for view column types (requires QVCI to be enabled). If QVCI is not enabled, view column types will show as UNKNOWN.
 
 ## Teradata QVCI Requirements
 
 ### What is QVCI?
 
-QVCI (Queryable View Column Index) is a Teradata Database feature introduced in TD16.0 that enables efficient retrieval of view column information via `DBC.ColumnsQV` and `DBC.ColumnsJQV` views. This application requires QVCI to be enabled because we use `DBC.ColumnsJQV` to extract complete column metadata (including types) for both tables and views.
+QVCI (Queryable View Column Index) is a Teradata Database feature introduced in TD16.0 that enables efficient retrieval of view column information via `DBC.ColumnsQV` and `DBC.ColumnsJQV` views. This application uses `DBC.ColumnsJQV` to extract view column types when QVCI is enabled. If QVCI is not enabled, view column types will show as UNKNOWN (table column types are always available via `DBC.ColumnsV`).
 
 ### Checking QVCI Status
 
@@ -190,13 +190,7 @@ After running this command, **restart the Teradata Database** for the change to 
 
 ### If QVCI Cannot be Enabled
 
-If QVCI cannot be enabled on your Teradata system (due to stability concerns or administrative policies), you will need to modify `populate_lineage.py` to fall back to the legacy approach:
-
-1. Change `DBC.ColumnsJQV` back to `DBC.ColumnsV` in the `populate_openlineage_fields()` function
-2. Restore the `update_view_column_types()` function (see git history)
-3. Re-enable the call to `update_view_column_types()` in `main()`
-
-This fallback uses `HELP COLUMN` commands for each view column, which is slower but works without QVCI.
+If QVCI cannot be enabled on your Teradata system, no code changes are needed. The `populate_lineage.py` script automatically detects QVCI availability during pre-flight checks. Table column types are always populated from `DBC.ColumnsV`. View column types will show as UNKNOWN when QVCI is not available.
 
 ### References
 
