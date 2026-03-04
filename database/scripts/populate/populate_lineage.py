@@ -125,6 +125,121 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
     return count
 
 
+def _resolve_view_field_types_via_help_column(cursor, database: str, view_name: str) -> dict:
+    """Resolve view column types using Teradata's HELP COLUMN syntax.
+
+    Research findings (2026-03-04):
+    - HELP COLUMN database.viewname.* returns actual resolved types for view columns
+    - DBC.ColumnsV returns NULL for all view column types (causing UNKNOWN in output)
+    - DBC.ColumnsJQV requires QVCI to be enabled (not always available)
+    - HELP COLUMN works without QVCI and returns the same type codes as DBC.ColumnsV
+      (e.g., 'I' for INTEGER, 'CV' for VARCHAR, 'DA' for DATE)
+    - Result columns: [0]=Column Name, [1]=Type, [4]=Max Length,
+      [5]=Decimal Total Digits, [6]=Decimal Fractional Digits
+
+    Type mapping applied here mirrors the SQL CASE in populate_openlineage_fields()
+    so the output is consistent with the QVCI-based path.
+
+    Args:
+        cursor: Active Teradata cursor
+        database: Database name containing the view
+        view_name: Name of the view to inspect
+
+    Returns:
+        Dict mapping column_name (str, uppercased) -> type_string (str).
+        Returns empty dict on any error (graceful degradation).
+
+    Example:
+        types = _resolve_view_field_types_via_help_column(cursor, 'demo_user', 'stg_customers')
+        # Returns: {'CUSTOMER_ID': 'INTEGER', 'FIRST_NAME': 'VARCHAR(1000)', ...}
+    """
+    # Python-side type mapping mirroring the SQL CASE in populate_openlineage_fields()
+    # Key = stripped type code (same codes Teradata stores in ColumnType / HELP COLUMN Type)
+    SIMPLE_TYPES = {
+        'I': 'INTEGER',
+        'I1': 'BYTEINT',
+        'I2': 'SMALLINT',
+        'I8': 'BIGINT',
+        'F': 'FLOAT',
+        'DA': 'DATE',
+        'TZ': 'TIME WITH TIME ZONE',
+        'SZ': 'TIMESTAMP WITH TIME ZONE',
+        'CO': 'CLOB',
+        'BO': 'BLOB',
+        'N': 'NUMBER',
+        'AN': 'ARRAY',
+        'JN': 'JSON',
+        'DY': 'INTERVAL DAY',
+        'DH': 'INTERVAL DAY TO HOUR',
+        'DM': 'INTERVAL DAY TO MINUTE',
+        'DS': 'INTERVAL DAY TO SECOND',
+        'HR': 'INTERVAL HOUR',
+        'HM': 'INTERVAL HOUR TO MINUTE',
+        'HS': 'INTERVAL HOUR TO SECOND',
+        'MI': 'INTERVAL MINUTE',
+        'MS': 'INTERVAL MINUTE TO SECOND',
+        'SC': 'INTERVAL SECOND',
+        'MO': 'INTERVAL MONTH',
+        'YR': 'INTERVAL YEAR',
+        'YM': 'INTERVAL YEAR TO MONTH',
+        'PD': 'PERIOD(DATE)',
+        'PT': 'PERIOD(TIME)',
+        'PS': 'PERIOD(TIMESTAMP)',
+        'PM': 'PERIOD(TIMESTAMP WITH TIME ZONE)',
+    }
+
+    def _map_type(type_code: str, max_length, dec_total, dec_frac) -> str:
+        """Map a HELP COLUMN type code to a human-readable type string."""
+        tc = type_code.strip()
+
+        if tc in SIMPLE_TYPES:
+            return SIMPLE_TYPES[tc]
+
+        if tc == 'D':
+            total = dec_total if dec_total is not None else 0
+            frac = dec_frac if dec_frac is not None else 0
+            return f'DECIMAL({total},{frac})'
+
+        if tc in ('TS', 'AT'):
+            base = 'TIMESTAMP' if tc == 'TS' else 'TIME'
+            frac = dec_frac if dec_frac is not None else 0
+            return f'{base}({frac})'
+
+        if tc in ('CF', 'BF'):
+            base = 'CHAR' if tc == 'CF' else 'BYTE'
+            length = max_length if max_length is not None else 0
+            return f'{base}({length})'
+
+        if tc in ('CV', 'BV'):
+            base = 'VARCHAR' if tc == 'CV' else 'VARBYTE'
+            length = max_length if max_length is not None else 0
+            return f'{base}({length})'
+
+        # Fallback: return the raw type code (better than UNKNOWN)
+        return tc if tc else 'UNKNOWN'
+
+    try:
+        cursor.execute(f'HELP COLUMN {database}.{view_name}.*')
+        rows = cursor.fetchall()
+
+        result = {}
+        for row in rows:
+            col_name = row[0].strip().upper()  # Normalize to uppercase
+            type_code = row[1] if row[1] is not None else ''
+            max_length = row[4]      # Max Length
+            dec_total = row[5]       # Decimal Total Digits
+            dec_frac = row[6]        # Decimal Fractional Digits
+
+            type_str = _map_type(type_code, max_length, dec_total, dec_frac)
+            result[col_name] = type_str
+
+        return result
+
+    except Exception as e:
+        # Graceful degradation: caller will fall back to UNKNOWN types
+        return {}
+
+
 def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool = False):
     """Populate OL_DATASET_FIELD from DBC views using INSERT...SELECT.
 
