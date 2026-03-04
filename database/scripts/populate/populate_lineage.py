@@ -244,9 +244,16 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
     """Populate OL_DATASET_FIELD from DBC views using INSERT...SELECT.
 
     Tables: Uses DBC.ColumnsV (always has complete column type information).
-    Views: Uses DBC.ColumnsJQV if QVCI is enabled (provides view column types),
-           otherwise uses DBC.ColumnsV (column types will be UNKNOWN for views
-           since DBC.ColumnsV returns NULL for view column types).
+    Views: Uses HELP COLUMN to resolve actual column types without requiring QVCI.
+           The qvci_available parameter is retained for API compatibility but is
+           no longer used -- HELP COLUMN replaces both DBC.ColumnsJQV and the
+           QVCI-disabled fallback, working correctly on all Teradata environments.
+
+    View field population strategy:
+      1. INSERT view fields from DBC.ColumnsV (provides column names, ordinal
+         positions, nullable -- but returns NULL for view column types)
+      2. UPDATE field_type for each view using HELP COLUMN resolved types
+         (HELP COLUMN returns actual resolved types without requiring QVCI)
     """
     # SQL CASE for mapping Teradata column type codes to readable names
     type_mapping = """CASE
@@ -333,15 +340,70 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
     table_count = _insert_fields('DBC.ColumnsV', "('T', 'O')")
     print(f"  Created {table_count} table fields")
 
-    # View fields: DBC.ColumnsJQV if QVCI enabled, else DBC.ColumnsV (UNKNOWN types)
-    if qvci_available:
-        print("--- Populating view fields from DBC.ColumnsJQV ---")
-        view_count = _insert_fields('DBC.ColumnsJQV', "('V')")
-        print(f"  Created {view_count} view fields")
-    else:
-        print("--- Populating view fields from DBC.ColumnsV (QVCI not enabled) ---")
-        view_count = _insert_fields('DBC.ColumnsV', "('V')")
-        print(f"  Created {view_count} view fields (types will be UNKNOWN)")
+    # View fields: step 1 -- INSERT from DBC.ColumnsV (column names/positions,
+    # types will be UNKNOWN since DBC.ColumnsV returns NULL for view column types)
+    print("--- Populating view fields from DBC.ColumnsV (names/positions) ---")
+    view_count = _insert_fields('DBC.ColumnsV', "('V')")
+    print(f"  Created {view_count} view field rows")
+
+    # View fields: step 2 -- UPDATE field_type using HELP COLUMN for each view.
+    # HELP COLUMN resolves actual column types without requiring QVCI.
+    print("--- Resolving view field types via HELP COLUMN ---")
+    views_resolved = 0
+    fields_updated = 0
+
+    try:
+        # Fetch all distinct views that have fields in OL_DATASET_FIELD
+        cursor.execute(f"""
+            SELECT DISTINCT
+                TRIM(t.DatabaseName) AS db,
+                TRIM(t.TableName) AS tbl
+            FROM DBC.TablesV t
+            WHERE t.TableKind = 'V'
+              AND TRANSLATE_CHK(t.DatabaseName USING UNICODE_TO_LATIN) = 0
+              AND TRANSLATE_CHK(t.TableName USING UNICODE_TO_LATIN) = 0
+              AND EXISTS (
+                  SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
+                  WHERE odf.dataset_id = ? || '/' || TRIM(t.DatabaseName) || '.' || TRIM(t.TableName)
+              )
+            ORDER BY 1, 2
+        """, [namespace_id])
+        view_list = cursor.fetchall()
+
+        for row in view_list:
+            db_name, view_name = row[0], row[1]
+            col_types = _resolve_view_field_types_via_help_column(cursor, db_name, view_name)
+
+            if not col_types:
+                # HELP COLUMN returned nothing (view may be inaccessible) -- skip
+                continue
+
+            # UPDATE each column's field_type in OL_DATASET_FIELD
+            view_fields_updated = 0
+            for col_name_upper, type_str in col_types.items():
+                field_id = f"{namespace_id}/{db_name}.{view_name}/{col_name_upper}"
+                # Also try mixed-case field_id (column names in OL_DATASET_FIELD are
+                # stored as-is from DBC.ColumnsV, so match case-insensitively via UPPER)
+                cursor.execute(f"""
+                    UPDATE {DATABASE}.OL_DATASET_FIELD
+                    SET field_type = ?
+                    WHERE dataset_id = ?
+                      AND UPPER(field_name) = ?
+                      AND field_type = 'UNKNOWN'
+                """, [type_str,
+                      f"{namespace_id}/{db_name}.{view_name}",
+                      col_name_upper])
+                view_fields_updated += cursor.rowcount
+
+            if view_fields_updated > 0:
+                views_resolved += 1
+                fields_updated += view_fields_updated
+
+    except Exception as e:
+        print(f"  [WARN] HELP COLUMN type resolution encountered an error: {e}")
+        print("  View field types may remain as UNKNOWN for affected views")
+
+    print(f"  Updated {fields_updated} view field types across {views_resolved} views")
 
     total = table_count + view_count
     print(f"  Total: {total} fields created")
@@ -530,30 +592,32 @@ def run_preflight_checks(cursor) -> tuple:
     """Run pre-flight checks before population and print status summary.
 
     Checks:
-      1. QVCI status: verifies DBC.ColumnsJQV is accessible (requires QVCI enabled)
+      1. QVCI status: informational only -- view column types are now resolved via
+         HELP COLUMN regardless of QVCI availability (see _resolve_view_field_types_via_help_column)
       2. DB coverage: counts total databases visible in DBC.DatabasesV
 
     Returns:
         Tuple of (all_checks_passed, qvci_available).
+        qvci_available is retained for API compatibility but is no longer used
+        by populate_openlineage_fields() -- HELP COLUMN is always used for views.
     """
     print("\n--- Pre-flight checks ---")
     checks_passed = 0
     checks_failed = 0
     qvci_available = False
 
-    # Check 1: QVCI availability
+    # Check 1: QVCI status (informational -- view types now use HELP COLUMN regardless)
     try:
         cursor.execute("SELECT 1 FROM DBC.ColumnsJQV WHERE 1=0")
-        print("[OK] QVCI enabled: DBC.ColumnsJQV accessible (view column types available)")
+        print("[INFO] QVCI enabled: DBC.ColumnsJQV accessible (view types resolved via HELP COLUMN)")
         checks_passed += 1
         qvci_available = True
     except Exception as e:
         err_str = str(e)
         if "9719" in err_str:
-            print("[WARN] QVCI disabled: view column types will show as UNKNOWN")
+            print("[INFO] QVCI disabled: view column types will be resolved via HELP COLUMN")
         else:
-            print(f"[WARN] QVCI check error: {err_str}")
-        # QVCI being disabled is a warning, not a hard failure
+            print(f"[INFO] QVCI check: {err_str} (view types will be resolved via HELP COLUMN)")
         checks_passed += 1
 
     # Check 2: DB coverage
@@ -758,7 +822,7 @@ DBQL Requirements:
         print(f"  - 1 namespace")
         if not args.lineage_only:
             print(f"  - ~N datasets from DBC.TablesV")
-            print(f"  - ~N fields from DBC.ColumnsV" + (" + DBC.ColumnsJQV for views" if qvci_available else " (view types UNKNOWN)"))
+            print(f"  - ~N fields from DBC.ColumnsV (tables) + HELP COLUMN type resolution (views)")
         if use_dbql:
             print(f"  - Column lineage from DBQL tables")
         else:

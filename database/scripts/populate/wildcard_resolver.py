@@ -26,7 +26,7 @@ Performance:
 Teradata Conventions:
     - Unquoted identifiers are stored uppercase (SELECT * from mytable → MYTABLE)
     - Quoted identifiers preserve case (SELECT * from "MyTable" → MyTable)
-    - DBC.ColumnsJQV returns columns in ColumnId order (ordinal position)
+    - DBC.ColumnsV returns columns in ColumnId order (ordinal position) for tables
 """
 
 import json
@@ -119,9 +119,9 @@ class WildcardResolver:
     def warm_cache(self, table_refs: Set[Tuple[str, str]]) -> None:
         """Batch-query metadata for all referenced tables in a single round-trip.
 
-        Queries DBC.ColumnsJQV to fetch column metadata for all tables in a single
-        batch query (or multiple batches if > BATCH_SIZE tables). Results are cached
-        in-memory for subsequent wildcard resolution.
+        Queries DBC.ColumnsV to fetch column metadata for all (non-view) tables in a
+        single batch query (or multiple batches if > BATCH_SIZE tables). Results are
+        cached in-memory for subsequent wildcard resolution.
 
         For views, queries DBC.TablesV to detect them, then fetches view definitions
         and expands wildcards recursively.
@@ -464,15 +464,9 @@ class WildcardResolver:
             import sqlglot
             from sqlglot import exp
 
-            # Normalize REPLACE VIEW -> CREATE VIEW for sqlglot parsing
-            # Teradata stores view definitions as REPLACE VIEW in RequestText
-            normalized_sql = re.sub(
-                r'^\s*REPLACE\s+VIEW',
-                'CREATE VIEW',
-                view_sql,
-                count=1,
-                flags=re.IGNORECASE
-            )
+            # Normalize Teradata-specific SQL constructs for sqlglot parsing
+            from view_lineage_extractor import ViewLineageExtractor
+            normalized_sql = ViewLineageExtractor._normalize_teradata_sql(view_sql)
 
             # Parse with Teradata dialect, fallback to generic
             try:
@@ -540,15 +534,20 @@ class WildcardResolver:
             self._view_expansion_path.discard(key)
 
     def _warm_cache_batch(self, table_refs: List[Tuple[str, str]]) -> None:
-        """Query metadata for a single batch of tables.
+        """Query column metadata for a single batch of (non-view) tables.
 
-        Tries DBC.ColumnsJQV first (works for both tables and views when QVCI
-        is enabled), then falls back to DBC.ColumnsV if QVCI is disabled
-        (Error 9719). ColumnsV returns NULL types for views but column names
-        and ordinal positions are still available, which is all we need.
+        Uses DBC.ColumnsV to fetch column names and ordinal positions for tables.
+        Views are handled separately via view expansion (_expand_view_columns) and
+        are never passed to this method -- warm_cache() separates views out before
+        calling here.
+
+        DBC.ColumnsV is used directly (not DBC.ColumnsJQV) because:
+          - This method only processes tables, not views
+          - DBC.ColumnsV always has complete type info for tables
+          - No QVCI dependency needed for wildcard resolution (column names only)
 
         Args:
-            table_refs: List of (database, table) tuples (already normalized)
+            table_refs: List of (database, table) tuples (already normalized, tables only)
         """
         if not table_refs:
             return
@@ -560,46 +559,19 @@ class WildcardResolver:
 
         where_clause = " OR ".join(conditions)
 
-        # Try ColumnsJQV first (requires QVCI), fall back to ColumnsV
-        columns_view = "DBC.ColumnsJQV"
-        try:
-            query = f"""
-                SELECT
-                    TRIM(DatabaseName) as db,
-                    TRIM(TableName) as tbl,
-                    TRIM(ColumnName) as col,
-                    ColumnId as ordinal
-                FROM {columns_view}
-                WHERE {where_clause}
-                ORDER BY DatabaseName, TableName, ColumnId
-            """
+        query = f"""
+            SELECT
+                TRIM(DatabaseName) as db,
+                TRIM(TableName) as tbl,
+                TRIM(ColumnName) as col,
+                ColumnId as ordinal
+            FROM DBC.ColumnsV
+            WHERE {where_clause}
+            ORDER BY DatabaseName, TableName, ColumnId
+        """
 
-            logger.debug(f"Executing batch metadata query for {len(table_refs)} tables using {columns_view}")
-            self.cursor.execute(query)
-
-        except Exception as e:
-            if "9719" in str(e):
-                # QVCI disabled — fall back to ColumnsV
-                columns_view = "DBC.ColumnsV"
-                logger.info(
-                    "QVCI disabled (Error 9719), falling back to %s for metadata cache",
-                    columns_view
-                )
-
-                query = f"""
-                    SELECT
-                        TRIM(DatabaseName) as db,
-                        TRIM(TableName) as tbl,
-                        TRIM(ColumnName) as col,
-                        ColumnId as ordinal
-                    FROM {columns_view}
-                    WHERE {where_clause}
-                    ORDER BY DatabaseName, TableName, ColumnId
-                """
-
-                self.cursor.execute(query)
-            else:
-                raise
+        logger.debug(f"Executing batch metadata query for {len(table_refs)} tables using DBC.ColumnsV")
+        self.cursor.execute(query)
 
         # Group results by (database, table) and store in cache
         current_key = None

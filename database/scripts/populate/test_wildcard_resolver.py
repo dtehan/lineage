@@ -21,20 +21,20 @@ from wildcard_resolver import WildcardResolver
 
 def make_query_discriminating_fetchall(mock_cursor, column_rows):
     """Create a fetchall side_effect that returns [] for TablesV queries
-    and column_rows for ColumnsJQV queries.
+    and column_rows for ColumnsV queries.
 
-    This is needed because warm_cache() now makes an additional DBC.TablesV
-    query to detect views before the DBC.ColumnsJQV query for table metadata.
+    This is needed because warm_cache() makes an additional DBC.TablesV
+    query to detect views before the DBC.ColumnsV query for table metadata.
 
     Args:
         mock_cursor: The MagicMock cursor
-        column_rows: Rows to return for ColumnsJQV queries
+        column_rows: Rows to return for ColumnsV queries
     """
     def fetchall_side_effect():
         last_query = mock_cursor.execute.call_args[0][0]
         if 'TablesV' in last_query:
             return []  # no views found
-        return column_rows  # ColumnsJQV result
+        return column_rows  # ColumnsV result
 
     mock_cursor.fetchall.side_effect = fetchall_side_effect
 
@@ -53,9 +53,9 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_warm_cache_single_table(self):
         """Test single table query and caching."""
-        # Mock cursor.fetchall() returning 3 columns for ColumnsJQV,
+        # Mock cursor.fetchall() returning 3 columns for ColumnsV,
         # and [] for TablesV (no views). Use query-discriminating side_effect
-        # because warm_cache() now calls DBC.TablesV before DBC.ColumnsJQV.
+        # because warm_cache() calls DBC.TablesV before DBC.ColumnsV.
         original_column_rows = [
             ('DEMO_USER', 'CUSTOMERS', 'customer_id', 1),
             ('DEMO_USER', 'CUSTOMERS', 'name', 2),
@@ -67,15 +67,15 @@ class TestWildcardResolver(unittest.TestCase):
         table_refs = {('demo_user', 'customers')}
         self.resolver.warm_cache(table_refs)
 
-        # Assert cursor.execute() was called (now 2 calls: TablesV + ColumnsJQV)
+        # Assert cursor.execute() was called (2 calls: TablesV + ColumnsV)
         self.mock_cursor.execute.assert_called()
         call_args_list = [c[0][0] for c in self.mock_cursor.execute.call_args_list]
         tables_v_calls = [q for q in call_args_list if 'TablesV' in q]
-        columns_jqv_calls = [q for q in call_args_list if 'ColumnsJQV' in q]
+        columns_v_calls = [q for q in call_args_list if 'ColumnsV' in q and 'TablesV' not in q]
         self.assertTrue(len(tables_v_calls) >= 1, "Expected at least one TablesV call")
-        self.assertTrue(len(columns_jqv_calls) >= 1, "Expected at least one ColumnsJQV call")
-        self.assertIn('DEMO_USER', columns_jqv_calls[0])
-        self.assertIn('CUSTOMERS', columns_jqv_calls[0])
+        self.assertTrue(len(columns_v_calls) >= 1, "Expected at least one ColumnsV call")
+        self.assertIn('DEMO_USER', columns_v_calls[0])
+        self.assertIn('CUSTOMERS', columns_v_calls[0])
 
         # Assert cache contains correct columns in order
         columns = self.resolver.resolve_star('demo_user', 'customers')
@@ -83,7 +83,7 @@ class TestWildcardResolver(unittest.TestCase):
 
     def test_warm_cache_multiple_tables(self):
         """Test batch query with multiple tables."""
-        # Mock cursor.fetchall() returning columns for 3 tables for ColumnsJQV
+        # Mock cursor.fetchall() returning columns for 3 tables for ColumnsV
         # and [] for TablesV (no views). Use query-discriminating side_effect.
         original_column_rows = [
             ('DB1', 'TABLE1', 'col1', 1),
@@ -103,7 +103,7 @@ class TestWildcardResolver(unittest.TestCase):
         }
         self.resolver.warm_cache(table_refs)
 
-        # Verify execute() was called (now 2 calls: TablesV + ColumnsJQV)
+        # Verify execute() was called (2 calls: TablesV + ColumnsV)
         self.mock_cursor.execute.assert_called()
 
         # Assert all tables cached
@@ -148,7 +148,7 @@ class TestWildcardResolver(unittest.TestCase):
         """Test batch splitting at 100 tables."""
         # Mock cursor.fetchall() to return empty (we only care about call count).
         # Use query-discriminating side_effect to ensure TablesV calls return []
-        # and ColumnsJQV calls also return [] (we're testing pagination, not content).
+        # and ColumnsV calls also return [] (we're testing pagination, not content).
         make_query_discriminating_fetchall(self.mock_cursor, [])
 
         # Provide 150 table references
@@ -158,11 +158,10 @@ class TestWildcardResolver(unittest.TestCase):
         }
         self.resolver.warm_cache(table_refs)
 
-        # Assert cursor.execute() called 3 times:
+        # Assert cursor.execute() called 4 times:
         # 2 TablesV batches (100 + 50) to identify views
-        # + 2 ColumnsJQV batches (100 + 50) for table metadata
+        # + 2 ColumnsV batches (100 + 50) for table metadata
         # = 4 total (since all 150 refs are treated as tables: no views found)
-        # Actually: 2 TablesV (100+50) + 2 ColumnsJQV (100+50) = 4
         self.assertEqual(self.mock_cursor.execute.call_count, 4)
 
     def test_warm_cache_graceful_on_error(self):
@@ -178,22 +177,19 @@ class TestWildcardResolver(unittest.TestCase):
         columns = self.resolver.resolve_star('demo_user', 'customers')
         self.assertEqual(columns, [])
 
-    def test_warm_cache_qvci_fallback(self):
-        """Test fallback from ColumnsJQV to ColumnsV when QVCI is disabled (Error 9719)."""
+    def test_warm_cache_uses_columns_v_directly(self):
+        """Test _warm_cache_batch uses DBC.ColumnsV directly (no ColumnsJQV dependency)."""
         column_rows = [
             ('DEMO_USER', 'CUSTOMERS', 'customer_id', 1),
             ('DEMO_USER', 'CUSTOMERS', 'name', 2),
             ('DEMO_USER', 'CUSTOMERS', 'email', 3),
         ]
 
-        call_count = [0]
+        queries_executed = []
 
         def execute_side_effect(query, *args):
             self._last_query = query
-            call_count[0] += 1
-            # Raise QVCI error on ColumnsJQV query
-            if 'ColumnsJQV' in query:
-                raise Exception('[Error 9719] QVCI feature is disabled.')
+            queries_executed.append(query)
 
         def fetchall_side_effect():
             q = getattr(self, '_last_query', '')
@@ -206,11 +202,17 @@ class TestWildcardResolver(unittest.TestCase):
         self.mock_cursor.execute.side_effect = execute_side_effect
         self.mock_cursor.fetchall.side_effect = fetchall_side_effect
 
-        # Warm cache - should fall back to ColumnsV
+        # Warm cache for a table
         table_refs = {('demo_user', 'customers')}
         self.resolver.warm_cache(table_refs)
 
-        # Assert cache contains correct columns from ColumnsV fallback
+        # Assert ColumnsV was used, ColumnsJQV was NOT queried
+        columns_v_queries = [q for q in queries_executed if 'ColumnsV' in q and 'TablesV' not in q]
+        columns_jqv_queries = [q for q in queries_executed if 'ColumnsJQV' in q]
+        self.assertTrue(len(columns_v_queries) >= 1, "Expected at least one DBC.ColumnsV query")
+        self.assertEqual(len(columns_jqv_queries), 0, "DBC.ColumnsJQV should NOT be queried")
+
+        # Assert cache contains correct columns
         columns = self.resolver.resolve_star('demo_user', 'customers')
         self.assertEqual(columns, ['customer_id', 'name', 'email'])
 
@@ -580,7 +582,7 @@ class TestViewExpansion(unittest.TestCase):
         """Configure mock cursor to return different results based on query.
 
         Discriminates between DBC.TablesV (TableKind/RequestText) queries and
-        DBC.ColumnsJQV/ColumnsV queries by inspecting the last executed query string.
+        DBC.ColumnsV queries by inspecting the last executed query string.
         """
         def mock_execute(query, *args):
             self._last_query = query
@@ -593,7 +595,7 @@ class TestViewExpansion(unittest.TestCase):
                     return view_rows or []
                 elif 'RequestText' in self._last_query:
                     return request_text_rows or []
-                elif 'ColumnsJQV' in self._last_query or 'ColumnsV' in self._last_query:
+                elif 'ColumnsV' in self._last_query and 'TablesV' not in self._last_query:
                     return column_rows or []
             return []
 
@@ -801,8 +803,8 @@ class TestViewExpansion(unittest.TestCase):
             # _identify_views: TablesV with TableKind (no RequestText)
             if 'TablesV' in q and 'TableKind' in q and 'RequestText' not in q:
                 return [('DEMO_USER', 'MY_VIEW')]
-            # _warm_cache_batch: ColumnsJQV for the table
-            elif 'ColumnsJQV' in q:
+            # _warm_cache_batch: ColumnsV for the table (not TablesV)
+            elif 'ColumnsV' in q and 'TablesV' not in q:
                 return table_col_rows
             # _fetch_view_definitions: TablesV with RequestText
             elif 'TablesV' in q and 'RequestText' in q:
