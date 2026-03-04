@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: v6.0 shipped — milestone archived
+stopped_at: "Completed quick-1: Improve view column type resolution using HELP COLUMN"
+last_updated: "2026-03-04T23:29:14.442Z"
+last_activity: 2026-02-23 — v6.0 Full System Catalog milestone completed and archived
+progress:
+  total_phases: 25
+  completed_phases: 24
+  total_plans: 53
+  completed_plans: 53
+  percent: 100
+---
+
 # Project State
 
 ## Project Reference
@@ -45,6 +61,8 @@ v6.0: ██████████ 100% (2/2 phases) — shipped 2026-02-23
 ### Decisions
 
 (Cleared at milestone boundary — full decision log in PROJECT.md Key Decisions table)
+- [Phase quick-1]: HELP COLUMN replaces QVCI for view column type resolution: single approach works on all Teradata environments, eliminating UNKNOWN types when QVCI is disabled
+- [Phase quick-1]: wildcard_resolver._warm_cache_batch() uses DBC.ColumnsV directly for tables (no QVCI dependency); views handled via separate expansion path
 
 ### Pending Todos
 
@@ -56,6 +74,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-23
-Stopped at: v6.0 Full System Catalog milestone archived. Ready for next milestone.
+Last session: 2026-03-04T23:29:10.117Z
+Stopped at: Completed quick-1: Improve view column type resolution using HELP COLUMN
 Resume file: None
