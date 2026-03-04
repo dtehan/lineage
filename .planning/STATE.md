@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-02-23)
 
 Phase: All 23 phases complete across 6 milestones
 Status: v6.0 shipped — milestone archived
-Last activity: 2026-02-23 — v6.0 Full System Catalog milestone completed and archived
+Last activity: 2026-03-04 - Completed quick task 1: Improve view column type resolution using HELP COLUMN syntax
 
 Progress:
 
@@ -71,6 +71,12 @@ None.
 ### Blockers/Concerns
 
 None.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 1 | Improve view column type resolution using HELP COLUMN syntax | 2026-03-04 | 8132e1c | [1-improve-view-column-type-resolution-usin](./quick/1-improve-view-column-type-resolution-usin/) |
 
 ## Session Continuity
 
