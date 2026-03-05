@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: v6.0 shipped — milestone archived
-stopped_at: "Completed 24-efficient-incremental-ol-database-updates-02: DBQL and view lineage watermark integration"
-last_updated: "2026-03-05T03:01:08.971Z"
+stopped_at: "Completed 24-efficient-incremental-ol-database-updates-03: Incremental population orchestration"
+last_updated: "2026-03-05T03:07:43.483Z"
 last_activity: "2026-03-05 - Completed quick task 2: Fix external node column types in BFS database lineage"
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 100
 ---
 
@@ -57,6 +57,7 @@ v6.0: ██████████ 100% (2/2 phases) — shipped 2026-02-23
 | v6.0 Full System Catalog | 2 | 5 | Shipped 2026-02-23 |
 | Phase 24-efficient-incremental-ol-database-updates P01 | 12 | 2 tasks | 4 files |
 | Phase 24-efficient-incremental-ol-database-updates P02 | 2 | 2 tasks | 2 files |
+| Phase 24-efficient-incremental-ol-database-updates P03 | 4 | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ v6.0: ██████████ 100% (2/2 phases) — shipped 2026-02-23
 - [Phase 24-efficient-incremental-ol-database-updates]: UPDATE-then-conditional-INSERT upsert pattern for OL_POPULATE_LOG (matches proven archive pattern); OL_POPULATE_LOG added to top of tables_to_drop list in setup script
 - [Phase 24-efficient-incremental-ol-database-updates]: Watermark written after insert (not before) to ensure it only advances when data is committed; 0-record successful runs also advance watermark to avoid re-scanning empty windows
 - [Phase 24-efficient-incremental-ol-database-updates]: ViewLineageExtractor.since defaults to None for backward-compatible full-scan; Plan 03 will wire the caller to pass the watermark timestamp
+- [Phase 24-efficient-incremental-ol-database-updates]: ViewLineageExtractor patch path: lazy import inside function requires patch.object on source module + reload, not module-level patch
+- [Phase 24-efficient-incremental-ol-database-updates]: cleanup_stale_datasets uses NOT EXISTS against DBC.TablesV with UPPER normalization for case-insensitive name matching
 
 ### Pending Todos
 
@@ -93,6 +96,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T03:01:08.968Z
-Stopped at: Completed 24-efficient-incremental-ol-database-updates-02: DBQL and view lineage watermark integration
+Last session: 2026-03-05T03:07:43.480Z
+Stopped at: Completed 24-efficient-incremental-ol-database-updates-03: Incremental population orchestration
 Resume file: None
