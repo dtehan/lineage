@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: v6.0 shipped — milestone archived
-stopped_at: "Completed 24-efficient-incremental-ol-database-updates-01: WatermarkStore infrastructure"
-last_updated: "2026-03-05T02:57:12.221Z"
+stopped_at: "Completed 24-efficient-incremental-ol-database-updates-02: DBQL and view lineage watermark integration"
+last_updated: "2026-03-05T03:01:08.971Z"
 last_activity: "2026-03-05 - Completed quick task 2: Fix external node column types in BFS database lineage"
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 100
 ---
 
@@ -56,6 +56,7 @@ v6.0: ██████████ 100% (2/2 phases) — shipped 2026-02-23
 | v5.0 Database Lineage Layout | 3 | 5 | Shipped 2026-02-22 |
 | v6.0 Full System Catalog | 2 | 5 | Shipped 2026-02-23 |
 | Phase 24-efficient-incremental-ol-database-updates P01 | 12 | 2 tasks | 4 files |
+| Phase 24-efficient-incremental-ol-database-updates P02 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -68,6 +69,8 @@ v6.0: ██████████ 100% (2/2 phases) — shipped 2026-02-23
 - [Phase quick-2]: Case-insensitive matching needed for external node resolution — lineage edges from view DDL use UPPER case while OL_DATASET stores lowercase
 - [Phase 24-efficient-incremental-ol-database-updates]: WatermarkStore uses CURRENT_TIMESTAMP(0) from Teradata SQL to avoid timezone mismatch; all methods exception-safe so watermark failures never abort populate runs
 - [Phase 24-efficient-incremental-ol-database-updates]: UPDATE-then-conditional-INSERT upsert pattern for OL_POPULATE_LOG (matches proven archive pattern); OL_POPULATE_LOG added to top of tables_to_drop list in setup script
+- [Phase 24-efficient-incremental-ol-database-updates]: Watermark written after insert (not before) to ensure it only advances when data is committed; 0-record successful runs also advance watermark to avoid re-scanning empty windows
+- [Phase 24-efficient-incremental-ol-database-updates]: ViewLineageExtractor.since defaults to None for backward-compatible full-scan; Plan 03 will wire the caller to pass the watermark timestamp
 
 ### Pending Todos
 
@@ -90,6 +93,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-05T02:57:12.218Z
-Stopped at: Completed 24-efficient-incremental-ol-database-updates-01: WatermarkStore infrastructure
+Last session: 2026-03-05T03:01:08.968Z
+Stopped at: Completed 24-efficient-incremental-ol-database-updates-02: DBQL and view lineage watermark integration
 Resume file: None
