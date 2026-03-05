@@ -124,7 +124,7 @@ See archive: `.planning/milestones/v6.0-ROADMAP.md`
 **Goal:** Add watermark-based incremental population to all populate_lineage.py paths (datasets, fields, DBQL lineage, view lineage) using Teradata's AlterTimeStamp for change detection, so only new or changed objects are processed on subsequent runs
 **Requirements**: [INC-01, INC-02, INC-03, INC-04, INC-05, INC-06, INC-07, INC-08]
 **Depends on:** Phase 23
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
 - [ ] 24-01-PLAN.md — Watermark infrastructure (OL_POPULATE_LOG table, WatermarkStore class, migration script, unit tests)
