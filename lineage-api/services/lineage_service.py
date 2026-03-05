@@ -370,6 +370,12 @@ class LineageService:
             if external_dataset_names:
                 external_meta = self._batch_resolve_dataset_metadata(external_dataset_names)
                 dataset_metadata.update(external_meta)
+                # Also map original-case names to resolved metadata (lineage edges
+                # may use UPPER case while OL_DATASET stores lowercase)
+                for orig_name in external_dataset_names:
+                    lower_match = external_meta.get(orig_name.lower())
+                    if lower_match and orig_name not in dataset_metadata:
+                        dataset_metadata[orig_name] = lower_match
 
             for record in bfs_records:
                 source_dataset = record["source_dataset"]
@@ -430,7 +436,9 @@ class LineageService:
         if not dataset_names:
             return {}
 
-        names_list = list(dataset_names)
+        # Lowercase names for case-insensitive matching (lineage edges may use
+        # UPPER case from view DDL while OL_DATASET stores lowercase)
+        names_list = list({n.lower() for n in dataset_names})
         placeholders = ",".join("?" * len(names_list))
 
         with self.dataset_repo.connection.cursor() as cur:
@@ -438,7 +446,7 @@ class LineageService:
                 SELECT TRIM(d."name"), d.source_type, n.namespace_uri
                 FROM OL_DATASET d
                 JOIN OL_NAMESPACE n ON d.namespace_id = n.namespace_id
-                WHERE TRIM(d."name") IN ({placeholders})
+                WHERE LOWER(TRIM(d."name")) IN ({placeholders})
             """, names_list)
 
             result = {}
@@ -462,11 +470,11 @@ class LineageService:
         if not field_keys:
             return []
 
-        # Build lookup: (dataset_name, field_name) -> key
-        lookup = {(ds_name, field_name): key for key, ds_name, field_name in field_keys}
+        # Build lookup: (dataset_name_lower, field_name_lower) -> key
+        lookup = {(ds_name.lower(), field_name.lower()): key for key, ds_name, field_name in field_keys}
 
-        # Get unique dataset names to query OL_DATASET for their IDs
-        dataset_names = list({ds_name for _, ds_name, _ in field_keys})
+        # Get unique dataset names (lowercased to match DB storage)
+        dataset_names = list({ds_name.lower() for _, ds_name, _ in field_keys})
         ds_placeholders = ",".join("?" * len(dataset_names))
 
         results = []
@@ -502,7 +510,7 @@ class LineageService:
                 nullable_raw = self.dataset_repo._strip(row[3]) if row[3] else None
                 nullable = nullable_raw == 'Y' if nullable_raw else None
 
-                key = lookup.get((ds_name, field_name))
+                key = lookup.get((ds_name.lower(), field_name.lower()))
                 if key:
                     results.append((key, field_type, nullable))
 
