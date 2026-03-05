@@ -39,6 +39,7 @@ from typing import Dict, List, Optional, Set, Tuple
 import teradatasql
 
 from db_config import CONFIG
+from watermark_store import WatermarkStore
 from wildcard_resolver import WildcardResolver
 
 # Import SQL parser from canonical location (lineage-api/utils/)
@@ -151,6 +152,8 @@ class DBQLExtractor:
         self.dry_run = dry_run
         self.parser = TeradataSQLParser(default_database=DATABASE)
         self.stats = ExtractionStats()
+        self.watermark = WatermarkStore(cursor, DATABASE)
+        self._used_watermark = False
 
     def check_dbql_access(self) -> Tuple[bool, str]:
         """
@@ -314,11 +317,17 @@ class DBQLExtractor:
             logger.info("Mode: FULL extraction (all history)")
         elif since:
             extraction_since = since
-            logger.info("Mode: Extract since %s", since)
+            logger.info("Mode: Extract since %s (explicit)", since)
         else:
-            # Default: last 30 days
-            extraction_since = datetime.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)
-            logger.info("Mode: Default (last %d days)", DEFAULT_LOOKBACK_DAYS)
+            # Auto-read from watermark
+            extraction_since = self.watermark.get(WatermarkStore.SOURCE_DBQL)
+            if extraction_since:
+                self._used_watermark = True
+                logger.info("Mode: Incremental since %s (from watermark)", extraction_since)
+            else:
+                # No watermark = first run, use default lookback
+                extraction_since = datetime.now() - timedelta(days=DEFAULT_LOOKBACK_DAYS)
+                logger.info("Mode: First run (no watermark), last %d days", DEFAULT_LOOKBACK_DAYS)
 
         # Fetch queries from DBQL
         queries = self.fetch_queries(extraction_since)
@@ -413,9 +422,13 @@ class DBQLExtractor:
         # Insert lineage records
         if lineage_records:
             inserted = self._insert_lineage_records(lineage_records)
-            logger.info("Inserted %d lineage records", inserted)
+            # Write watermark AFTER all data is committed (Pitfall 2 from research)
+            self.watermark.set(WatermarkStore.SOURCE_DBQL, inserted)
+            logger.info("Inserted %d lineage records, watermark updated", inserted)
             return inserted
 
+        # Even with 0 records, advance watermark (successful run with nothing new)
+        self.watermark.set(WatermarkStore.SOURCE_DBQL, 0)
         return 0
 
     def _insert_lineage_records(self, records: List[Dict]) -> int:
@@ -497,6 +510,7 @@ class DBQLExtractor:
         print(f"  Queries failed:        {self.stats.queries_failed}")
         print(f"  Queries skipped:       {self.stats.queries_skipped}")
         print(f"  Lineage records:       {self.stats.lineage_records}")
+        print(f"  Watermark used:        {'yes (auto)' if self._used_watermark else 'no'}")
 
         # Print resolver statistics if available
         if hasattr(self, 'resolver') and self.resolver:
