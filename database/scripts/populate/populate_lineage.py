@@ -498,6 +498,28 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
     return total
 
 
+def cleanup_stale_datasets(cursor, namespace_id: str) -> int:
+    """Soft-delete datasets for tables/views that no longer exist in DBC.TablesV."""
+    print("\n--- Cleaning up stale datasets ---")
+    try:
+        cursor.execute(f"""
+            UPDATE {DATABASE}.OL_DATASET
+            SET is_active = 'N', updated_at = CURRENT_TIMESTAMP(0)
+            WHERE is_active = 'Y'
+              AND NOT EXISTS (
+                  SELECT 1 FROM DBC.TablesV t
+                  WHERE UPPER(TRIM(t.DatabaseName)) || '.' || UPPER(TRIM(t.TableName)) = UPPER(name)
+                    AND t.TableKind IN ('T', 'V', 'O')
+              )
+        """)
+        count = cursor.rowcount
+        print(f"  Deactivated {count} stale datasets")
+        return count
+    except Exception as e:
+        print(f"  Warning: stale cleanup failed: {e}")
+        return 0
+
+
 def populate_lineage_from_fixtures(cursor, namespace_id: str, namespace_uri: str):
     """Populate OL_COLUMN_LINEAGE from fixture mappings."""
     print("\n--- Populating OL_COLUMN_LINEAGE from fixtures ---")
@@ -556,11 +578,13 @@ def populate_lineage_from_fixtures(cursor, namespace_id: str, namespace_uri: str
 
 
 def populate_lineage_from_views(cursor, namespace_uri: str, verbose: bool = False,
-                                dry_run: bool = False):
+                                dry_run: bool = False, since=None):
     """Populate OL_COLUMN_LINEAGE by deriving lineage from view definitions.
 
     Fetches view SQL from DBC.TablesV.RequestText, parses with SQLGlot to extract
     column mappings, and inserts results as OL_COLUMN_LINEAGE records.
+
+    When since is provided, only processes views changed since that timestamp.
     """
     print("\n--- Populating OL_COLUMN_LINEAGE from view definitions ---")
 
@@ -580,6 +604,7 @@ def populate_lineage_from_views(cursor, namespace_uri: str, verbose: bool = Fals
         database=DATABASE,
         verbose=verbose,
         dry_run=dry_run,
+        since=since,
     )
 
     count = extractor.extract_all()
@@ -750,8 +775,18 @@ Re-run Safety:
   By default, the script is safe to re-run -- existing data is preserved via
   NOT EXISTS guards. Use --full-refresh to clear and rebuild from scratch.
 
+Incremental Mode:
+  The script automatically tracks when each population source was last
+  run using OL_POPULATE_LOG watermarks. On subsequent runs, only new
+  or changed objects are processed.
+
+  python populate_lineage.py                    # Auto-incremental
+  python populate_lineage.py --full-refresh     # Force full scan
+  python populate_lineage.py --reset-watermark DBQL  # Reset DBQL watermark
+  python populate_lineage.py --reset-watermark ALL   # Reset all watermarks
+
 Examples:
-  # Default: DBQL extraction + view lineage (safe to re-run)
+  # Default: DBQL extraction + view lineage (safe to re-run, auto-incremental)
   python populate_lineage.py
   python populate_lineage.py --dbql --since "2024-01-01"
   python populate_lineage.py --dbql --full
@@ -768,6 +803,13 @@ Examples:
 
   # Clear all OL_* data and repopulate from scratch (destructive)
   python populate_lineage.py --full-refresh
+
+  # Reset specific watermark (then re-run to re-process that source)
+  python populate_lineage.py --reset-watermark DATASETS
+  python populate_lineage.py --reset-watermark ALL
+
+  # Skip stale dataset cleanup pass
+  python populate_lineage.py --no-cleanup
 
 DBQL Requirements:
   - SELECT access on DBC.DBQLogTbl and DBC.DBQLSQLTbl
@@ -844,6 +886,17 @@ DBQL Requirements:
         action="store_true",
         help="Only populate lineage (skip datasets/fields)"
     )
+    parser.add_argument(
+        "--reset-watermark",
+        type=str,
+        metavar="SOURCE",
+        help="Reset watermark for specific source (DATASETS, FIELDS, VIEW_LINEAGE, DBQL, ALL) and exit"
+    )
+    parser.add_argument(
+        "--no-cleanup",
+        action="store_true",
+        help="Skip stale dataset cleanup pass"
+    )
 
     args = parser.parse_args()
 
@@ -890,15 +943,52 @@ DBQL Requirements:
         print(f"ERROR: Failed to connect: {e}")
         sys.exit(1)
 
+    # Initialize watermark store
+    watermark = WatermarkStore(cursor, DATABASE)
+
+    # Handle --reset-watermark (early exit after resetting)
+    if args.reset_watermark:
+        source = args.reset_watermark.upper()
+        valid_sources = ['DATASETS', 'FIELDS', 'VIEW_LINEAGE', 'DBQL', 'ALL']
+        if source not in valid_sources:
+            print(f"ERROR: Invalid source '{source}'. Valid: {', '.join(valid_sources)}")
+            cursor.close()
+            conn.close()
+            return 1
+        if source == 'ALL':
+            watermark.clear_all()
+            print("Cleared all watermarks")
+        else:
+            watermark.clear(source)
+            print(f"Cleared watermark for {source}")
+        cursor.close()
+        conn.close()
+        return 0
+
     # Run pre-flight checks before any INSERT operations
     _, qvci_available = run_preflight_checks(cursor)
     print("Pre-flight complete. Proceeding with population...")
 
-    # Print mode summary
-    if args.full_refresh:
-        print("\nMode: full refresh (clearing existing data first)")
+    # Read watermarks for incremental mode (or clear for full refresh)
+    if not args.full_refresh:
+        dataset_since = watermark.get(WatermarkStore.SOURCE_DATASETS)
+        field_since = watermark.get(WatermarkStore.SOURCE_FIELDS)
+        view_since = watermark.get(WatermarkStore.SOURCE_VIEW_LINEAGE)
+        if dataset_since:
+            print(f"  Dataset watermark: {dataset_since}")
+        if field_since:
+            print(f"  Field watermark: {field_since}")
+        if view_since:
+            print(f"  View lineage watermark: {view_since}")
+        print("  DBQL watermark: managed internally by DBQLExtractor")
+        print("\nMode: incremental (watermarks loaded)")
     else:
-        print("\nMode: incremental (preserving existing data)")
+        dataset_since = None
+        field_since = None
+        view_since = None
+        watermark.clear_all()
+        print("  Watermarks cleared (full refresh)")
+        print("\nMode: full refresh (clearing existing data first)")
     print("System DB exclusion: none (all databases included)")
 
     # Get namespace
@@ -934,8 +1024,15 @@ DBQL Requirements:
 
         # Populate datasets and fields (unless lineage-only mode)
         if not args.lineage_only:
-            populate_openlineage_datasets(cursor, namespace_id)
-            populate_openlineage_fields(cursor, namespace_id, qvci_available=qvci_available)
+            dataset_count = populate_openlineage_datasets(cursor, namespace_id, since=dataset_since)
+            watermark.set(WatermarkStore.SOURCE_DATASETS, dataset_count)
+
+            field_count = populate_openlineage_fields(cursor, namespace_id, qvci_available=qvci_available, since=field_since)
+            watermark.set(WatermarkStore.SOURCE_FIELDS, field_count)
+
+            # Stale dataset cleanup (after datasets/fields, before lineage)
+            if not args.no_cleanup:
+                cleanup_stale_datasets(cursor, namespace_id)
 
         # Populate lineage based on mode
         if use_dbql:
@@ -951,11 +1048,13 @@ DBQL Requirements:
 
         # Derive lineage from view definitions (default, opt out with --no-views)
         if not args.no_views:
-            populate_lineage_from_views(
+            view_count = populate_lineage_from_views(
                 cursor, namespace_uri,
                 verbose=args.verbose,
-                dry_run=args.dry_run
+                dry_run=args.dry_run,
+                since=view_since,
             )
+            watermark.set(WatermarkStore.SOURCE_VIEW_LINEAGE, view_count)
 
         # Verify data
         verify_openlineage_data(cursor)
