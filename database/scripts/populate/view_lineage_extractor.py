@@ -23,6 +23,8 @@ import logging
 import re
 from typing import Dict, List, Optional, Set, Tuple
 
+from watermark_store import WatermarkStore
+
 logger = logging.getLogger('view_lineage_extractor')
 
 # Batch size limit to prevent query explosion
@@ -66,6 +68,7 @@ class ViewLineageExtractor:
         database: str,
         verbose: bool = False,
         dry_run: bool = False,
+        since=None,
     ):
         """Initialize the view lineage extractor.
 
@@ -75,6 +78,8 @@ class ViewLineageExtractor:
             database: Database name containing the OL_* tables (e.g. 'demo_user')
             verbose: Enable verbose/debug logging
             dry_run: If True, preview changes without inserting
+            since: Optional datetime — only process views changed since this timestamp.
+                   When None (default), processes all views (full scan behavior preserved).
         """
         # Fail fast if sqlglot not installed
         import sqlglot  # noqa: F401 -- just to verify it's available
@@ -85,35 +90,46 @@ class ViewLineageExtractor:
         self.database = database
         self.verbose = verbose
         self.dry_run = dry_run
+        self.since = since
+        self.watermark = WatermarkStore(cursor, database)
 
         if verbose:
             logging.getLogger('view_lineage_extractor').setLevel(logging.DEBUG)
 
     def extract_all(self) -> int:
-        """Discover all views, parse their SQL, and insert lineage records.
+        """Discover all views (or changed views if since is set), parse their SQL, and insert lineage records.
 
         Returns:
             Total number of lineage records inserted (or that would be inserted
             in dry_run mode).
         """
-        # Step 1: Discover views
-        views = self._discover_views()
-        logger.info(f"Discovered {len(views)} views in OL_DATASET")
+        # Step 1: Discover views (full or incremental)
+        views = self._discover_changed_views()
+        if self.since is not None:
+            logger.info(f"Incremental: discovered {len(views)} changed views since {self.since}")
+            print(f"  Mode: incremental ({len(views)} changed views since {self.since})")
+        else:
+            logger.info(f"Full scan: discovered {len(views)} views in OL_DATASET")
+            print(f"  Mode: full scan ({len(views)} views)")
         print(f"  Discovered {len(views)} views in OL_DATASET")
 
         if not views:
             return 0
 
-        # Step 2: Fetch view definitions from DBC.TablesV
+        # Step 2: Clean up stale lineage for changed views (incremental mode only)
+        if self.since is not None:
+            self._cleanup_stale_view_lineage(views)
+
+        # Step 3: Fetch view definitions from DBC.TablesV
         view_names = [(name.split('.')[0], name.split('.')[1]) for _, name in views]
         definitions = self._fetch_view_definitions(view_names)
         logger.info(f"Fetched {len(definitions)} view definitions")
         print(f"  Fetched {len(definitions)} view definitions")
 
-        # Step 3: Build a set of known view names for reference
+        # Step 4: Build a set of known view names for reference
         view_name_set: Set[str] = {name.upper() for _, name in views}
 
-        # Step 4: For each view, parse and extract lineage records
+        # Step 5: For each view, parse and extract lineage records
         all_records = []
         for dataset_id, view_name in views:
             parts = view_name.split('.')
@@ -144,9 +160,11 @@ class ViewLineageExtractor:
             f"Total lineage records extracted from view definitions: {len(all_records)}"
         )
 
-        # Step 5: Insert records
+        # Step 6: Insert records
         if not self.dry_run:
             inserted = self._insert_lineage_records(all_records)
+            # Write watermark after successful extraction
+            self.watermark.set(WatermarkStore.SOURCE_VIEW_LINEAGE, inserted)
         else:
             inserted = len(all_records)
             print(f"  [DRY RUN] Would create {inserted} lineage records from view definitions")
@@ -173,6 +191,75 @@ class ViewLineageExtractor:
         except Exception as e:
             logger.warning(f"Failed to discover views from OL_DATASET: {e}")
             return []
+
+    def _discover_changed_views(self) -> List[Tuple[str, str]]:
+        """Discover views to process — full scan or changed-only based on self.since.
+
+        When self.since is None: delegates to _discover_views() (full scan).
+        When self.since is set: queries only views whose AlterTimeStamp or
+        CreateTimeStamp is later than self.since, using a parameterized CAST.
+
+        Falls back to full _discover_views() scan on any query failure.
+
+        Returns:
+            List of (dataset_id, name) tuples for views to process.
+        """
+        if self.since is None:
+            return self._discover_views()
+
+        since_str = self.since.strftime('%Y-%m-%d %H:%M:%S')
+        try:
+            self.cursor.execute(
+                f"""
+                SELECT d.dataset_id, d.name
+                FROM {self.database}.OL_DATASET d
+                JOIN DBC.TablesV t
+                  ON UPPER(TRIM(t.DatabaseName)) || '.' || UPPER(TRIM(t.TableName)) = UPPER(d.name)
+                WHERE d.source_type = 'VIEW'
+                  AND d.is_active = 'Y'
+                  AND (COALESCE(t.AlterTimeStamp, t.CreateTimeStamp) > CAST(? AS TIMESTAMP(0)))
+                """,
+                (since_str,)
+            )
+            rows = self.cursor.fetchall()
+            logger.info(
+                f"Changed-view query returned {len(rows)} views since {since_str}"
+            )
+            return [(row[0], row[1]) for row in rows]
+        except Exception as e:
+            logger.warning(
+                f"Changed-view query failed ({e}), falling back to full scan"
+            )
+            return self._discover_views()
+
+    def _cleanup_stale_view_lineage(self, views: List[Tuple[str, str]]) -> None:
+        """Delete existing lineage records for changed views before re-extraction.
+
+        Removes OL_COLUMN_LINEAGE rows where target_dataset matches the view name
+        and transformation_description indicates view-derived lineage. This prevents
+        stale records when a view definition changes.
+
+        Args:
+            views: List of (dataset_id, name) tuples — name is 'DB.VIEWNAME' format.
+        """
+        delete_sql = f"""
+            DELETE FROM {self.database}.OL_COLUMN_LINEAGE
+            WHERE target_dataset = ?
+              AND transformation_description = 'Derived from view definition'
+        """
+        total_deleted = 0
+        for _dataset_id, view_name in views:
+            try:
+                self.cursor.execute(delete_sql, (view_name,))
+                # rowcount may not be available on all Teradata drivers — use 0 as fallback
+                deleted = getattr(self.cursor, 'rowcount', 0) or 0
+                total_deleted += deleted
+                logger.debug(f"Deleted {deleted} stale lineage records for {view_name}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to delete stale lineage for {view_name}: {e} (non-fatal)"
+                )
+        logger.info(f"Deleted {total_deleted} stale view lineage records before re-extraction")
 
     def _fetch_view_definitions(
         self, view_refs: List[Tuple[str, str]]
@@ -511,24 +598,70 @@ class ViewLineageExtractor:
         """Normalize Teradata-specific SQL constructs for sqlglot parsing.
 
         Handles constructs that sqlglot's Teradata dialect cannot parse:
-        - REPLACE VIEW -> CREATE VIEW
-        - LOCKING clauses (named table, ROW, TABLE variants)
-        - (TITLE 'xxx') column attributes
-        - (NAMED "xxx") column attributes
+        - REPLACE VIEW -> CREATE VIEW (including after leading comments)
+        - LOCKING clauses (ROW, TABLE tablename, DATABASE, VIEW variants)
+        - Column attribute groups: (NAMED x), (TITLE 'x'), (FORMAT 'x'), combos
+        - TRANSLATE(expr USING charset [WITH ERROR]) -> expr
+        - Teradata type casts: NULL (VARCHAR(128)), 'x' (CHAR(7))
+        - Teradata type-format casts: expr (DATE, FORMAT 'xxx')
+        - Interval qualifiers: HOUR(4) TO SECOND
+        - Hex byte literals: 'xxx'XB -> 'xxx'
         """
         s = re.sub(
-            r'^\s*REPLACE\s+VIEW', 'CREATE VIEW',
+            r'\bREPLACE\s+VIEW', 'CREATE VIEW',
             view_sql, count=1, flags=re.IGNORECASE
         )
-        # Strip LOCKING clauses: LOCKING {ROW|TABLE|db.tbl} FOR {ACCESS|READ|...}
-        s = re.sub(r'LOCKING\s+\S+\s+FOR\s+\w+\s*', '', s, flags=re.IGNORECASE)
-        # Strip (TITLE 'xxx') with optional NAMED
+        # Strip LOCKING clauses: LOCKING [ROW|TABLE|...] [tablename] FOR mode
         s = re.sub(
-            r"\(\s*TITLE\s+'[^']*'\s*(?:,\s*NAMED\s+\"[^\"]*\"\s*)?\)",
+            r'LOCKING\s+(?:(?:ROW|TABLE|DATABASE|VIEW)\s+)?(?:\S+\s+)?FOR\s+'
+            r'(?:ACCESS|READ|WRITE|EXCLUSIVE|SHARE|CHECKSUM)\s*',
             '', s, flags=re.IGNORECASE
         )
-        # Strip standalone (NAMED "xxx")
-        s = re.sub(r'\(\s*NAMED\s+"[^"]*"\s*\)', '', s, flags=re.IGNORECASE)
+        # Strip parenthesized column attributes: (NAMED x), (TITLE 'x'), (FORMAT 'x')
+        s = re.sub(
+            r"""\((?:\s*(?:NAMED\s+(?:\w+|"[^"]*")|TITLE\s+'[^']*'|FORMAT\s+'[^']*')\s*,?)+\s*\)""",
+            '', s, flags=re.IGNORECASE
+        )
+        # Teradata TRANSLATE(expr USING charset [WITH ERROR]) -> expr
+        s = re.sub(
+            r'\bTRANSLATE\s*\(\s*(.+?)\s+USING\s+\w+(?:\s+WITH\s+ERROR)?\s*\)',
+            r'\1', s, flags=re.IGNORECASE
+        )
+        # Strip hex byte literal suffix: 'xxx'XB -> 'xxx'
+        s = re.sub(r"'([^']*)'XB", r"'\1'", s, flags=re.IGNORECASE)
+        # Teradata type casts after NULL: NULL (VARCHAR(128)) -> NULL
+        s = re.sub(
+            r'(?<=NULL)\s*\(\s*(?:CHAR|VARCHAR|INTEGER|SMALLINT|BIGINT|DECIMAL|FLOAT|'
+            r'DATE|TIME|TIMESTAMP|BYTEINT|BYTE|VARBYTE|BLOB|CLOB|NUMBER|NUMERIC)'
+            r'\s*(?:\(\d+(?:,\s*\d+)?\))?\s*\)',
+            '', s, flags=re.IGNORECASE
+        )
+        # Teradata type casts after string literals: 'x' (CHAR(7)) -> 'x'
+        s = re.sub(
+            r"(?<=')\s*\(\s*(?:CHAR|VARCHAR|INTEGER|SMALLINT|BIGINT|DECIMAL|FLOAT|"
+            r"DATE|TIME|TIMESTAMP|BYTEINT|BYTE|VARBYTE|BLOB|CLOB|NUMBER|NUMERIC)"
+            r"\s*(?:\(\d+(?:,\s*\d+)?\))?\s*\)",
+            '', s, flags=re.IGNORECASE
+        )
+        # Teradata type-format casts with optional NAMED:
+        # (DATE, FORMAT 'xxx') or (TYPE(n), FORMAT 'xxx', NAMED id)
+        s = re.sub(
+            r"""\(\s*(?:DATE|TIME|TIMESTAMP|INTEGER|SMALLINT|BIGINT|DECIMAL|FLOAT|CHAR|VARCHAR)"""
+            r"""\s*(?:\(\d+(?:,\s*\d+)?\))?\s*,\s*FORMAT\s+'[^']*'"""
+            r"""(?:\s*,\s*NAMED\s+\w+)?\s*\)""",
+            '', s, flags=re.IGNORECASE
+        )
+        # Teradata interval qualifiers: HOUR(4) TO SECOND, DAY(2) TO MINUTE, etc.
+        s = re.sub(
+            r'\b(?:YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\s*\(\s*\d+\s*\)\s+TO\s+'
+            r'(?:YEAR|MONTH|DAY|HOUR|MINUTE|SECOND)\b',
+            '', s, flags=re.IGNORECASE
+        )
+        # Teradata temporal predicates: CONTAINS, OVERLAPS, etc. -> =
+        s = re.sub(
+            r'\b(?:CONTAINS|OVERLAPS|PRECEDES|SUCCEEDS|MEETS)\b(?!\s*\()',
+            '=', s, flags=re.IGNORECASE
+        )
         return s
 
     def _expand_star_lineage(
