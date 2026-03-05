@@ -64,6 +64,7 @@ v6.0: ██████████ 100% (2/2 phases) — shipped 2026-02-23
 - [Phase quick-1]: HELP COLUMN replaces QVCI for view column type resolution: single approach works on all Teradata environments, eliminating UNKNOWN types when QVCI is disabled
 - [Phase quick-1]: wildcard_resolver._warm_cache_batch() uses DBC.ColumnsV directly for tables (no QVCI dependency); views handled via separate expansion path
 - [Phase quick-2]: External BFS nodes use post-loop batch query (_batch_resolve_external_field_metadata) to resolve field types; two-stage approach (OL_DATASET ID lookup then OL_DATASET_FIELD fetch) avoids N+1 queries
+- [Phase quick-2]: Case-insensitive matching needed for external node resolution — lineage edges from view DDL use UPPER case while OL_DATASET stores lowercase
 
 ### Pending Todos
 
@@ -78,7 +79,7 @@ None.
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 1 | Improve view column type resolution using HELP COLUMN syntax | 2026-03-04 | 8132e1c | [1-improve-view-column-type-resolution-usin](./quick/1-improve-view-column-type-resolution-usin/) |
-| 2 | Fix external node column types in BFS database lineage | 2026-03-05 | c4ada37 | [2-research-why-some-tables-lack-column-dat](./quick/2-research-why-some-tables-lack-column-dat/) |
+| 2 | Fix external node column types in BFS database lineage | 2026-03-05 | 963e2dc | [2-research-why-some-tables-lack-column-dat](./quick/2-research-why-some-tables-lack-column-dat/) |
 
 ## Session Continuity
 
