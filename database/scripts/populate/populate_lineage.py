@@ -26,6 +26,8 @@ import teradatasql
 import hashlib
 
 from db_config import CONFIG, get_openlineage_namespace
+from watermark_store import WatermarkStore
+from typing import Optional
 
 # Get database name from config
 DATABASE = CONFIG["database"]
@@ -93,9 +95,29 @@ def populate_openlineage_namespace(cursor, namespace_uri: str):
     return namespace_id
 
 
-def populate_openlineage_datasets(cursor, namespace_id: str):
-    """Populate OL_DATASET from DBC.TablesV using INSERT...SELECT."""
+def populate_openlineage_datasets(cursor, namespace_id: str, since: Optional[datetime] = None) -> int:
+    """Populate OL_DATASET from DBC.TablesV using INSERT...SELECT.
+
+    When since is provided (incremental mode), only inserts datasets for tables/views
+    created or altered after the watermark. Also updates existing datasets' updated_at
+    for changed tables.
+    """
     print("\n--- Populating OL_DATASET from DBC.TablesV ---")
+    if since is not None:
+        print(f"  Mode: incremental (since {since})")
+    else:
+        print("  Mode: full scan")
+
+    since_str = since.strftime('%Y-%m-%d %H:%M:%S') if since is not None else None
+
+    # Build WHERE clause for incremental filter
+    incremental_filter = ""
+    if since is not None:
+        incremental_filter = "\n          AND (COALESCE(AlterTimeStamp, CreateTimeStamp) > CAST(? AS TIMESTAMP(0)))"
+
+    params = [namespace_id, namespace_id, namespace_id]
+    if since is not None:
+        params.append(since_str)
 
     # Use INSERT...SELECT to keep data in database
     cursor.execute(f"""
@@ -113,15 +135,32 @@ def populate_openlineage_datasets(cursor, namespace_id: str):
             CURRENT_TIMESTAMP(0) AS updated_at,
             'Y' AS is_active
         FROM DBC.TablesV
-        WHERE TableKind IN ('T', 'V', 'O')
+        WHERE TableKind IN ('T', 'V', 'O'){incremental_filter}
           AND NOT EXISTS (
               SELECT 1 FROM {DATABASE}.OL_DATASET od
               WHERE od.dataset_id = ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
           )
-    """, [namespace_id, namespace_id, namespace_id])
+    """, params)
 
     count = cursor.rowcount
     print(f"  Created {count} datasets")
+
+    # For incremental runs, also UPDATE existing datasets' updated_at for changed tables
+    if since is not None:
+        cursor.execute(f"""
+            UPDATE {DATABASE}.OL_DATASET
+            SET updated_at = CURRENT_TIMESTAMP(0)
+            WHERE is_active = 'Y'
+              AND dataset_id IN (
+                  SELECT ? || '/' || TRIM(DatabaseName) || '.' || TRIM(TableName)
+                  FROM DBC.TablesV
+                  WHERE TableKind IN ('T', 'V', 'O')
+                    AND COALESCE(AlterTimeStamp, CreateTimeStamp) > CAST(? AS TIMESTAMP(0))
+              )
+        """, [namespace_id, since_str])
+        updated = cursor.rowcount
+        print(f"  Updated {updated} existing datasets (changed since watermark)")
+
     return count
 
 
@@ -240,7 +279,8 @@ def _resolve_view_field_types_via_help_column(cursor, database: str, view_name: 
         return {}
 
 
-def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool = False):
+def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool = False,
+                                since: Optional[datetime] = None) -> int:
     """Populate OL_DATASET_FIELD from DBC views using INSERT...SELECT.
 
     Tables: Uses DBC.ColumnsV (always has complete column type information).
@@ -254,6 +294,11 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
          positions, nullable -- but returns NULL for view column types)
       2. UPDATE field_type for each view using HELP COLUMN resolved types
          (HELP COLUMN returns actual resolved types without requiring QVCI)
+
+    When since is provided (incremental mode):
+      - Deletes existing OL_DATASET_FIELD rows for changed tables (to re-insert fresh)
+      - Only inserts fields for tables/views changed since the watermark
+      - Only resolves HELP COLUMN types for changed views
     """
     # SQL CASE for mapping Teradata column type codes to readable names
     type_mapping = """CASE
@@ -297,7 +342,43 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
                 ELSE COALESCE(TRIM(c.ColumnType), 'UNKNOWN')
             END"""
 
+    since_str = since.strftime('%Y-%m-%d %H:%M:%S') if since is not None else None
+
+    # Incremental mode: delete fields for changed tables so they get re-inserted fresh
+    if since is not None:
+        cursor.execute(f"""
+            SELECT TRIM(DatabaseName) || '.' || TRIM(TableName)
+            FROM DBC.TablesV
+            WHERE TableKind IN ('T', 'V', 'O')
+              AND AlterTimeStamp > CAST(? AS TIMESTAMP(0))
+              AND AlterTimeStamp <> CreateTimeStamp
+        """, [since_str])
+        changed_tables = [row[0] for row in cursor.fetchall()]
+        deleted_fields = 0
+        for changed_name in changed_tables:
+            dataset_id = f"{namespace_id}/{changed_name}"
+            cursor.execute(
+                f"DELETE FROM {DATABASE}.OL_DATASET_FIELD WHERE dataset_id = ?",
+                [dataset_id]
+            )
+            deleted_fields += cursor.rowcount
+        if changed_tables:
+            print(f"  Deleted {deleted_fields} field rows for {len(changed_tables)} changed tables")
+
     params = [namespace_id, namespace_id, namespace_id]
+    if since is not None:
+        params.append(since_str)
+
+    # AlterTimeStamp filter appended to _insert_fields when in incremental mode
+    alter_ts_filter = ""
+    if since is not None:
+        alter_ts_filter = """
+              AND EXISTS (
+                  SELECT 1 FROM DBC.TablesV t2
+                  WHERE t2.DatabaseName = c.DatabaseName
+                    AND t2.TableName = c.TableName
+                    AND COALESCE(t2.AlterTimeStamp, t2.CreateTimeStamp) > CAST(? AS TIMESTAMP(0))
+              )"""
 
     def _insert_fields(source_view, table_kinds):
         """Insert fields from a DBC columns view for specific table kinds."""
@@ -323,7 +404,7 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
                   WHERE t.DatabaseName = c.DatabaseName
                     AND t.TableName = c.TableName
                     AND t.TableKind IN {table_kinds}
-              )
+              ){alter_ts_filter}
               AND NOT EXISTS (
                   SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
                   WHERE odf.field_id = ? || '/' || TRIM(c.DatabaseName) || '.' || TRIM(c.TableName) || '/' || TRIM(c.ColumnName)
@@ -352,8 +433,15 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
     views_resolved = 0
     fields_updated = 0
 
+    # When since is provided, scope view list to changed views only
+    view_list_params = [namespace_id]
+    view_alter_ts_filter = ""
+    if since is not None:
+        view_alter_ts_filter = "\n              AND COALESCE(t.AlterTimeStamp, t.CreateTimeStamp) > CAST(? AS TIMESTAMP(0))"
+        view_list_params.append(since_str)
+
     try:
-        # Fetch all distinct views that have fields in OL_DATASET_FIELD
+        # Fetch distinct views that have fields in OL_DATASET_FIELD (scoped to changed views in incremental mode)
         cursor.execute(f"""
             SELECT DISTINCT
                 TRIM(t.DatabaseName) AS db,
@@ -361,13 +449,13 @@ def populate_openlineage_fields(cursor, namespace_id: str, qvci_available: bool 
             FROM DBC.TablesV t
             WHERE t.TableKind = 'V'
               AND TRANSLATE_CHK(t.DatabaseName USING UNICODE_TO_LATIN) = 0
-              AND TRANSLATE_CHK(t.TableName USING UNICODE_TO_LATIN) = 0
+              AND TRANSLATE_CHK(t.TableName USING UNICODE_TO_LATIN) = 0{view_alter_ts_filter}
               AND EXISTS (
                   SELECT 1 FROM {DATABASE}.OL_DATASET_FIELD odf
                   WHERE odf.dataset_id = ? || '/' || TRIM(t.DatabaseName) || '.' || TRIM(t.TableName)
               )
             ORDER BY 1, 2
-        """, [namespace_id])
+        """, view_list_params + [namespace_id])
         view_list = cursor.fetchall()
 
         for row in view_list:
