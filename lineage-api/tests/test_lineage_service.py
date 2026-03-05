@@ -259,5 +259,229 @@ class TestLineageServiceSourceType(unittest.TestCase):
         self.assertEqual(nodes["db.source_view.col1"]["dataset"]["sourceType"], "VIEW")
 
 
+class TestDatabaseLineageBfsExternalNodes(unittest.TestCase):
+    """Tests for external node column type resolution in _get_database_lineage_bfs."""
+
+    def setUp(self):
+        self.dataset_repo = MagicMock()
+        self.lineage_repo = MagicMock()
+        self.service = LineageService(self.lineage_repo, self.dataset_repo)
+
+        # Set up a mock cursor context manager
+        self.mock_cursor = MagicMock()
+        self.mock_cursor.__enter__ = MagicMock(return_value=self.mock_cursor)
+        self.mock_cursor.__exit__ = MagicMock(return_value=False)
+        self.dataset_repo.connection.cursor.return_value = self.mock_cursor
+
+        # Strip helper mirrors the real one
+        self.dataset_repo._strip.side_effect = lambda v: v.strip() if isinstance(v, str) else v
+
+    def _make_bfs_record(
+        self,
+        source_dataset="ext_db.source_table",
+        source_field="col1",
+        target_dataset="mydb.target_table",
+        target_field="col1",
+        transformation_type="IDENTITY",
+    ):
+        return {
+            "source_dataset": source_dataset,
+            "source_field": source_field,
+            "target_dataset": target_dataset,
+            "target_field": target_field,
+            "transformation_type": transformation_type,
+        }
+
+    # -----------------------------------------------------------------------
+    # _batch_resolve_external_field_metadata — direct unit tests
+    # -----------------------------------------------------------------------
+
+    def test_batch_resolve_returns_empty_when_no_keys(self):
+        """_batch_resolve_external_field_metadata returns [] immediately when input is empty."""
+        result = self.service._batch_resolve_external_field_metadata([])
+        self.assertEqual(result, [])
+        # No DB queries should have been issued
+        self.dataset_repo.connection.cursor.assert_not_called()
+
+    def test_batch_resolve_returns_field_type_and_nullable_true(self):
+        """_batch_resolve resolves field_type and nullable=True when DB returns 'Y'."""
+        field_keys = [("ext_db.source_table.col1", "ext_db.source_table", "col1")]
+
+        # First fetchall: dataset ID lookup
+        self.mock_cursor.fetchall.side_effect = [
+            [("ds-ext-001", "ext_db.source_table")],           # OL_DATASET query
+            [("ext_db.source_table", "col1", "INTEGER", "Y")], # OL_DATASET_FIELD query
+        ]
+
+        result = self.service._batch_resolve_external_field_metadata(field_keys)
+
+        self.assertEqual(len(result), 1)
+        key, field_type, nullable = result[0]
+        self.assertEqual(key, "ext_db.source_table.col1")
+        self.assertEqual(field_type, "INTEGER")
+        self.assertTrue(nullable)
+
+    def test_batch_resolve_nullable_false_when_db_returns_n(self):
+        """_batch_resolve resolves nullable=False when DB returns 'N'."""
+        field_keys = [("ext_db.t.col2", "ext_db.t", "col2")]
+
+        self.mock_cursor.fetchall.side_effect = [
+            [("ds-ext-002", "ext_db.t")],
+            [("ext_db.t", "col2", "VARCHAR(50)", "N")],
+        ]
+
+        result = self.service._batch_resolve_external_field_metadata(field_keys)
+
+        self.assertEqual(len(result), 1)
+        _, field_type, nullable = result[0]
+        self.assertEqual(field_type, "VARCHAR(50)")
+        self.assertFalse(nullable)
+
+    def test_batch_resolve_returns_empty_when_no_datasets_found(self):
+        """_batch_resolve returns [] when OL_DATASET returns no rows for the dataset names."""
+        field_keys = [("ext_db.unknown.col1", "ext_db.unknown", "col1")]
+
+        self.mock_cursor.fetchall.side_effect = [
+            [],  # No datasets found
+        ]
+
+        result = self.service._batch_resolve_external_field_metadata(field_keys)
+        self.assertEqual(result, [])
+
+    def test_batch_resolve_handles_multiple_fields_single_query(self):
+        """Multiple external fields are resolved with one pair of queries (not N queries)."""
+        field_keys = [
+            ("ext_db.t.colA", "ext_db.t", "colA"),
+            ("ext_db.t.colB", "ext_db.t", "colB"),
+        ]
+
+        self.mock_cursor.fetchall.side_effect = [
+            [("ds-ext-003", "ext_db.t")],
+            [
+                ("ext_db.t", "colA", "INTEGER", "Y"),
+                ("ext_db.t", "colB", "DATE", "N"),
+            ],
+        ]
+
+        result = self.service._batch_resolve_external_field_metadata(field_keys)
+
+        # Should get 2 results, one per field
+        self.assertEqual(len(result), 2)
+        result_map = {key: (ft, nullable) for key, ft, nullable in result}
+        self.assertIn("ext_db.t.colA", result_map)
+        self.assertIn("ext_db.t.colB", result_map)
+        self.assertEqual(result_map["ext_db.t.colA"], ("INTEGER", True))
+        self.assertEqual(result_map["ext_db.t.colB"], ("DATE", False))
+
+        # Exactly 2 execute calls: one for datasets, one for fields
+        self.assertEqual(self.mock_cursor.execute.call_count, 2)
+
+    # -----------------------------------------------------------------------
+    # _get_database_lineage_bfs — integration-style tests (mocking cursor)
+    # -----------------------------------------------------------------------
+
+    def test_external_node_gets_column_type(self):
+        """External node added in Phase 2 gets columnType from OL_DATASET_FIELD (not None)."""
+        from unittest.mock import patch
+
+        # Phase 1: cursor returns one internal dataset with one field
+        internal_dataset_rows = [("ds-int-001", "mydb.target_table", "TABLE", "teradata://host:1025")]
+        internal_field_rows = [("ds-int-001", "col1", "BIGINT", "N")]
+
+        # _batch_resolve_dataset_metadata cursor (namespace lookup for external dataset)
+        ds_meta_cursor = MagicMock()
+        ds_meta_cursor.__enter__ = MagicMock(return_value=ds_meta_cursor)
+        ds_meta_cursor.__exit__ = MagicMock(return_value=False)
+        ds_meta_cursor.fetchall.return_value = [
+            ("ext_db.source_table", "TABLE", "teradata://host:1025")
+        ]
+
+        # _batch_resolve_external_field_metadata cursor (field types lookup)
+        ext_cursor = MagicMock()
+        ext_cursor.__enter__ = MagicMock(return_value=ext_cursor)
+        ext_cursor.__exit__ = MagicMock(return_value=False)
+        ext_cursor.fetchall.side_effect = [
+            [("ds-ext-001", "ext_db.source_table")],           # OL_DATASET ID query
+            [("ext_db.source_table", "col1", "INTEGER", "Y")], # OL_DATASET_FIELD query
+        ]
+
+        # Sequence: Phase 1 cursor, _batch_resolve_dataset_metadata cursor,
+        # _batch_resolve_external_field_metadata cursor
+        self.dataset_repo.connection.cursor.side_effect = [
+            self.mock_cursor,  # Phase 1 uses this
+            ds_meta_cursor,    # _batch_resolve_dataset_metadata uses this
+            ext_cursor,        # _batch_resolve_external_field_metadata uses this
+        ]
+        self.mock_cursor.fetchall.side_effect = [
+            internal_dataset_rows,  # Phase 1 dataset SELECT
+            internal_field_rows,    # Phase 1 field SELECT
+        ]
+
+        bfs_record = self._make_bfs_record(
+            source_dataset="ext_db.source_table",
+            source_field="col1",
+            target_dataset="mydb.target_table",
+            target_field="col1",
+        )
+
+        with patch("services.lineage_service.graph_engine") as mock_engine:
+            mock_engine.is_ready = True
+            mock_engine.traverse_database.return_value = [bfs_record]
+
+            result = self.service._get_database_lineage_bfs("mydb", "both", 3)
+
+        nodes = {n["id"]: n for n in result["graph"]["nodes"]}
+        external_node = nodes.get("ext_db.source_table.col1")
+        self.assertIsNotNone(external_node, "External node should be present in graph")
+        self.assertEqual(
+            external_node["metadata"]["columnType"],
+            "INTEGER",
+            "External node columnType should be resolved from OL_DATASET_FIELD, not None"
+        )
+        self.assertTrue(external_node["metadata"]["nullable"])
+
+    def test_internal_node_not_overwritten(self):
+        """Phase 1 internal nodes are not added to external_field_keys (no overwrite)."""
+        from unittest.mock import patch
+
+        # Phase 1: both source and target are internal to "mydb"
+        internal_dataset_rows = [
+            ("ds-int-001", "mydb.source_table", "TABLE", "teradata://host:1025"),
+            ("ds-int-002", "mydb.target_table", "TABLE", "teradata://host:1025"),
+        ]
+        internal_field_rows = [
+            ("ds-int-001", "col1", "INTEGER", "Y"),
+            ("ds-int-002", "col1", "BIGINT", "N"),
+        ]
+
+        self.dataset_repo.connection.cursor.return_value = self.mock_cursor
+        self.mock_cursor.fetchall.side_effect = [
+            internal_dataset_rows,
+            internal_field_rows,
+        ]
+
+        bfs_record = self._make_bfs_record(
+            source_dataset="mydb.source_table",
+            source_field="col1",
+            target_dataset="mydb.target_table",
+            target_field="col1",
+        )
+
+        with patch("services.lineage_service.graph_engine") as mock_engine:
+            mock_engine.is_ready = True
+            mock_engine.traverse_database.return_value = [bfs_record]
+
+            result = self.service._get_database_lineage_bfs("mydb", "both", 3)
+
+        nodes = {n["id"]: n for n in result["graph"]["nodes"]}
+
+        # Internal nodes should retain their Phase 1 columnType
+        self.assertEqual(nodes["mydb.source_table.col1"]["metadata"]["columnType"], "INTEGER")
+        self.assertEqual(nodes["mydb.target_table.col1"]["metadata"]["columnType"], "BIGINT")
+
+        # Only 2 execute calls (Phase 1 dataset + field queries); no _batch_resolve calls
+        self.assertEqual(self.mock_cursor.execute.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

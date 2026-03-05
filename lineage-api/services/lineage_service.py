@@ -356,6 +356,7 @@ class LineageService:
         record_timing("bfs_db_lineage", (time.perf_counter() - t0) * 1000)
 
         edges = []
+        external_field_keys = []  # list of (key, ds_name, field_name) for external nodes
 
         if bfs_records:
             # Collect external dataset names (outside this database) for metadata resolution
@@ -401,9 +402,18 @@ class LineageService:
                                 "nullable": None
                             }
                         }
+                        external_field_keys.append((key, ds_name, field_name))
 
                 edge = self._build_edge(source_key, target_key, transformation_type)
                 edges.append(edge)
+
+            # Batch-resolve column types for external nodes
+            if external_field_keys:
+                external_field_meta = self._batch_resolve_external_field_metadata(external_field_keys)
+                for key, field_type, nullable in external_field_meta:
+                    if key in nodes:
+                        nodes[key]["metadata"]["columnType"] = field_type
+                        nodes[key]["metadata"]["nullable"] = nullable
 
         return {
             "databaseName": database_name,
@@ -439,6 +449,64 @@ class LineageService:
                     "sourceType": self.dataset_repo._strip(row[1]) if row[1] else "TABLE"
                 }
             return result
+
+    def _batch_resolve_external_field_metadata(self, field_keys: list) -> list:
+        """Resolve field_type and nullable for external fields in a single batch query.
+
+        Args:
+            field_keys: list of (key, dataset_name, field_name) tuples
+
+        Returns:
+            list of (key, field_type, nullable_bool) tuples
+        """
+        if not field_keys:
+            return []
+
+        # Build lookup: (dataset_name, field_name) -> key
+        lookup = {(ds_name, field_name): key for key, ds_name, field_name in field_keys}
+
+        # Get unique dataset names to query OL_DATASET for their IDs
+        dataset_names = list({ds_name for _, ds_name, _ in field_keys})
+        ds_placeholders = ",".join("?" * len(dataset_names))
+
+        results = []
+        with self.dataset_repo.connection.cursor() as cur:
+            cur.execute(f"""
+                SELECT d.dataset_id, TRIM(d."name")
+                FROM OL_DATASET d
+                WHERE TRIM(d."name") IN ({ds_placeholders})
+            """, dataset_names)
+
+            dataset_id_map = {}  # dataset_name -> dataset_id
+            for row in cur.fetchall():
+                ds_id = self.dataset_repo._strip(row[0]) if row[0] else ""
+                ds_name = self.dataset_repo._strip(row[1]) if row[1] else ""
+                dataset_id_map[ds_name] = ds_id
+
+            if not dataset_id_map:
+                return []
+
+            dataset_ids = list(dataset_id_map.values())
+            field_placeholders = ",".join("?" * len(dataset_ids))
+            cur.execute(f"""
+                SELECT d."name", f.field_name, f.field_type, f.nullable
+                FROM OL_DATASET_FIELD f
+                JOIN OL_DATASET d ON f.dataset_id = d.dataset_id
+                WHERE f.dataset_id IN ({field_placeholders})
+            """, dataset_ids)
+
+            for row in cur.fetchall():
+                ds_name = self.dataset_repo._strip(row[0]) if row[0] else ""
+                field_name = self.dataset_repo._strip(row[1]) if row[1] else ""
+                field_type = self.dataset_repo._strip(row[2]) if row[2] else None
+                nullable_raw = self.dataset_repo._strip(row[3]) if row[3] else None
+                nullable = nullable_raw == 'Y' if nullable_raw else None
+
+                key = lookup.get((ds_name, field_name))
+                if key:
+                    results.append((key, field_type, nullable))
+
+        return results
 
     def _get_database_lineage_cte(
         self,
