@@ -141,6 +141,18 @@ OL_DDL_STATEMENTS = [
         description VARCHAR(500),
         PRIMARY KEY (version_id)
     )
+    """,
+
+    # OL_POPULATE_LOG - Track incremental populate watermarks
+    """
+    CREATE MULTISET TABLE {DATABASE}.OL_POPULATE_LOG (
+        source_name    VARCHAR(64)  NOT NULL,
+        last_run_at    TIMESTAMP(0),
+        rows_processed INTEGER,
+        status         VARCHAR(20),
+        updated_at     TIMESTAMP(0),
+        PRIMARY KEY (source_name)
+    )
     """
 ]
 
@@ -217,6 +229,7 @@ def main():
 
     # OL_* tables to drop (in reverse order to handle dependencies)
     tables_to_drop = [
+        "OL_POPULATE_LOG",
         "OL_SCHEMA_VERSION",
         "OL_COLUMN_LINEAGE",
         "OL_RUN_OUTPUT",
