@@ -118,3 +118,15 @@ See archive: `.planning/milestones/v6.0-ROADMAP.md`
 | 21. UX Polish | v5.0 | 1/1 | Complete | 2026-02-22 |
 | 22. Metadata Population Foundation | v6.0 | 3/3 | Complete | 2026-02-23 |
 | 23. Standalone Table Rendering | v6.0 | 2/2 | Complete | 2026-02-23 |
+
+### Phase 24: Efficient incremental OL database updates - only process new/changed queries, views, tables and columns
+
+**Goal:** Add watermark-based incremental population to all populate_lineage.py paths (datasets, fields, DBQL lineage, view lineage) using Teradata's AlterTimeStamp for change detection, so only new or changed objects are processed on subsequent runs
+**Requirements**: [INC-01, INC-02, INC-03, INC-04, INC-05, INC-06, INC-07, INC-08]
+**Depends on:** Phase 23
+**Plans:** 3 plans
+
+Plans:
+- [ ] 24-01-PLAN.md — Watermark infrastructure (OL_POPULATE_LOG table, WatermarkStore class, migration script, unit tests)
+- [ ] 24-02-PLAN.md — DBQL and view lineage extractor incremental changes (auto-watermark, changed-view detection, stale cleanup)
+- [ ] 24-03-PLAN.md — populate_lineage.py integration (AlterTimeStamp filtering, CLI flags, stale dataset cleanup, watermark wiring)
