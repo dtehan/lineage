@@ -1,9 +1,9 @@
 ---
 phase: 24
 slug: efficient-incremental-ol-database-updates-only-process-new-changed-queries-views-tables-and-columns
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: approved
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-03-04
 ---
 
@@ -38,24 +38,23 @@ created: 2026-03-04
 
 | Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 24-01-01 | 01 | 0 | WatermarkStore unit tests | unit | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-02 | 01 | 0 | Incremental populate tests | integration | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-03 | 01 | 1 | WatermarkStore get/set | unit | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-04 | 01 | 1 | Incremental dataset skips unchanged | unit | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-05 | 01 | 1 | New tables processed | integration | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-06 | 01 | 2 | Stale view lineage deletion | unit | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-07 | 01 | 2 | DBQL watermark auto-read | unit | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
-| 24-01-08 | 01 | 2 | Full-refresh bypasses watermarks | unit | `cd database && python tests/run_tests.py` | ❌ W0 | ⬜ pending |
+| 24-01-01 | 01 | 1 | WatermarkStore class + DDL | unit | `cd database && python -m pytest tests/test_watermark_store.py -v` | Plan 01 Task 2 | pending |
+| 24-01-02 | 01 | 1 | WatermarkStore unit tests | unit | `cd database && python -m pytest tests/test_watermark_store.py -v` | Plan 01 Task 2 | pending |
+| 24-02-01 | 02 | 2 | DBQL watermark auto-read/write | source inspection | AST verify in plan | N/A | pending |
+| 24-02-02 | 02 | 2 | Changed-view detection + stale cleanup | source inspection | AST verify in plan | N/A | pending |
+| 24-03-01 | 03 | 3 | AlterTimeStamp dataset/field filtering | integration | `cd database && python -m pytest tests/test_incremental_populate.py -v` | Plan 03 Task 3 | pending |
+| 24-03-02 | 03 | 3 | CLI flags + watermark wiring | source inspection | AST verify in plan | N/A | pending |
+| 24-03-03 | 03 | 3 | Integration tests for incremental populate | integration | `cd database && python -m pytest tests/test_incremental_populate.py -v` | Plan 03 Task 3 | pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: pending / green / red / flaky*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] `database/tests/test_watermark_store.py` — unit tests for WatermarkStore get/set
-- [ ] `database/tests/test_incremental_populate.py` — integration tests for changed-tables detection
-- [ ] `database/scripts/setup/migrate_add_populate_log.py` — migration script for existing deployments
+- [x] `database/tests/test_watermark_store.py` — unit tests for WatermarkStore get/set (created by Plan 01 Task 2)
+- [x] `database/tests/test_incremental_populate.py` — integration tests for changed-tables detection (created by Plan 03 Task 3)
+- [x] `database/scripts/setup/migrate_add_populate_log.py` — migration script for existing deployments (created by Plan 01 Task 1)
 
 ---
 
@@ -70,11 +69,11 @@ created: 2026-03-04
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved

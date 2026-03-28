@@ -674,40 +674,11 @@ Database: SALES_DW (50 of 200 tables loaded)
 3. Use zoom and pan to navigate
 4. Double-click to fit view
 
-### QVCI Disabled Error
+### QVCI Disabled Info Message
 
-**Problem:** Error 9719: "QVCI feature is disabled" when running `populate_lineage.py`
+**Message:** Informational log noting QVCI is disabled during `populate_lineage.py` preflight checks.
 
-**Cause:** The script uses `DBC.ColumnsJQV` to extract column metadata, which requires QVCI (Queryable View Column Index) to be enabled on your Teradata system.
-
-**Solutions:**
-
-**Option 1: Enable QVCI (recommended)**
-
-Contact your Teradata DBA to enable QVCI using the `dbscontrol` utility:
-
-```bash
-dbscontrol << EOF
-M internal 551=false
-W
-EOF
-```
-
-**Note:** This requires a database restart. Plan for a maintenance window.
-
-**Option 2: Use fallback approach**
-
-If QVCI cannot be enabled (due to stability concerns or administrative policies), modify `populate_lineage.py`:
-
-1. Change `DBC.ColumnsJQV` to `DBC.ColumnsV` in the `populate_openlineage_fields()` function
-2. Restore the `update_view_column_types()` function from git history
-3. Re-enable the call to `update_view_column_types()` in `main()`
-
-This fallback uses `HELP COLUMN` commands for each view column, which is slower but works without QVCI.
-
-**For more details:**
-- See `CLAUDE.md` for complete QVCI documentation
-- [Teradata QVCI Knowledge Article](https://support.teradata.com/knowledge?id=kb_article_view&sysparm_article=KB0026034)
+**Impact:** None. The application uses Teradata's `HELP COLUMN` command to resolve view column types, which works on all environments regardless of QVCI status. View column types (INTEGER, VARCHAR, etc.) resolve correctly without QVCI enabled.
 
 ---
 

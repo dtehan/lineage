@@ -31,7 +31,7 @@ This guide enables an operations team to deploy the Lineage application from scr
 | npm | (included with Node.js) | Frontend package management |
 | Teradata access | -- | Network connectivity to a Teradata instance on port 1025 (or configured port) |
 
-**Teradata QVCI:** The Teradata instance must have QVCI (Queryable View Column Index) enabled. This is a system-level configuration that requires DBA coordination and a database restart. If QVCI is not already enabled on your Teradata system, plan for a maintenance window before beginning deployment. See [Database Setup > Verify QVCI Status](#41-verify-qvci-status) for verification and enablement instructions.
+**Teradata QVCI (optional):** QVCI (Queryable View Column Index) is no longer required. The application uses Teradata's `HELP COLUMN` command to resolve view column types, which works on all Teradata environments regardless of QVCI status. If QVCI is enabled, the system will note it during preflight checks but does not depend on it.
 
 ---
 
@@ -117,32 +117,15 @@ If both the legacy and primary variable are set, the primary variable takes prec
 
 ## Database Setup
 
-### 4.1 Verify QVCI Status
+### 4.1 View Column Type Resolution
 
-QVCI (Queryable View Column Index) is a Teradata feature that enables efficient retrieval of view column information via the `DBC.ColumnsJQV` system view. The lineage application requires QVCI to extract complete column metadata (including data types) for both tables and views.
+The application resolves view column types using Teradata's `HELP COLUMN` command. This works on all Teradata environments without requiring QVCI (Queryable View Column Index) to be enabled.
 
-**Check if QVCI is enabled:**
+**How it works:**
+- **Table columns:** Retrieved from `DBC.ColumnsV` (always provides complete type information)
+- **View columns:** Retrieved via `HELP COLUMN database.viewname.*` which returns actual resolved types (e.g., INTEGER, VARCHAR(1000)) regardless of QVCI status
 
-```sql
--- Try querying DBC.ColumnsJQV
--- If you receive error 9719 ("QVCI feature is disabled"), QVCI needs to be enabled
-SELECT TOP 1 * FROM DBC.ColumnsJQV;
-```
-
-If the query returns a result, QVCI is enabled. If you receive error 9719, follow the enablement steps below.
-
-**Enable QVCI (requires DBA privileges):**
-
-```bash
-dbscontrol << EOF
-M internal 551=false
-W
-EOF
-```
-
-After running this command, **restart the Teradata Database** for the change to take effect. This is a system-level change that requires DBA privileges and a maintenance window.
-
-**If QVCI cannot be enabled:** A fallback approach is available. Modify `database/scripts/populate/populate_lineage.py` to use `DBC.ColumnsV` instead of `DBC.ColumnsJQV` in the `populate_openlineage_fields()` function, and re-enable the `update_view_column_types()` function (see git history for the original implementation). This fallback uses `HELP COLUMN` commands for each view column, which is slower but works without QVCI.
+The populate script runs a preflight check that detects QVCI availability and logs the result as informational, but does not depend on it for correctness.
 
 ### 4.2 Create Schema
 
@@ -151,7 +134,7 @@ cd database
 python scripts/setup/setup_lineage_schema.py
 ```
 
-This creates 9 OpenLineage tables with 17 indexes:
+This creates 10 OpenLineage tables with 17 indexes:
 
 | Table | Purpose |
 |-------|---------|
@@ -163,7 +146,15 @@ This creates 9 OpenLineage tables with 17 indexes:
 | `OL_RUN_INPUT` | Run input datasets |
 | `OL_RUN_OUTPUT` | Run output datasets |
 | `OL_COLUMN_LINEAGE` | Column-level lineage with transformation types |
+| `OL_POPULATE_LOG` | Watermark timestamps for incremental population |
 | `OL_SCHEMA_VERSION` | Schema version tracking |
+
+**Upgrading existing deployments:** If you already have the schema deployed, run the migration script to add the new `OL_POPULATE_LOG` table:
+
+```bash
+python scripts/setup/migrate_add_populate_log.py          # Add OL_POPULATE_LOG table
+python scripts/setup/migrate_add_populate_log.py --dry-run # Preview without making changes
+```
 
 ### 4.3 Create Test Data (Optional)
 
@@ -187,7 +178,7 @@ python scripts/populate/populate_lineage.py --since "2024-01-01"           # DBQ
 python scripts/populate/populate_lineage.py --full                         # Full extraction (all history)
 ```
 
-DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. The Teradata user specified in your configuration must have access to these system views. The DBQL extractor uses the `WildcardResolver` module to automatically expand `SELECT *` and qualified wildcards (`t1.*`) to actual column names using batch DBC.ColumnsJQV metadata.
+DBQL mode requires SELECT privileges on `DBC.DBQLogTbl` and `DBC.DBQLSQLTbl`. The Teradata user specified in your configuration must have access to these system views. The DBQL extractor uses the `WildcardResolver` module to automatically expand `SELECT *` and qualified wildcards (`t1.*`) to actual column names using `DBC.ColumnsV` metadata.
 
 **View lineage mode** -- derives column-level lineage from view SQL definitions:
 
@@ -212,6 +203,31 @@ python scripts/populate/populate_lineage.py --skip-clear      # Append mode (don
 python scripts/populate/populate_lineage.py --lineage-only    # Only populate lineage, skip datasets/fields
 ```
 
+### 4.5 Incremental Population
+
+By default, `populate_lineage.py` runs in **incremental mode** — it only processes datasets, fields, views, and DBQL queries that have changed since the last successful run. Watermark timestamps are stored in the `OL_POPULATE_LOG` table.
+
+**How it works:**
+- On first run (no watermarks), a full scan is performed
+- On subsequent runs, each source (datasets, fields, view lineage, DBQL) reads its watermark and only processes objects with `AlterTimeStamp` or `CreateTimeStamp` newer than the watermark
+- Changed views have their stale lineage records cleaned up before re-extraction
+- Dropped or renamed objects are soft-deleted via `is_active = 'N'` (stale cleanup)
+- Watermarks are written after each successful source extraction
+
+**Incremental flags:**
+
+```bash
+python scripts/populate/populate_lineage.py                       # Incremental (default)
+python scripts/populate/populate_lineage.py --full-refresh        # Clear all watermarks and do a full scan
+python scripts/populate/populate_lineage.py --reset-watermark DBQL      # Reset watermark for DBQL source
+python scripts/populate/populate_lineage.py --reset-watermark ALL       # Reset all watermarks
+python scripts/populate/populate_lineage.py --no-cleanup          # Skip stale dataset deactivation
+```
+
+**Valid `--reset-watermark` sources:** `DATASETS`, `FIELDS`, `VIEW_LINEAGE`, `DBQL`, `ALL`
+
+Resetting a watermark causes the next run to perform a full scan for that source only. Use `--full-refresh` to clear everything and rebuild from scratch.
+
 **Populate metadata** -- after populating lineage data, populate the metadata for the tables:
 
 ```bash
@@ -220,7 +236,7 @@ python scripts/populate/populate_test_metadata.py
 
 This populates `OL_NAMESPACE`, `OL_DATASET`, and `OL_DATASET_FIELD` records for the tables referenced in the lineage data.
 
-### 4.5 DBQL Prerequisites
+### 4.6 DBQL Prerequisites
 
 Before using DBQL extraction, ensure these requirements are met:
 
@@ -240,7 +256,7 @@ Before using DBQL extraction, ensure these requirements are met:
    pip install sqlglot>=25.0.0
    ```
 
-### 4.6 What DBQL Extraction Captures
+### 4.7 What DBQL Extraction Captures
 
 The extractor parses the following statement types from DBQL:
 - `INSERT INTO ... SELECT` statements
@@ -257,7 +273,7 @@ The extractor automatically resolves wildcards in SQL statements to actual colum
 
 | Pattern | Example | How It's Resolved |
 |---------|---------|-------------------|
-| Simple wildcard | `SELECT *` | Expanded to all columns from the source table via DBC.ColumnsJQV metadata |
+| Simple wildcard | `SELECT *` | Expanded to all columns from the source table via DBC.ColumnsV metadata |
 | Qualified wildcard | `SELECT t1.*, t2.*` | Each alias resolved to its table, then expanded to that table's columns |
 | INSERT with wildcard | `INSERT INTO target SELECT * FROM source` | Columns matched by ordinal position (1st to 1st, 2nd to 2nd) |
 | CREATE AS wildcard | `CREATE TABLE target AS SELECT * FROM source` | Target columns derived from source column names |
@@ -265,14 +281,14 @@ The extractor automatically resolves wildcards in SQL statements to actual colum
 
 Wildcard-expanded lineage records receive a confidence score of 0.70. Multi-table unqualified `SELECT *` (ambiguous source attribution) is skipped with a warning.
 
-### 4.7 DBQL Extraction Limitations
+### 4.8 DBQL Extraction Limitations
 
 - **Query text truncation**: DBQL may truncate very long SQL statements
 - **Dynamic SQL**: Dynamically generated SQL may not be fully captured
 - **Complex expressions**: Some complex column expressions may not parse correctly
 - **Parse failures**: The extractor gracefully handles parse failures and continues
 
-### 4.8 Troubleshooting DBQL Extraction
+### 4.9 Troubleshooting DBQL Extraction
 
 **"No access to DBQL tables" error:**
 - DBQL logging may not be enabled on your Teradata system
@@ -295,7 +311,7 @@ Wildcard-expanded lineage records receive a confidence score of 0.70. Multi-tabl
 
 The application includes an optional Redis caching layer that reduces lineage query response times from 2-4 seconds to under 100ms for repeated queries. The application works normally without Redis (gracefully degrades to in-memory caching).
 
-### 4.9 Redis Setup
+### 4.10 Redis Setup
 
 **Install Redis** (if not already available):
 
@@ -335,7 +351,7 @@ redis-cli ping
 # Expected output: PONG
 ```
 
-### 4.10 Cache Configuration
+### 4.11 Cache Configuration
 
 Add Redis configuration to your `.env` file:
 
@@ -347,7 +363,7 @@ CACHE_TTL=3600  # Cache expiration in seconds (1 hour)
 
 **If Redis is not configured or unavailable**, the application automatically falls back to in-memory SimpleCache. This provides graceful degradation but does not share cache across requests.
 
-### 4.11 Graph Engine Redis Persistence
+### 4.12 Graph Engine Redis Persistence
 
 The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the networkx DiGraph in Redis, separate from the query cache:
 
@@ -356,7 +372,7 @@ The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the net
 - **On cache invalidation:** Snapshot is deleted and rebuilt along with the in-memory graph
 - **No TTL:** Snapshot is invalidated explicitly only (not subject to `CACHE_TTL`)
 
-### 4.12 Cache Behavior
+### 4.13 Cache Behavior
 
 **With Redis:**
 - Cold start (first ever): 2-4 seconds (Teradata load + graph build + Redis save)
@@ -371,7 +387,7 @@ The in-memory graph engine (Phase 14/18) stores a serialized snapshot of the net
 - No cross-request caching, no graph persistence
 - Application functions normally (no errors)
 
-### 4.13 Cache Management Endpoints
+### 4.14 Cache Management Endpoints
 
 The application provides REST API endpoints for cache management:
 
@@ -1014,7 +1030,7 @@ Verify each item before going live:
 **Application:**
 
 - [ ] Teradata credentials configured and tested
-- [ ] QVCI enabled on Teradata instance (see [Database Setup](#41-verify-qvci-status))
+- [ ] Teradata credentials configured (QVCI not required -- view types resolved via HELP COLUMN)
 - [ ] OL_* schema created and lineage data populated
 - [ ] Backend starts without errors
 - [ ] Frontend built (`npm run build`)
@@ -1158,11 +1174,9 @@ export $(cat ../.env | grep -v '^#' | xargs) && python python_server.py
 
 ### QVCI Feature is Disabled (Error 9719)
 
-**Symptoms:** `populate_lineage.py` fails with error 9719 during metadata extraction.
+**Symptoms:** Informational message during `populate_lineage.py` preflight checks noting QVCI is disabled.
 
-**Cause:** QVCI is not enabled on the Teradata instance.
-
-**Solution:** See [Database Setup > Verify QVCI Status](#41-verify-qvci-status) for verification and enablement instructions. Enabling QVCI requires DBA privileges and a database restart. If QVCI cannot be enabled, modify `populate_lineage.py` to use `DBC.ColumnsV` instead of `DBC.ColumnsJQV` (see the fallback instructions in [Database Setup](#41-verify-qvci-status)).
+**Impact:** None. This is now informational only. The application uses `HELP COLUMN` for view column type resolution, which works without QVCI. View column types will resolve correctly regardless of QVCI status.
 
 ### Empty Lineage Graph
 

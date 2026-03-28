@@ -77,5 +77,5 @@ python scripts/populate/populate_lineage.py --dry-run      # Preview what would 
 
 - **OpenLineage Schema:** OL_* tables aligned with [OpenLineage spec v2-0-2](https://openlineage.io/docs/spec/object-model). See `database/scripts/setup/setup_lineage_schema.py` for table definitions.
 - **Lineage Traversal:** Recursive CTEs traverse `OL_COLUMN_LINEAGE` -- upstream follows target->source, downstream follows source->target, with cycle detection via path tracking.
-- **QVCI:** Teradata feature for view column type resolution via `DBC.ColumnsJQV`. When disabled, view column types show as UNKNOWN (table types always available via `DBC.ColumnsV`). The populate script auto-detects QVCI availability.
+- **QVCI:** Teradata feature for view column metadata via `DBC.ColumnsJQV`. No longer required — the application uses `HELP COLUMN` to resolve view column types on all environments. The populate script auto-detects QVCI availability as informational only.
 - **Configuration:** Copy `.env.example` to `.env`. Key vars: `TERADATA_HOST`, `TERADATA_USER`, `TERADATA_PASSWORD`, `TERADATA_DATABASE`, `API_PORT` (default 8080).

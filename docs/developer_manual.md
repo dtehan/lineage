@@ -64,7 +64,7 @@ npm run dev                      # Runs on :3000, proxies API to :8080
 
 Open `http://localhost:3000` to view the application.
 
-For detailed configuration, QVCI setup, and production deployment, see the [Operations Guide](operations_guide.md).
+For detailed configuration and production deployment, see the [Operations Guide](operations_guide.md).
 
 ### Quick Start (ClearScape Analytics)
 
@@ -114,7 +114,7 @@ This section provides developer-specific setup details. For comprehensive instal
 
 ### Prerequisites
 
-See [Operations Guide > Prerequisites](operations_guide.md#prerequisites) for full software requirements and Teradata QVCI verification.
+See [Operations Guide > Prerequisites](operations_guide.md#prerequisites) for full software requirements.
 
 | Software | Minimum Version | Notes |
 |----------|----------------|-------|
@@ -174,7 +174,7 @@ Developer-specific notes:
 
 ### Database Setup
 
-See [Operations Guide > Database Setup](operations_guide.md#database-setup) for QVCI verification, schema creation, and lineage population procedures.
+See [Operations Guide > Database Setup](operations_guide.md#database-setup) for schema creation and lineage population procedures.
 
 The lineage population script supports multiple modes:
 
@@ -183,6 +183,8 @@ The lineage population script supports multiple modes:
 | DBQL extraction (default) | `python scripts/populate/populate_lineage.py` | Production -- extracts lineage from Teradata query logs |
 | Fixtures | `python scripts/populate/populate_lineage.py --fixtures` | Demo and testing -- uses hardcoded mappings |
 | View lineage | `python scripts/populate/populate_lineage.py --views` | Derives column lineage from view SQL definitions |
+
+By default, the script runs in **incremental mode** — only processing objects changed since the last run using watermark timestamps stored in `OL_POPULATE_LOG`. Use `--full-refresh` to force a full scan, or `--reset-watermark SOURCE` to reset a specific source's watermark (valid sources: `DATASETS`, `FIELDS`, `VIEW_LINEAGE`, `DBQL`, `ALL`). Use `--no-cleanup` to skip stale dataset deactivation.
 
 For local development, fixtures mode provides a complete working dataset without requiring query log history. The `--views` flag can be combined with either mode to additionally populate view lineage.
 
@@ -394,10 +396,11 @@ The `database/scripts/populate/` directory includes two key modules for lineage 
 
 | Module | Purpose |
 |--------|---------|
-| `wildcard_resolver.py` | Resolves `SELECT *` and qualified wildcards (`t1.*`) to actual column names using batch DBC.ColumnsJQV metadata with in-memory caching |
+| `wildcard_resolver.py` | Resolves `SELECT *` and qualified wildcards (`t1.*`) to actual column names using batch DBC.ColumnsV metadata with in-memory caching |
 | `view_lineage_extractor.py` | Derives column-level lineage from view SQL definitions via SQLGlot parsing of DBC.TablesV.RequestText |
+| `watermark_store.py` | Reads/writes per-source watermark timestamps in `OL_POPULATE_LOG` for incremental population |
 
-These modules are invoked by `populate_lineage.py` during DBQL extraction (WildcardResolver) and `--views` mode (ViewLineageExtractor).
+These modules are invoked by `populate_lineage.py` during DBQL extraction (WildcardResolver), `--views` mode (ViewLineageExtractor), and incremental mode (WatermarkStore).
 
 ### 5.2 Layered Architecture
 
@@ -614,6 +617,7 @@ erDiagram
 | `OL_RUN_INPUT` | Run input datasets | `run_id`, `dataset_id` |
 | `OL_RUN_OUTPUT` | Run output datasets | `run_id`, `dataset_id` |
 | `OL_COLUMN_LINEAGE` | Column-level lineage | `source_field_id`, `target_field_id`, `transformation_type` |
+| `OL_POPULATE_LOG` | Watermark timestamps for incremental population | `source_type`, `last_run_at`, `records_processed` |
 | `OL_SCHEMA_VERSION` | Schema version tracking | `version`, `applied_at` |
 
 ### 7.3 Lineage Traversal
@@ -788,3 +792,4 @@ When making changes, use this table to find the relevant code:
 | Lineage population | `database/scripts/populate/populate_lineage.py` |
 | Wildcard expansion | `database/scripts/populate/wildcard_resolver.py` |
 | View lineage extraction | `database/scripts/populate/view_lineage_extractor.py` |
+| Incremental watermarks | `database/scripts/populate/watermark_store.py` |
